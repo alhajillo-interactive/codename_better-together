@@ -288,7 +288,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4fbeed3ed9c6a1942b42d7775471cbc7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Networking.ConnectionManager
-  _playerPrefab: {fileID: 0}
+  _playerPrefab: {fileID: 2005781851}
   _spawnPoints:
   - {x: 0, y: 0, z: 0}
   _maxPlayers: 4
@@ -400,6 +400,17 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2005781851 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 4751566618374441298, guid: 8c7b7bae47e74db439b7f9122f77e82b, type: 3}
+  m_PrefabInstance: {fileID: 5275265711023944796}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
 --- !u!1001 &5275265711023944796
 PrefabInstance:
   m_ObjectHideFlags: 0
