@@ -109,3 +109,20 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Unity scene auto-recovery after crashes
+/[Aa]ssets/_Recovery/
+/[Aa]ssets/_Recovery.meta
+
+# Jetbrains Rider
+.idea/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+[Dd]esktop.ini
+
+# Claude Code personal settings
+.claude/settings.local.json
