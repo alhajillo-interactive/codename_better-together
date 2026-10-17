@@ -40,11 +40,13 @@ namespace BetterTogether.Combat
         private Transform _stars;
         private Quaternion _wobbleRest;
         private bool _showingDizzy;
+        private bool _isSpawned;
 
         [Networked] private TickTimer StunTimer { get; set; }
 
-        public bool IsStunned => Object != null && Object.IsValid && !StunTimer.ExpiredOrNotRunning(Runner);
-        public bool CanBeKicked => !(_immuneWhileStunned && IsStunned);
+        // Other clients query these every frame, also before Spawned / after Despawned, when networked state can't be read.
+        public bool IsStunned => _isSpawned && !StunTimer.ExpiredOrNotRunning(Runner);
+        public bool CanBeKicked => _isSpawned && !(_immuneWhileStunned && IsStunned);
 
         private void Awake()
         {
@@ -54,7 +56,13 @@ namespace BetterTogether.Combat
                 _wobbleRest = _wobbleTarget.localRotation;
         }
 
-        public override void Spawned() => _stars = CreateStars();
+        public override void Spawned()
+        {
+            _isSpawned = true;
+            _stars = CreateStars();
+        }
+
+        public override void Despawned(NetworkRunner runner, bool hasState) => _isSpawned = false;
 
         /// <summary>Called by the kicker's client on its local copy of this player.</summary>
         public void Kick(Vector3 velocity, Vector3 kickerPosition) => RPC_Kick(velocity, kickerPosition);
