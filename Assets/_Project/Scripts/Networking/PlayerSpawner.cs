@@ -1,4 +1,6 @@
 #if FUSION_WEAVER
+using BetterTogether.Interaction;
+using BetterTogether.Player;
 using Fusion;
 using UnityEngine;
 
@@ -40,6 +42,30 @@ namespace BetterTogether.Networking
                 : Vector3.zero;
 
             Runner.Spawn(prefab, position, Quaternion.identity, player);
+        }
+
+        /// <summary>
+        /// Replaces the local player's character with the prefab for <paramref name="role"/>, keeping its position.
+        /// Must run on the character's owner.
+        /// </summary>
+        public void ChangeRole(PlayerCharacter current, PlayerRole role)
+        {
+            var prefab = role == PlayerRole.Camper ? _camperPrefab : _gnomePrefab;
+            if (prefab == null)
+            {
+                Debug.LogWarning($"[PlayerSpawner] No prefab assigned for role {role} on ConnectionManager.");
+                return;
+            }
+
+            if (current.TryGetComponent<PlayerInteractor>(out var interactor) && interactor.Carried != null)
+                interactor.Carried.Drop();
+
+            var currentTransform = current.transform;
+            var position = currentTransform.position;
+            var rotation = currentTransform.rotation;
+
+            Runner.Despawn(current.Object);
+            Runner.Spawn(prefab, position, rotation, Runner.LocalPlayer);
         }
     }
 }

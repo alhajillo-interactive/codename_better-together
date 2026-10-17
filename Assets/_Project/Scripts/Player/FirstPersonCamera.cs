@@ -21,6 +21,9 @@ namespace BetterTogether.Player
 
         public float Yaw { get; private set; }
 
+        /// <summary>While true the cursor stays unlocked and mouse look is paused, e.g. while a debug panel is open.</summary>
+        public static bool CursorFree { get; set; }
+
         private void Awake()
         {
             Instance = this;
@@ -56,7 +59,12 @@ namespace BetterTogether.Player
 
             var cursorLocked = Cursor.lockState == CursorLockMode.Locked;
 
-            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+            if (CursorFree)
+            {
+                if (cursorLocked)
+                    SetCursorLocked(false);
+            }
+            else if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
                 SetCursorLocked(false);
             else if (!cursorLocked && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
                 SetCursorLocked(true);
