@@ -51,6 +51,13 @@ namespace BetterTogether.Networking
             if (IsConnecting || IsConnected)
                 return false;
 
+            // By path, not build index: indices differ between machines whose scene lists differ.
+            if (!PathSceneManager.TryGetSceneRef(_gameplayScene, out var gameplaySceneRef, out var sceneError))
+            {
+                Debug.LogError($"[ConnectionManager] Gameplay Scene: {sceneError}", this);
+                return false;
+            }
+
             IsConnecting = true;
 
             // A runner can't be reused after shutdown, so each session gets its own GameObject.
@@ -63,9 +70,8 @@ namespace BetterTogether.Networking
             runnerObject.AddComponent<PlayerSpawner>().Init(_gnomePrefab, _camperPrefab, _spawnPoints);
             var sceneManager = runnerObject.AddComponent<PathSceneManager>();
 
-            // By path, not build index: indices differ between machines whose scene lists differ.
             var sceneInfo = new NetworkSceneInfo();
-            sceneInfo.AddSceneRef(sceneManager.GetSceneRef(_gameplayScene.Path), LoadSceneMode.Single);
+            sceneInfo.AddSceneRef(gameplaySceneRef, LoadSceneMode.Single);
 
             var result = await _runner.StartGame(new StartGameArgs
             {
@@ -86,6 +92,28 @@ namespace BetterTogether.Networking
             }
 
             Debug.Log($"[ConnectionManager] Connected to session '{_runner.SessionInfo.Name}' in region {_runner.SessionInfo.Region}");
+            return true;
+        }
+
+        /// <summary>
+        /// Moves every player in the session to another scene. Only the scene authority (Shared mode master client)
+        /// may do this; other clients follow automatically.
+        /// </summary>
+        public bool LoadNetworkScene(SceneReference scene)
+        {
+            if (!IsConnected || !_runner.IsSceneAuthority)
+            {
+                Debug.LogWarning("[ConnectionManager] Only the scene authority can change the networked scene.", this);
+                return false;
+            }
+
+            if (!PathSceneManager.TryGetSceneRef(scene, out var sceneRef, out var error))
+            {
+                Debug.LogError($"[ConnectionManager] {error}", this);
+                return false;
+            }
+
+            _runner.LoadScene(sceneRef, LoadSceneMode.Single);
             return true;
         }
 

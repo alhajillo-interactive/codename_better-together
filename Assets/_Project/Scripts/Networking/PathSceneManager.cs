@@ -1,4 +1,5 @@
 #if FUSION_WEAVER
+using Eflatun.SceneReference;
 using Fusion;
 using UnityEngine.SceneManagement;
 
@@ -17,6 +18,31 @@ namespace BetterTogether.Networking
             return buildIndex >= 0
                 ? SceneRef.FromPath(SceneUtility.GetScenePathByBuildIndex(buildIndex))
                 : base.GetSceneRef(sceneNameOrPath);
+        }
+
+        /// <summary>
+        /// Resolves a SceneReference to a path-based SceneRef. Use this for every networked scene load
+        /// (never SceneRef.FromIndex) so all clients agree on the scene.
+        /// </summary>
+        public static bool TryGetSceneRef(SceneReference scene, out SceneRef sceneRef, out string error)
+        {
+            sceneRef = SceneRef.None;
+
+            if (scene == null || !scene.TryGetPath(out var path))
+            {
+                error = "No scene assigned (or the scene asset was deleted).";
+                return false;
+            }
+
+            if (SceneUtility.GetBuildIndexByScenePath(path) < 0)
+            {
+                error = $"'{path}' is not enabled in the Build Profile scene list.";
+                return false;
+            }
+
+            sceneRef = SceneRef.FromPath(path);
+            error = null;
+            return true;
         }
     }
 }
