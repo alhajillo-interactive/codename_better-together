@@ -570,6 +570,6 @@ MonoBehaviour:
   _targetMask:
     serializedVersion: 2
     m_Bits: 4294967295
-  _horizontalSpeed: 9
-  _upwardSpeed: 5
+  _horizontalSpeed: 5
+  _upwardSpeed: 3.5
   _cooldown: 0.8

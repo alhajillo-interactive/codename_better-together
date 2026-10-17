@@ -17,6 +17,7 @@ namespace BetterTogether.Interaction
         [SerializeField] private LayerMask _interactionMask = ~0;
 
         private InputAction _interact;
+        private PlayerMovement _movement;
 
         public static PlayerInteractor Local { get; private set; }
 
@@ -34,6 +35,7 @@ namespace BetterTogether.Interaction
 
             Local = this;
             _interact = InputSystem.actions.FindAction("Player/Interact");
+            _movement = GetComponent<PlayerMovement>();
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -48,6 +50,13 @@ namespace BetterTogether.Interaction
         {
             if (Local != this)
                 return;
+
+            // Stunned players can't pick anything up until they recover.
+            if (_movement != null && _movement.IsStunned)
+            {
+                Focused = null;
+                return;
+            }
 
             UpdateFocus();
 

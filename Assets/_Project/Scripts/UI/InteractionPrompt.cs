@@ -33,7 +33,9 @@ namespace BetterTogether.UI
             GUI.color = previousColor;
 
             string text = null;
-            if (local.Focused != null && local.Focused.CanInteract(local))
+            if (local.TryGetComponent<Kickable>(out var kickable) && kickable.IsStunned)
+                text = "¡Aturdido!";
+            else if (local.Focused != null && local.Focused.CanInteract(local))
                 text = "[E] " + local.Focused.Prompt;
             else if (CamperKick.Local is { HasTargetInRange: true, IsReady: true })
                 text = "[Clic] Patear";

@@ -19,8 +19,9 @@ namespace BetterTogether.Combat
         [SerializeField] private LayerMask _targetMask = ~0;
 
         [Header("Force")]
-        [SerializeField] private float _horizontalSpeed = 9f;
-        [SerializeField] private float _upwardSpeed = 5f;
+        [Tooltip("With the defaults a gnome lands about 2.5 m away after a ~0.3 m hop.")]
+        [SerializeField] private float _horizontalSpeed = 5f;
+        [SerializeField] private float _upwardSpeed = 3.5f;
         [SerializeField] private float _cooldown = 0.8f;
 
         private readonly Collider[] _overlap = new Collider[16];
@@ -86,7 +87,7 @@ namespace BetterTogether.Combat
             for (var i = 0; i < count; i++)
             {
                 var kickable = _overlap[i].GetComponentInParent<Kickable>();
-                if (kickable == null || kickable.transform == transform || _targets.Contains(kickable))
+                if (kickable == null || !kickable.CanBeKicked || kickable.transform == transform || _targets.Contains(kickable))
                     continue;
 
                 var toTarget = Flat(kickable.transform.position - origin);

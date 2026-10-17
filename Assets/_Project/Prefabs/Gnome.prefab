@@ -721,9 +721,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 554842587961420e8de876c6d27b4950, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Combat.Kickable
-  _maxKickSpeed: 15
-  _stunDuration: 0.6
+  _maxKickSpeed: 8
+  _stunDuration: 2
+  _immuneWhileStunned: 1
   _dropTowardKicker: 0.5
+  _wobbleTarget: {fileID: 1544159409446623205}
+  _wobbleAngle: 12
+  _starsHeight: 0.55
+  _starsRadius: 0.15
+  _starSize: 0.05
+  _starColor: {r: 1, g: 0.85, b: 0.2, a: 1}
 --- !u!1 &8087498446399852310
 GameObject:
   m_ObjectHideFlags: 0
