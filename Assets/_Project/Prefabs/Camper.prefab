@@ -108,6 +108,8 @@ GameObject:
   - component: {fileID: 3470650623124616110}
   - component: {fileID: 2714558682491771343}
   - component: {fileID: 4403363427365039995}
+  - component: {fileID: 6293817405528136094}
+  - component: {fileID: 7371402795475265320}
   m_Layer: 0
   m_Name: Camper
   m_TagString: Untagged
@@ -131,6 +133,7 @@ Transform:
   - {fileID: 5936903362903682375}
   - {fileID: 7448268824482469954}
   - {fileID: 8427013488694503345}
+  - {fileID: 3492481566404576480}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!143 &1848605719635223851
@@ -182,6 +185,7 @@ MonoBehaviour:
   - {fileID: 5235739631324567063}
   - {fileID: 3470650623124616110}
   - {fileID: 4403363427365039995}
+  - {fileID: 7371402795475265320}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &8603880299416115042
 MonoBehaviour:
@@ -329,6 +333,19 @@ MonoBehaviour:
   transmitEnabled: 1
   recordingEnabled: 1
   recordWhenJoined: 1
+--- !u!114 &6293817405528136094
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2407974724338023452}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3986deb98168394684c41606a9495af, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: PhotonVoice::Photon.Voice.Unity.UtilityScripts.MicAmplifier
+  amplificationFactor: 3
 --- !u!114 &4403363427365039995
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -342,6 +359,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Voice.PlayerVoice
   _listenGroups: 
+  _settings: {fileID: 11400000, guid: e4b2a6f08d1c47b39f5a7c2d1e6b8093, type: 2}
+  _speakerSource: {fileID: 2254200433185246491}
 --- !u!1 &3840529701168068516
 GameObject:
   m_ObjectHideFlags: 0
@@ -396,10 +415,10 @@ AudioSource:
   SpatializePostEffects: 0
   Priority: 128
   DopplerLevel: 1
-  MinDistance: 1
-  MaxDistance: 25
+  MinDistance: 4
+  MaxDistance: 30
   Pan2D: 0
-  rolloffMode: 0
+  rolloffMode: 1
   BypassEffects: 0
   BypassListenerEffects: 0
   BypassReverbZones: 0
@@ -484,3 +503,51 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dd7fea91fe63f4e1b884ef1e16a975c3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: PhotonVoice::Photon.Voice.Unity.Speaker
+--- !u!1 &1331308957734600335
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3492481566404576480}
+  m_Layer: 0
+  m_Name: CarryAnchor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3492481566404576480
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1331308957734600335}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.35, y: 1.2, z: 0.7}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 5728052846930928352}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7371402795475265320
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2407974724338023452}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22f097dd0e6376d4d96ffd34b4ea2d71, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Interaction.PlayerInteractor
+  _carryAnchor: {fileID: 3492481566404576480}
+  _reach: 2.5
+  _interactionMask:
+    serializedVersion: 2
+    m_Bits: 4294967295

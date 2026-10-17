@@ -23,6 +23,11 @@ namespace BetterTogether.Voice
             _audio = GetComponent<AudioSource>();
         }
 
+        public override void Spawned()
+        {
+            _voice.Settings.ApplyToChatter(_audio);
+        }
+
         public override void Render()
         {
             var local = PlayerCharacter.Local;
