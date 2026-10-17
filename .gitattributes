@@ -1,0 +1,65 @@
+# Normalize line endings: the repo always stores LF.
+* text=auto
+
+# Unity YAML: Unity writes these with LF, so keep LF in the working tree too
+# (avoids "modified" files that only differ in line endings on Windows).
+*.unity         text eol=lf merge=unityyamlmerge
+*.prefab        text eol=lf merge=unityyamlmerge
+*.asset         text eol=lf merge=unityyamlmerge
+*.meta          text eol=lf merge=unityyamlmerge
+*.mat           text eol=lf merge=unityyamlmerge
+*.anim          text eol=lf merge=unityyamlmerge
+*.controller    text eol=lf merge=unityyamlmerge
+*.overrideController text eol=lf merge=unityyamlmerge
+*.physicMaterial text eol=lf merge=unityyamlmerge
+*.physicsMaterial2D text eol=lf merge=unityyamlmerge
+*.playable      text eol=lf merge=unityyamlmerge
+*.mask          text eol=lf merge=unityyamlmerge
+*.brush         text eol=lf merge=unityyamlmerge
+*.flare         text eol=lf merge=unityyamlmerge
+*.fontsettings  text eol=lf merge=unityyamlmerge
+*.guiskin       text eol=lf merge=unityyamlmerge
+*.giparams      text eol=lf merge=unityyamlmerge
+*.renderTexture text eol=lf merge=unityyamlmerge
+*.spriteatlas   text eol=lf merge=unityyamlmerge
+*.terrainlayer  text eol=lf merge=unityyamlmerge
+*.lighting      text eol=lf merge=unityyamlmerge
+*.shadergraph   text eol=lf
+*.shadersubgraph text eol=lf
+*.inputactions  text eol=lf
+*.fusion        text eol=lf
+*.json          text eol=lf
+
+# Code
+*.cs            text diff=csharp
+*.asmdef        text eol=lf
+*.asmref        text eol=lf
+*.shader        text
+*.hlsl          text
+*.cginc         text
+*.yarn          text
+
+# Binaries
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.psd binary
+*.tga binary
+*.tif binary
+*.exr binary
+*.hdr binary
+*.fbx binary
+*.obj binary
+*.blend binary
+*.wav binary
+*.mp3 binary
+*.ogg binary
+*.ttf binary
+*.otf binary
+*.dll binary
+*.so binary
+*.a binary
+*.bundle binary
+*.debug binary
+*.release binary
+*.unitypackage binary
