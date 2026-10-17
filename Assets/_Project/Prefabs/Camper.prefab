@@ -530,7 +530,7 @@ Transform:
   m_GameObject: {fileID: 1331308957734600335}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.35, y: 1.2, z: 0.7}
+  m_LocalPosition: {x: 0, y: 1.15, z: 0.75}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -549,7 +549,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Interaction.PlayerInteractor
   _carryAnchor: {fileID: 3492481566404576480}
-  _reach: 2.5
+  _reach: 3
+  _aimRadius: 0.15
   _interactionMask:
     serializedVersion: 2
     m_Bits: 4294967295

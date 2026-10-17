@@ -7,26 +7,33 @@ namespace BetterTogether.Interaction
 {
     /// <summary>
     /// Lets the local player focus an <see cref="IInteractable"/> by looking at it and use it with the interact key.
-    /// Also tracks the one <see cref="Carryable"/> the player is holding.
+    /// What the player is holding is derived from the <see cref="Carryable"/>s themselves.
     /// </summary>
     public class PlayerInteractor : NetworkBehaviour
     {
         [Tooltip("Where carried objects are held, as a direct child of the player root.")]
         [SerializeField] private Transform _carryAnchor;
         [SerializeField] private float _reach = 2f;
+        [SerializeField] private float _aimRadius = 0.1f;
         [SerializeField] private LayerMask _interactionMask = ~0;
 
         private InputAction _interact;
         private PlayerMovement _movement;
+        private PlayerCharacter _character;
 
         public static PlayerInteractor Local { get; private set; }
 
         public Transform CarryAnchor => _carryAnchor;
         public float Reach => _reach;
+        public PlayerRole Role => _character.Role;
 
-        /// <summary>Only meaningful on the local player.</summary>
-        public Carryable Carried { get; private set; }
+        public Carryable Carried => Carryable.FindHeldBy(this);
         public IInteractable Focused { get; private set; }
+
+        private void Awake()
+        {
+            _character = GetComponent<PlayerCharacter>();
+        }
 
         public override void Spawned()
         {
@@ -43,8 +50,6 @@ namespace BetterTogether.Interaction
             if (Local == this)
                 Local = null;
         }
-
-        internal void SetCarried(Carryable carryable) => Carried = carryable;
 
         private void Update()
         {
@@ -64,10 +69,11 @@ namespace BetterTogether.Interaction
             if (_interact == null || !_interact.WasPressedThisFrame())
                 return;
 
+            var carried = Carried;
             if (Focused != null && Focused.CanInteract(this))
                 Focused.Interact(this);
-            else if (Carried != null)
-                Carried.Drop();
+            else if (carried != null)
+                carried.RequestRelease(this);
         }
 
         private void UpdateFocus()
@@ -78,7 +84,7 @@ namespace BetterTogether.Interaction
                 return;
 
             var origin = view.transform;
-            if (Physics.Raycast(origin.position, origin.forward, out var hit, _reach, _interactionMask, QueryTriggerInteraction.Ignore)
+            if (Physics.SphereCast(origin.position, _aimRadius, origin.forward, out var hit, _reach, _interactionMask, QueryTriggerInteraction.Ignore)
                 && !hit.transform.IsChildOf(transform))
                 Focused = hit.collider.GetComponentInParent<IInteractable>();
         }

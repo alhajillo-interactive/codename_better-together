@@ -5,8 +5,8 @@ namespace BetterTogether.Interaction
     /// </summary>
     public interface IInteractable
     {
-        /// <summary>Short label shown on the HUD, e.g. "Tomar leño".</summary>
-        string Prompt { get; }
+        /// <summary>Short label shown on the HUD for this interactor, e.g. "Tomar leño".</summary>
+        string GetPrompt(PlayerInteractor interactor);
 
         bool CanInteract(PlayerInteractor interactor);
 

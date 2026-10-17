@@ -33,27 +33,37 @@ namespace BetterTogether.UI
             GUI.color = previousColor;
 
             string text = null;
+            var carried = local.Carried;
             if (local.TryGetComponent<Kickable>(out var kickable) && kickable.IsStunned)
+            {
                 text = "¡Aturdido!";
+            }
             else if (local.Focused != null && local.Focused.CanInteract(local))
-                text = "[E] " + local.Focused.Prompt;
+            {
+                text = "[E] " + local.Focused.GetPrompt(local);
+            }
             else if (CamperKick.Local is { HasTargetInRange: true, IsReady: true })
+            {
                 text = "[Clic] Patear";
-            else if (local.Carried != null)
-                text = "[E] Soltar";
+            }
+            else if (carried != null)
+            {
+                var status = carried.StatusFor(local);
+                text = status != null ? status + "\n[E] Soltar" : "[E] Soltar";
+            }
 
             if (text == null)
                 return;
 
             _style ??= new GUIStyle(GUI.skin.label)
             {
-                alignment = TextAnchor.MiddleCenter,
+                alignment = TextAnchor.UpperCenter,
                 fontStyle = FontStyle.Bold,
             };
             _style.fontSize = _fontSize;
             _style.normal.textColor = _textColor;
 
-            GUI.Label(new Rect(center.x - 200f, center.y + _promptOffset - 15f, 400f, 30f), text, _style);
+            GUI.Label(new Rect(center.x - 200f, center.y + _promptOffset - 15f, 400f, 60f), text, _style);
         }
     }
 }

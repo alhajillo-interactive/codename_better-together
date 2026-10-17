@@ -78,7 +78,7 @@ namespace BetterTogether.Combat
 
             var position = transform.position;
             var toKicker = Vector3.ProjectOnPlane(kickerPosition - position, Vector3.up);
-            carried.DropAt(position + toKicker * _dropTowardKicker);
+            carried.RequestRelease(_interactor, position + toKicker * _dropTowardKicker);
         }
 
         public override void Render()

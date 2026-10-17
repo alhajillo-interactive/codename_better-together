@@ -1,104 +1,170 @@
+using System.Collections.Generic;
+using BetterTogether.Player;
 using Fusion;
 using UnityEngine;
 
 namespace BetterTogether.Interaction
 {
     /// <summary>
-    /// An object a player can pick up and drop, one at a time. Whoever picks it up takes state authority
-    /// (Shared mode) and every client shows it attached to the holder's carry anchor.
+    /// An object players can pick up and put down. The camper carries anything alone; big items need several gnomes.
+    /// Master-client object: the state authority is the single arbiter of grabs and releases (via RPCs),
+    /// and every client poses the item on its holders' carry anchors. The item is a Rigidbody synced by
+    /// NetworkTransform: the authority keeps it kinematic while carried and lets physics drop it otherwise.
     /// </summary>
+    [RequireComponent(typeof(Rigidbody))]
     public class Carryable : NetworkBehaviour, IInteractable
     {
+        private static readonly List<Carryable> All = new();
+
         [SerializeField] private string _displayName = "objeto";
+        [Tooltip("Gnomes needed to move it (1 or 2). The camper always carries it alone.")]
+        [SerializeField, Range(1, 2)] private int _gnomesRequired = 1;
+        [Tooltip("Two gnomes farther apart than this drop the item.")]
+        [SerializeField] private float _maxGnomeSpan = 1.6f;
+        [Tooltip("A lone gnome waiting for help that gets farther than this from the item lets go.")]
+        [SerializeField] private float _maxSoloGrabDistance = 1.2f;
 
         private Collider[] _colliders;
-        private PlayerInteractor _pendingHolder;
-        private float _halfHeight;
+        private Rigidbody _body;
         private bool _collidersEnabled = true;
 
-        [Networked] public PlayerInteractor Holder { get; private set; }
+        [Networked] private PlayerInteractor HolderA { get; set; }
+        [Networked] private PlayerInteractor HolderB { get; set; }
 
-        public bool IsCarried => CurrentHolder != null;
-        public string Prompt => $"Tomar {_displayName}";
+        /// <summary>True while the item follows its holders.</summary>
+        public bool IsMoving
+        {
+            get
+            {
+                var count = HolderCount;
+                if (count == 1)
+                    return RequiredHolders(Holder(0)) == 1;
+                return count == 2 && HeldByGnomes;
+            }
+        }
 
-        // A holder that left the game no longer counts.
-        private PlayerInteractor CurrentHolder =>
-            Holder != null && Holder.Object != null && Holder.Object.IsValid ? Holder : null;
+        private int HolderCount => (Valid(HolderA) != null ? 1 : 0) + (Valid(HolderB) != null ? 1 : 0);
+        private bool HeldByGnomes => HolderCount > 0 && Holder(0).Role == PlayerRole.Gnome;
+
+        /// <summary>The item an interactor is holding, if any.</summary>
+        public static Carryable FindHeldBy(PlayerInteractor interactor)
+        {
+            foreach (var carryable in All)
+            {
+                if (carryable.IsHeldBy(interactor))
+                    return carryable;
+            }
+
+            return null;
+        }
 
         private void Awake()
         {
             _colliders = GetComponentsInChildren<Collider>();
+            _body = GetComponent<Rigidbody>();
         }
 
-        public override void Spawned()
+        public override void Spawned() => All.Add(this);
+
+        public override void Despawned(NetworkRunner runner, bool hasState) => All.Remove(this);
+
+        public string GetPrompt(PlayerInteractor interactor)
         {
-            _halfHeight = _colliders.Length > 0 ? _colliders[0].bounds.extents.y : 0f;
+            if (HolderCount > 0)
+                return $"Ayudar a cargar {_displayName}";
+
+            return interactor.Role == PlayerRole.Camper || _gnomesRequired == 1
+                ? $"Tomar {_displayName}"
+                : $"Agarrar {_displayName} ({_gnomesRequired} duendes)";
         }
 
-        public bool CanInteract(PlayerInteractor interactor) =>
-            !IsCarried && interactor.Carried == null && _pendingHolder == null;
-
-        public void Interact(PlayerInteractor interactor) => PickUp(interactor);
-
-        private void PickUp(PlayerInteractor interactor)
+        /// <summary>Mirrors the authority's rules using the replicated state.</summary>
+        public bool CanInteract(PlayerInteractor interactor)
         {
-            _pendingHolder = interactor;
-            if (HasStateAuthority)
-                CompletePickUp();
+            if (FindHeldBy(interactor) != null)
+                return false;
+
+            return HolderCount == 0
+                || (HeldByGnomes && interactor.Role == PlayerRole.Gnome && HolderCount < _gnomesRequired);
+        }
+
+        public void Interact(PlayerInteractor interactor) => RPC_RequestGrab(interactor.Id);
+
+        public void RequestRelease(PlayerInteractor who) => RPC_RequestRelease(who.Id, false, default);
+
+        /// <summary>Releases the item and moves it to <paramref name="dropPoint"/> first (e.g. knocked out of a kicked gnome's hands).</summary>
+        public void RequestRelease(PlayerInteractor who, Vector3 dropPoint) => RPC_RequestRelease(who.Id, true, dropPoint);
+
+        /// <summary>Hint for a holder that cannot move the item yet, or null.</summary>
+        public string StatusFor(PlayerInteractor who) =>
+            IsHeldBy(who) && !IsMoving ? "Esperando otro duende..." : null;
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RPC_RequestGrab(NetworkBehaviourId interactorId)
+        {
+            if (!Runner.TryFindBehaviour(interactorId, out PlayerInteractor who) || !CanInteract(who))
+                return;
+
+            Compact();
+            if (Valid(HolderA) == null)
+                HolderA = who;
             else
-                Object.RequestStateAuthority();
+                HolderB = who;
         }
 
-        private void CompletePickUp()
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RPC_RequestRelease(NetworkBehaviourId interactorId, NetworkBool hasDropPoint, Vector3 dropPoint)
         {
-            if (CurrentHolder == null)
-            {
-                Holder = _pendingHolder;
-                _pendingHolder.SetCarried(this);
-            }
-
-            _pendingHolder = null;
-        }
-
-        /// <summary>Called by the holder's client, which has state authority.</summary>
-        public void Drop()
-        {
-            var holder = CurrentHolder;
-            if (holder == null)
+            if (!Runner.TryFindBehaviour(interactorId, out PlayerInteractor who) || !IsHeldBy(who))
                 return;
 
-            var holderTransform = holder.transform;
-            DropAt(holderTransform.position + holderTransform.forward * Mathf.Max(0.4f, holder.Reach * 0.4f));
-        }
+            // Keep the carry height; physics takes it to the ground once released.
+            if (hasDropPoint && IsMoving)
+                transform.position = new Vector3(dropPoint.x, transform.position.y, dropPoint.z);
 
-        /// <summary>Drops the object on the ground below <paramref name="point"/>. Called by the holder's client.</summary>
-        public void DropAt(Vector3 point)
-        {
-            var holder = CurrentHolder;
-            if (holder == null || !HasStateAuthority)
-                return;
+            if (HolderA == who)
+                HolderA = null;
+            else
+                HolderB = null;
 
-            var holderTransform = holder.transform;
-            var groundY = Physics.Raycast(point + Vector3.up, Vector3.down, out var hit, 4f, ~0, QueryTriggerInteraction.Ignore)
-                ? hit.point.y
-                : holderTransform.position.y;
-
-            var yaw = Quaternion.Euler(0f, holderTransform.eulerAngles.y, 0f);
-            transform.SetPositionAndRotation(new Vector3(point.x, groundY + _halfHeight, point.z), yaw);
-
-            holder.SetCarried(null);
-            Holder = null;
+            Compact();
         }
 
         public override void FixedUpdateNetwork()
         {
-            if (HasStateAuthority)
-                FollowHolder();
+            if (!HasStateAuthority)
+                return;
+
+            Compact();
+            if (HolderCount == 2 && HorizontalDistance(Holder(0).transform.position, Holder(1).transform.position) > _maxGnomeSpan)
+            {
+                HolderA = null;
+                HolderB = null;
+            }
+            else if (HolderCount == 1 && !IsMoving && DistanceToHolder(Holder(0)) > _maxSoloGrabDistance)
+            {
+                HolderA = null;
+            }
+
+            // Kinematic while carried; dynamic (falls under gravity) otherwise. Proxies are left to NetworkTransform.
+            var shouldBeKinematic = IsMoving;
+            if (_body.isKinematic != shouldBeKinematic)
+            {
+                _body.isKinematic = shouldBeKinematic;
+                if (!shouldBeKinematic)
+                {
+                    _body.linearVelocity = Vector3.zero;
+                    _body.angularVelocity = Vector3.zero;
+                }
+            }
+
+            if (TryGetFollowPose(out var position, out var rotation))
+                transform.SetPositionAndRotation(position, rotation);
         }
 
         public override void Render()
         {
-            var shouldEnable = !IsCarried;
+            var shouldEnable = !IsMoving;
             if (shouldEnable == _collidersEnabled)
                 return;
 
@@ -107,23 +173,79 @@ namespace BetterTogether.Interaction
                 c.enabled = shouldEnable;
         }
 
-        private void Update()
+        // Runs after NetworkTransform has rendered the replicated pose.
+        private void LateUpdate()
         {
-            // In Shared mode FixedUpdateNetwork only runs on the authority, so the requester waits here.
-            if (_pendingHolder != null && Object != null && Object.IsValid && HasStateAuthority)
-                CompletePickUp();
+            if (Object != null && Object.IsValid && TryGetFollowPose(out var position, out var rotation))
+                transform.SetPositionAndRotation(position, rotation);
         }
 
-        private void LateUpdate() => FollowHolder();
-
-        private void FollowHolder()
+        private bool TryGetFollowPose(out Vector3 position, out Quaternion rotation)
         {
-            if (Object == null || !Object.IsValid)
-                return;
+            position = default;
+            rotation = transform.rotation;
+            if (!IsMoving)
+                return false;
 
-            var holder = CurrentHolder;
-            if (holder != null)
-                transform.SetPositionAndRotation(holder.CarryAnchor.position, holder.CarryAnchor.rotation);
+            var first = Holder(0).CarryAnchor;
+            if (HolderCount == 1)
+            {
+                position = first.position;
+                rotation = first.rotation;
+                return true;
+            }
+
+            var second = Holder(1).CarryAnchor;
+            position = (first.position + second.position) * 0.5f;
+            var across = Vector3.ProjectOnPlane(second.position - first.position, Vector3.up);
+            if (across.sqrMagnitude > 1e-4f)
+                rotation = Quaternion.AngleAxis(Mathf.Atan2(-across.z, across.x) * Mathf.Rad2Deg, Vector3.up);
+            return true;
+        }
+
+        /// <summary>Horizontal distance from the holder to the closest point of the item.</summary>
+        private float DistanceToHolder(PlayerInteractor holder)
+        {
+            var from = holder.transform.position;
+            var best = HorizontalDistance(transform.position, from);
+            foreach (var c in _colliders)
+                best = Mathf.Min(best, HorizontalDistance(c.ClosestPoint(from), from));
+            return best;
+        }
+
+        private static float HorizontalDistance(Vector3 a, Vector3 b)
+        {
+            a.y = b.y;
+            return Vector3.Distance(a, b);
+        }
+
+        private int RequiredHolders(PlayerInteractor who) => who.Role == PlayerRole.Camper ? 1 : _gnomesRequired;
+
+        private bool IsHeldBy(PlayerInteractor interactor) =>
+            interactor != null && (Valid(HolderA) == interactor || Valid(HolderB) == interactor);
+
+        /// <summary>The i-th live holder; holders that left the game count as empty.</summary>
+        private PlayerInteractor Holder(int i)
+        {
+            var a = Valid(HolderA);
+            var b = Valid(HolderB);
+            if (a == null)
+                return i == 0 ? b : null;
+            return i == 0 ? a : b;
+        }
+
+        private static PlayerInteractor Valid(PlayerInteractor holder) =>
+            holder != null && holder.Object != null && holder.Object.IsValid ? holder : null;
+
+        /// <summary>Authority only: drops dead holders and fills slot A first.</summary>
+        private void Compact()
+        {
+            var a = Holder(0);
+            var b = Holder(1);
+            if (HolderA != a)
+                HolderA = a;
+            if (HolderB != b)
+                HolderB = b;
         }
     }
 }

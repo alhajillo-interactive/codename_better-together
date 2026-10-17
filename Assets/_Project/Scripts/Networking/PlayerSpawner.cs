@@ -58,7 +58,7 @@ namespace BetterTogether.Networking
             }
 
             if (current.TryGetComponent<PlayerInteractor>(out var interactor) && interactor.Carried != null)
-                interactor.Carried.Drop();
+                interactor.Carried.RequestRelease(interactor);
 
             var currentTransform = current.transform;
             var position = currentTransform.position;
