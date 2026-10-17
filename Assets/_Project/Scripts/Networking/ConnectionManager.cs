@@ -2,6 +2,7 @@
 // so this file compiles to nothing until then.
 #if FUSION_WEAVER
 using System.Threading.Tasks;
+using Eflatun.SceneReference;
 using Fusion;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -20,7 +21,7 @@ namespace BetterTogether.Networking
         [SerializeField] private Vector3[] _spawnPoints = { Vector3.zero };
         [SerializeField] private int _maxPlayers = 4;
         [Tooltip("Build index of the gameplay scene to load after connecting. -1 = stay in the current scene.")]
-        [SerializeField] private int _gameplaySceneBuildIndex = -1;
+        [SerializeField] private SceneReference _gameplayScene;
 
         private NetworkRunner _runner;
 
@@ -55,9 +56,7 @@ namespace BetterTogether.Networking
             runnerObject.AddComponent<PlayerSpawner>().Init(_playerPrefab, _spawnPoints);
             var sceneManager = runnerObject.AddComponent<NetworkSceneManagerDefault>();
 
-            var sceneIndex = _gameplaySceneBuildIndex >= 0
-                ? _gameplaySceneBuildIndex
-                : SceneManager.GetActiveScene().buildIndex;
+            var sceneIndex = _gameplayScene.BuildIndex;
             var sceneInfo = new NetworkSceneInfo();
             sceneInfo.AddSceneRef(SceneRef.FromIndex(sceneIndex), LoadSceneMode.Single);
 
