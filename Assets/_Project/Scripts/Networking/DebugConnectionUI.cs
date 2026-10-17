@@ -1,5 +1,6 @@
 #if FUSION_WEAVER
 using System.Linq;
+using BetterTogether.Gaze;
 using BetterTogether.Player;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -46,7 +47,7 @@ namespace BetterTogether.Networking
                 GUILayout.Label($"Players: {runner.SessionInfo.PlayerCount}/{runner.SessionInfo.MaxPlayers}");
                 GUILayout.Label($"Ping: {runner.GetPlayerRtt(runner.LocalPlayer) * 1000:0} ms");
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                GUILayout.Label("[F1] Cambiar roles");
+                GUILayout.Label("[F1] Debug: roles y mirada");
 #endif
                 if (GUILayout.Button("Disconnect"))
                     _ = manager.Disconnect();
@@ -76,9 +77,11 @@ namespace BetterTogether.Networking
                 .OrderBy(p => p.Object.StateAuthority.PlayerId)
                 .ToList();
 
-            var height = 70f + players.Count * 28f;
+            var height = 120f + players.Count * 28f;
             GUILayout.BeginArea(new Rect(Screen.width - RolePanelWidth - 10f, 10f, RolePanelWidth, height), GUI.skin.box);
-            GUILayout.Label("Roles (debug) — F1 para cerrar");
+            GUILayout.Label("Debug — F1 para cerrar");
+            DrawGazeToggle();
+            GUILayout.Space(6f);
 
             foreach (var player in players)
             {
@@ -94,6 +97,29 @@ namespace BetterTogether.Networking
                 GUILayout.Label("No hay jugadores todavía.");
 
             GUILayout.EndArea();
+        }
+
+        /// <summary>Turns the petrifying gaze of every camper on or off at once.</summary>
+        private static void DrawGazeToggle()
+        {
+            var gazes = CamperGaze.All.Where(g => g != null && g.Object != null && g.Object.IsValid).ToList();
+
+            GUILayout.BeginHorizontal();
+            if (gazes.Count == 0)
+            {
+                GUILayout.Label("Mirada petrificante: (no hay campista)");
+            }
+            else
+            {
+                var enabled = gazes.Any(g => g.IsGazeEnabled);
+                GUILayout.Label($"Mirada petrificante: {(enabled ? "ON" : "OFF")}", GUILayout.Width(170f));
+                if (GUILayout.Button(enabled ? "Desactivar" : "Activar"))
+                {
+                    foreach (var gaze in gazes)
+                        gaze.RPC_SetGazeEnabled(!enabled);
+                }
+            }
+            GUILayout.EndHorizontal();
         }
 
         private static void RoleButton(PlayerCharacter player, PlayerRole role)

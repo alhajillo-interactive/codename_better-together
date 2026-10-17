@@ -56,8 +56,8 @@ namespace BetterTogether.Interaction
             if (Local != this)
                 return;
 
-            // Stunned players can't pick anything up until they recover.
-            if (_movement != null && _movement.IsStunned)
+            // Stunned or frozen (watched by the camper) players can't pick anything up or drop it.
+            if (_movement != null && (_movement.IsStunned || _movement.IsFrozen))
             {
                 Focused = null;
                 return;

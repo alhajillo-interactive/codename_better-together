@@ -50,6 +50,12 @@ namespace BetterTogether.Player
         public bool IsStunned => _stunTimer > 0f;
 
         /// <summary>
+        /// Set by other systems (e.g. the camper's petrifying gaze) to hold the player still: no walking, jumping or
+        /// turning the body. Gravity and knockback still apply. The camera can still look around.
+        /// </summary>
+        public bool IsFrozen { get; set; }
+
+        /// <summary>
         /// Launches the player. Only has effect on the state authority, which is the one simulating movement.
         /// </summary>
         public void ApplyKnockback(Vector3 velocity, float stunDuration)
@@ -81,10 +87,10 @@ namespace BetterTogether.Player
                 _verticalVelocity = -1f; // Small push keeps the controller stuck to the ground.
 
             var dt = Runner.DeltaTime;
-            var stunned = IsStunned;
+            var stunned = IsStunned || IsFrozen;
             _stunTimer = Mathf.Max(0f, _stunTimer - dt);
 
-            var yaw = FirstPersonCamera.Instance != null ? FirstPersonCamera.Instance.Yaw : transform.eulerAngles.y;
+            var yaw = FirstPersonCamera.Instance != null && !IsFrozen ? FirstPersonCamera.Instance.Yaw : transform.eulerAngles.y;
             var move = stunned ? Vector2.zero : _move.ReadValue<Vector2>();
             var direction = Vector3.ClampMagnitude(Quaternion.Euler(0f, yaw, 0f) * new Vector3(move.x, 0f, move.y), 1f);
             var speed = _sprint.IsPressed() ? _sprintSpeed : _walkSpeed;

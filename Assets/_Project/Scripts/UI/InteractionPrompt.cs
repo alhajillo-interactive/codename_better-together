@@ -1,4 +1,5 @@
 using BetterTogether.Combat;
+using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using UnityEngine;
 
@@ -16,7 +17,28 @@ namespace BetterTogether.UI
         [SerializeField] private float _crosshairSize = 6f;
         [SerializeField] private float _promptOffset = 40f;
 
+        [SerializeField] private Color _watchedColor = new(1f, 0.25f, 0.2f);
+
         private GUIStyle _style;
+        private GUIStyle _watchedStyle;
+
+        /// <summary>Tells a gnome the camper is looking at it, so it knows why it can't move.</summary>
+        private void DrawWatchedWarning()
+        {
+            if (Petrifiable.Local == null || !Petrifiable.Local.IsWatched)
+                return;
+
+            _watchedStyle ??= new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = FontStyle.Bold,
+            };
+            _watchedStyle.fontSize = Mathf.RoundToInt(_fontSize * 1.3f);
+            _watchedStyle.normal.textColor = _watchedColor;
+
+            GUI.Label(new Rect(Screen.width * 0.5f - 250f, Screen.height * 0.15f, 500f, 40f),
+                "¡El campista te está mirando! No te muevas", _watchedStyle);
+        }
 
         private void OnGUI()
         {
@@ -31,6 +53,8 @@ namespace BetterTogether.UI
                 new Rect(center.x - _crosshairSize * 0.5f, center.y - _crosshairSize * 0.5f, _crosshairSize, _crosshairSize),
                 Texture2D.whiteTexture);
             GUI.color = previousColor;
+
+            DrawWatchedWarning();
 
             string text = null;
             var carried = local.Carried;

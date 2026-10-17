@@ -111,6 +111,7 @@ GameObject:
   - component: {fileID: 6293817405528136094}
   - component: {fileID: 7371402795475265320}
   - component: {fileID: 5939314844524169216}
+  - component: {fileID: 6152230495412790016}
   m_Layer: 0
   m_Name: Camper
   m_TagString: Untagged
@@ -188,6 +189,7 @@ MonoBehaviour:
   - {fileID: 4403363427365039995}
   - {fileID: 7371402795475265320}
   - {fileID: 5939314844524169216}
+  - {fileID: 6152230495412790016}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &8603880299416115042
 MonoBehaviour:
@@ -574,3 +576,22 @@ MonoBehaviour:
   _horizontalSpeed: 5
   _upwardSpeed: 3.5
   _cooldown: 0.8
+--- !u!114 &6152230495412790016
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2407974724338023452}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 739bb2579c4040bfae56687a703fea7f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Gaze.CamperGaze
+  _eye: {fileID: 7448268824482469954}
+  _halfAngle: 30
+  _range: 20
+  _occluders:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  _enabledOnSpawn: 1

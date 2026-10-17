@@ -20,6 +20,7 @@ namespace BetterTogether.Player
         private float _pitch;
 
         public float Yaw { get; private set; }
+        public float Pitch => _pitch;
 
         /// <summary>While true the cursor stays unlocked and mouse look is paused, e.g. while a debug panel is open.</summary>
         public static bool CursorFree { get; set; }

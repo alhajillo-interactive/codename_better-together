@@ -439,6 +439,7 @@ GameObject:
   - component: {fileID: 5148306927114508271}
   - component: {fileID: 6780018763413977546}
   - component: {fileID: 7805739811996808192}
+  - component: {fileID: 4683119257163552768}
   m_Layer: 0
   m_Name: Gnome
   m_TagString: Untagged
@@ -517,6 +518,7 @@ MonoBehaviour:
   - {fileID: 3009059105997180201}
   - {fileID: 6780018763413977546}
   - {fileID: 7805739811996808192}
+  - {fileID: 4683119257163552768}
   - {fileID: 6775593931138393117}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &2317096137556648295
@@ -732,6 +734,21 @@ MonoBehaviour:
   _starsRadius: 0.15
   _starSize: 0.05
   _starColor: {r: 1, g: 0.85, b: 0.2, a: 1}
+--- !u!114 &4683119257163552768
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7618880620199038078}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 858e31f735c04feab4c7ea2861d28f72, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Gaze.Petrifiable
+  _checkHeights:
+  - 0.1
+  - 0.4
 --- !u!1 &8087498446399852310
 GameObject:
   m_ObjectHideFlags: 0
