@@ -16,8 +16,6 @@ namespace BetterTogether.Player
 
         public override void Spawned()
         {
-            name = $"{name} {Object.StateAuthority.PlayerId}{(HasStateAuthority ? " (local)" : "")}";
-
             if (!HasStateAuthority)
                 return;
 

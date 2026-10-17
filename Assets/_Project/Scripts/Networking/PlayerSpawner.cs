@@ -10,12 +10,14 @@ namespace BetterTogether.Networking
     /// </summary>
     public class PlayerSpawner : SimulationBehaviour, IPlayerJoined
     {
-        private NetworkObject _playerPrefab;
+        private NetworkObject _gnomePrefab;
+        private NetworkObject _camperPrefab;
         private Vector3[] _spawnPoints;
 
-        public void Init(NetworkObject playerPrefab, Vector3[] spawnPoints)
+        public void Init(NetworkObject gnomePrefab, NetworkObject camperPrefab, Vector3[] spawnPoints)
         {
-            _playerPrefab = playerPrefab;
+            _gnomePrefab = gnomePrefab;
+            _camperPrefab = camperPrefab;
             _spawnPoints = spawnPoints;
         }
 
@@ -24,17 +26,20 @@ namespace BetterTogether.Networking
             if (player != Runner.LocalPlayer)
                 return;
 
-            if (_playerPrefab == null)
+            if (_gnomePrefab == null)
             {
-                Debug.LogError("[PlayerSpawner] No player prefab assigned on ConnectionManager.");
+                Debug.LogError("[PlayerSpawner] No gnome prefab assigned on ConnectionManager.");
                 return;
             }
+
+            // Temporary rule until a lobby assigns roles: the room creator (shared mode master client) is the camper.
+            var prefab = Runner.IsSharedModeMasterClient && _camperPrefab != null ? _camperPrefab : _gnomePrefab;
 
             var position = _spawnPoints is { Length: > 0 }
                 ? _spawnPoints[player.PlayerId % _spawnPoints.Length]
                 : Vector3.zero;
 
-            Runner.Spawn(_playerPrefab, position, Quaternion.identity, player);
+            Runner.Spawn(prefab, position, Quaternion.identity, player);
         }
     }
 }

@@ -288,7 +288,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4fbeed3ed9c6a1942b42d7775471cbc7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Networking.ConnectionManager
-  _playerPrefab: {fileID: 7554624045024866580, guid: 6a881d99f4c34b68be25c4bdf7982836, type: 3}
+  _gnomePrefab: {fileID: 7554624045024866580, guid: 6a881d99f4c34b68be25c4bdf7982836, type: 3}
+  _camperPrefab: {fileID: 8080532718310980367, guid: da7b5626bf74482d8eaac354037a875a, type: 3}
   _spawnPoints:
   - {x: 2.5, y: 0.05, z: 1.5}
   - {x: -2.5, y: 0.05, z: 2}

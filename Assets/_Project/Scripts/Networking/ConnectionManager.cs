@@ -4,8 +4,10 @@
 using System.Threading.Tasks;
 using Eflatun.SceneReference;
 using Fusion;
+using Photon.Voice.Fusion;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Serialization;
 
 namespace BetterTogether.Networking
 {
@@ -17,10 +19,13 @@ namespace BetterTogether.Networking
     {
         public static ConnectionManager Instance { get; private set; }
 
-        [SerializeField] private NetworkObject _playerPrefab;
+        [FormerlySerializedAs("_playerPrefab")]
+        [SerializeField] private NetworkObject _gnomePrefab;
+        [Tooltip("Optional. Spawned for the room creator; if empty everyone spawns as a gnome.")]
+        [SerializeField] private NetworkObject _camperPrefab;
         [SerializeField] private Vector3[] _spawnPoints = { Vector3.zero };
         [SerializeField] private int _maxPlayers = 4;
-        [Tooltip("Build index of the gameplay scene to load after connecting. -1 = stay in the current scene.")]
+        [Tooltip("Gameplay scene to load after connecting. Must be in Build Settings.")]
         [SerializeField] private SceneReference _gameplayScene;
 
         private NetworkRunner _runner;
@@ -53,7 +58,9 @@ namespace BetterTogether.Networking
             DontDestroyOnLoad(runnerObject);
             _runner = runnerObject.AddComponent<NetworkRunner>();
             _runner.ProvideInput = true;
-            runnerObject.AddComponent<PlayerSpawner>().Init(_playerPrefab, _spawnPoints);
+            // Joins the matching voice room automatically; players' VoiceNetworkObject uses it.
+            runnerObject.AddComponent<FusionVoiceClient>();
+            runnerObject.AddComponent<PlayerSpawner>().Init(_gnomePrefab, _camperPrefab, _spawnPoints);
             var sceneManager = runnerObject.AddComponent<NetworkSceneManagerDefault>();
 
             var sceneIndex = _gameplayScene.BuildIndex;
