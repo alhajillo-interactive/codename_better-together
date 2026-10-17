@@ -61,11 +61,11 @@ namespace BetterTogether.Networking
             // Joins the matching voice room automatically; players' VoiceNetworkObject uses it.
             runnerObject.AddComponent<FusionVoiceClient>();
             runnerObject.AddComponent<PlayerSpawner>().Init(_gnomePrefab, _camperPrefab, _spawnPoints);
-            var sceneManager = runnerObject.AddComponent<NetworkSceneManagerDefault>();
+            var sceneManager = runnerObject.AddComponent<PathSceneManager>();
 
-            var sceneIndex = _gameplayScene.BuildIndex;
+            // By path, not build index: indices differ between machines whose scene lists differ.
             var sceneInfo = new NetworkSceneInfo();
-            sceneInfo.AddSceneRef(SceneRef.FromIndex(sceneIndex), LoadSceneMode.Single);
+            sceneInfo.AddSceneRef(sceneManager.GetSceneRef(_gameplayScene.Path), LoadSceneMode.Single);
 
             var result = await _runner.StartGame(new StartGameArgs
             {
