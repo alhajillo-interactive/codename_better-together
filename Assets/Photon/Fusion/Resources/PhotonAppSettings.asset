@@ -21,7 +21,7 @@ MonoBehaviour:
     AppIdVideo: 
     AppVersion: 
     UseNameServer: 1
-    FixedRegion: 
+    FixedRegion: us
     Server: 
     Port: 0
     ProxyServer: 

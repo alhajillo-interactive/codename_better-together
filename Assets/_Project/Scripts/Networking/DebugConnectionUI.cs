@@ -21,7 +21,7 @@ namespace BetterTogether.Networking
             if (manager.IsConnected)
             {
                 var runner = manager.Runner;
-                GUILayout.Label($"Room: {runner.SessionInfo.Name}");
+                GUILayout.Label($"Room: {runner.SessionInfo.Name} ({runner.SessionInfo.Region})");
                 GUILayout.Label($"Players: {runner.SessionInfo.PlayerCount}/{runner.SessionInfo.MaxPlayers}");
                 GUILayout.Label($"Ping: {runner.GetPlayerRtt(runner.LocalPlayer) * 1000:0} ms");
                 if (GUILayout.Button("Disconnect"))
