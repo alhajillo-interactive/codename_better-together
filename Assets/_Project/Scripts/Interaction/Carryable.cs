@@ -64,11 +64,21 @@ namespace BetterTogether.Interaction
         public void Drop()
         {
             var holder = CurrentHolder;
+            if (holder == null)
+                return;
+
+            var holderTransform = holder.transform;
+            DropAt(holderTransform.position + holderTransform.forward * Mathf.Max(0.4f, holder.Reach * 0.4f));
+        }
+
+        /// <summary>Drops the object on the ground below <paramref name="point"/>. Called by the holder's client.</summary>
+        public void DropAt(Vector3 point)
+        {
+            var holder = CurrentHolder;
             if (holder == null || !HasStateAuthority)
                 return;
 
             var holderTransform = holder.transform;
-            var point = holderTransform.position + holderTransform.forward * Mathf.Max(0.4f, holder.Reach * 0.4f);
             var groundY = Physics.Raycast(point + Vector3.up, Vector3.down, out var hit, 4f, ~0, QueryTriggerInteraction.Ignore)
                 ? hit.point.y
                 : holderTransform.position.y;
