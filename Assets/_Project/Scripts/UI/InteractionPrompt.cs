@@ -1,3 +1,4 @@
+using BetterTogether.Combat;
 using BetterTogether.Interaction;
 using UnityEngine;
 
@@ -34,6 +35,8 @@ namespace BetterTogether.UI
             string text = null;
             if (local.Focused != null && local.Focused.CanInteract(local))
                 text = "[E] " + local.Focused.Prompt;
+            else if (CamperKick.Local is { HasTargetInRange: true, IsReady: true })
+                text = "[Clic] Patear";
             else if (local.Carried != null)
                 text = "[E] Soltar";
 

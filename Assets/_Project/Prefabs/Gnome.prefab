@@ -438,6 +438,7 @@ GameObject:
   - component: {fileID: 3009059105997180201}
   - component: {fileID: 5148306927114508271}
   - component: {fileID: 6780018763413977546}
+  - component: {fileID: 7805739811996808192}
   m_Layer: 0
   m_Name: Gnome
   m_TagString: Untagged
@@ -515,6 +516,7 @@ MonoBehaviour:
   - {fileID: 1654916255568555378}
   - {fileID: 3009059105997180201}
   - {fileID: 6780018763413977546}
+  - {fileID: 7805739811996808192}
   - {fileID: 6775593931138393117}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &2317096137556648295
@@ -574,6 +576,8 @@ MonoBehaviour:
   _sprintSpeed: 3.5
   _jumpHeight: 0.5
   _gravity: -20
+  _knockbackAirDrag: 1.5
+  _knockbackGroundDrag: 12
 --- !u!114 &1271387638182054602
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -705,6 +709,21 @@ MonoBehaviour:
   _interactionMask:
     serializedVersion: 2
     m_Bits: 4294967295
+--- !u!114 &7805739811996808192
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7618880620199038078}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 554842587961420e8de876c6d27b4950, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Combat.Kickable
+  _maxKickSpeed: 15
+  _stunDuration: 0.6
+  _dropTowardKicker: 0.5
 --- !u!1 &8087498446399852310
 GameObject:
   m_ObjectHideFlags: 0
