@@ -18,6 +18,8 @@ namespace BetterTogether.Match
     {
         [Tooltip("Players needed to start a match.")]
         [Min(1)] [SerializeField] private int _minPlayers = 2;
+        [Tooltip("Testing only: lets the match start with a single player, ignoring Min Players.")]
+        [SerializeField] private bool _allowSoloStart;
 
         [Tooltip("Start the countdown as soon as there are enough players, without waiting for the lobby button.")]
         [SerializeField] private bool _autoStart;
@@ -113,7 +115,7 @@ namespace BetterTogether.Match
             }
         }
 
-        public int MinPlayers => _minPlayers;
+        public int MinPlayers => _allowSoloStart ? 1 : _minPlayers;
 
         /// <summary>Raised on every client when the replicated phase changes.</summary>
         public event Action<MatchPhase> PhaseChanged;
@@ -151,7 +153,7 @@ namespace BetterTogether.Match
 
         private void DoStartMatch()
         {
-            if (CurrentPhase == MatchPhase.Waiting && PlayerCount >= _minPlayers)
+            if (CurrentPhase == MatchPhase.Waiting && PlayerCount >= MinPlayers)
                 BeginCountdown();
         }
 
@@ -163,7 +165,7 @@ namespace BetterTogether.Match
             switch (CurrentPhase)
             {
                 case MatchPhase.Waiting:
-                    if (_autoStart && PlayerCount >= _minPlayers)
+                    if (_autoStart && PlayerCount >= MinPlayers)
                         BeginCountdown();
                     break;
                 case MatchPhase.Countdown:
@@ -212,7 +214,7 @@ namespace BetterTogether.Match
 
         private void UpdateCountdown()
         {
-            if (PlayerCount < _minPlayers)
+            if (PlayerCount < MinPlayers)
             {
                 CurrentPhase = MatchPhase.Waiting;
                 PhaseTimer = default;
@@ -248,7 +250,7 @@ namespace BetterTogether.Match
             if (!PhaseTimer.Expired(Runner))
                 return;
 
-            if (PlayerCount >= _minPlayers)
+            if (PlayerCount >= MinPlayers)
             {
                 BeginCountdown();
                 return;
