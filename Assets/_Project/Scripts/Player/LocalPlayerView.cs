@@ -11,8 +11,8 @@ namespace BetterTogether.Player
     public class LocalPlayerView : NetworkBehaviour
     {
         [SerializeField] private Transform _cameraAnchor;
-        [Tooltip("Renderers that should not be visible to the local player (they still cast shadows).")]
-        [SerializeField] private Renderer[] _hiddenInFirstPerson;
+        [Tooltip("Root of the visual model; every renderer under it is hidden for the local player (shadows stay).")]
+        [SerializeField] private Transform _body;
 
         public override void Spawned()
         {
@@ -24,8 +24,11 @@ namespace BetterTogether.Player
             else
                 Debug.LogWarning("[LocalPlayerView] No FirstPersonCamera found in the scene.");
 
-            foreach (var hiddenRenderer in _hiddenInFirstPerson)
-                hiddenRenderer.shadowCastingMode = ShadowCastingMode.ShadowsOnly;
+            if (_body == null)
+                return;
+
+            foreach (var bodyRenderer in _body.GetComponentsInChildren<Renderer>(true))
+                bodyRenderer.shadowCastingMode = ShadowCastingMode.ShadowsOnly;
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)

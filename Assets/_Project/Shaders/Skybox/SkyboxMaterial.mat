@@ -39,7 +39,7 @@ Material:
     m_Floats:
     - _CloudBands: 2
     - _CloudBoilSpeed: 0.15
-    - _CloudCoverage: 0.45
+    - _CloudCoverage: 0.32
     - _CloudCurvature: 0.15
     - _CloudDayFade: 3
     - _CloudEdgeSoftness: 0.15

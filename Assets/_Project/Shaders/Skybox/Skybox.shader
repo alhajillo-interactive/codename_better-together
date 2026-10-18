@@ -41,7 +41,7 @@ Shader "BetterTogether/Skybox"
         _StarFadeSharpness ("Star Fade Sharpness", Range(0.5, 16)) = 4
 
         [Header(Clouds)]
-        _CloudCoverage ("Cloud Coverage", Range(0, 1)) = 0.45
+        _CloudCoverage ("Cloud Coverage", Range(0, 1)) = 0.32
         _CloudEdgeSoftness ("Cloud Edge Softness", Range(0, 1)) = 0.15
         _CloudScale ("Cloud Scale", Range(0.1, 5)) = 0.6
         _CloudPuffScale ("Cloud Puff Scale", Range(1, 20)) = 6

@@ -593,8 +593,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Player.LocalPlayerView
   _cameraAnchor: {fileID: 8654765146232553351}
-  _hiddenInFirstPerson:
-  - {fileID: 4711394594078004514}
+  _body: {fileID: 1544159409446623205}
 --- !u!114 &4307647866129598102
 MonoBehaviour:
   m_ObjectHideFlags: 0

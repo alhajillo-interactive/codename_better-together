@@ -984,52 +984,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: bb6faf08565f4369b71a643722d4fb6f, type: 3}
---- !u!1 &8120500001
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 8120500002}
-  - component: {fileID: 8120500003}
-  m_Layer: 0
-  m_Name: Sky
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &8120500002
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8120500001}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &8120500003
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8120500001}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a6e78d23dd504e19810297594be4e744, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _sun: {fileID: 1396005438}
-  _moon: {fileID: 0}
 --- !u!1 &8120500011
 GameObject:
   m_ObjectHideFlags: 0
@@ -1041,6 +995,7 @@ GameObject:
   - component: {fileID: 8120500012}
   - component: {fileID: 8120500013}
   - component: {fileID: 8120500014}
+  - component: {fileID: 8120500015}
   m_Layer: 0
   m_Name: DayNightCycle
   m_TagString: Untagged
@@ -1095,10 +1050,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 886c6b682e7c462db96eb06b8d973dd7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Environment.DayNightCycle
+  _dayDuration: 120
+  _nightDuration: 60
+  _startTimeOfDay: 0.02
+--- !u!114 &8120500015
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8120500011}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3a4ead564ceb4fb7b58d7a9f8b6d8c12, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Environment.SkyLighting
   _sun: {fileID: 1396005438}
-  _dayDuration: 60
-  _startAngle: 10
-  _nightAngle: 200
+  _previewTimeOfDay: 0.3
   _sunYaw: 170
   _sunIntensity: 1.2
   _dayAmbient: {r: 0.55, g: 0.6, b: 0.7, a: 1}
@@ -1120,5 +1088,4 @@ SceneRoots:
   - {fileID: 6955463999416037845}
   - {fileID: 6453784960849210753}
   - {fileID: 7647937820464219110}
-  - {fileID: 8120500002}
   - {fileID: 8120500012}
