@@ -67,7 +67,13 @@ namespace BetterTogether.Networking
             _runner.ProvideInput = true;
             // Joins the matching voice room automatically; players' VoiceNetworkObject uses it.
             runnerObject.AddComponent<FusionVoiceClient>();
+
+            // CLAUDE TODO: refactor to have a separate player spawner in a scene object 
+            // so we can have better control on who is the camper and when to spawn the players 
+            // based on teh game manager onGameStart
             runnerObject.AddComponent<PlayerSpawner>().Init(_gnomePrefab, _camperPrefab, _spawnPoints);
+
+            // CLAUDE TODO: use the scene reference _gameplayScene in this game object to load said scene so we can easily reference it on the unity editor
             var sceneManager = runnerObject.AddComponent<PathSceneManager>();
 
             var sceneInfo = new NetworkSceneInfo();
