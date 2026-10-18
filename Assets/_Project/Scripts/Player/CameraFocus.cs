@@ -26,6 +26,9 @@ namespace BetterTogether.Player
 
         public static CameraFocus Instance { get; private set; }
 
+        /// <summary>0..1 eased focus amount (0 normal, 1 fully focused), for HUD effects.</summary>
+        public float Amount { get; private set; }
+
         private void Awake()
         {
             Instance = this;
@@ -48,6 +51,7 @@ namespace BetterTogether.Player
             _blend = _transitionTime > 0f ? Mathf.MoveTowards(_blend, wanted, Time.deltaTime / _transitionTime) : wanted;
 
             var eased = 1f - (1f - _blend) * (1f - _blend);
+            Amount = eased;
             _punch.BaseFieldOfView = Mathf.Lerp(_normalFov, _focusFov, eased);
             if (FirstPersonCamera.Instance != null)
                 FirstPersonCamera.Instance.SensitivityScale = Mathf.Lerp(1f, _focusSensitivity, eased);

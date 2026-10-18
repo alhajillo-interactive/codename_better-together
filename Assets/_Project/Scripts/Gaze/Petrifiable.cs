@@ -11,7 +11,9 @@ namespace BetterTogether.Gaze
     /// <summary>
     /// A player that freezes while a camper keeps it locked (see <see cref="CamperGaze"/>). The camper decides who is
     /// locked; the owner of this player freezes it once the lock is full, publishes <see cref="IsPetrified"/> and lets
-    /// the player break free by mashing the interact key. Every client tints a petrified player like stone.
+    /// the player break free by mashing the interact key. Once petrified the player stays stone, even if the camper
+    /// looks away, until it mashes the interact key or is kicked free (and never between matches).
+    /// Every client tints a petrified player like stone.
     /// Runs after the interactor so the key press that frees the gnome doesn't also pick something up.
     /// </summary>
     [RequireComponent(typeof(PlayerMovement))]
@@ -36,14 +38,8 @@ namespace BetterTogether.Gaze
         [SerializeField] private float _decayPerSecond = 3f;
         [Tooltip("Seconds without a press before the progress starts to decay.")]
         [SerializeField] private float _decayDelay = 0.4f;
-        [Tooltip("Seconds after which the player is released on its own.")]
-        [SerializeField] private float _maxFrozenSeconds = 6f;
         [Tooltip("Seconds the camper can't lock this player after it broke free.")]
         [SerializeField] private float _releaseImmunity = 2.5f;
-        [Tooltip("Immunity after the automatic release.")]
-        [SerializeField] private float _autoReleaseImmunity = 1f;
-        [Tooltip("Seconds the break progress is kept after the camper loses the lock, in case it comes back.")]
-        [SerializeField] private float _keepProgressSeconds = 1f;
         [Tooltip("Forward speed of the hop when released.")]
         [SerializeField] private float _hopForward = 2f;
         [Tooltip("Upward speed of the hop when released.")]
@@ -77,9 +73,7 @@ namespace BetterTogether.Gaze
         private MaterialPropertyBlock _block;
         private float _focusHeight;
         private float _stoneAmount;
-        private float _frozenTime;
         private float _sinceLastPress;
-        private float _keepTimer;
         private float _requiredForFreeze;
         private int _timesPetrified;
         private bool _wasLocked;
@@ -221,6 +215,12 @@ namespace BetterTogether.Gaze
             if (Local != this)
                 return;
 
+            // Nobody is stone between matches, and the gaze can't freeze anyone in the lobby or the countdown.
+            var match = MatchManager.Instance;
+            var betweenMatches = match != null && (match.Phase == MatchPhase.Waiting || match.Phase == MatchPhase.Countdown);
+            if (betweenMatches && IsPetrified)
+                ClearStone();
+
             var dt = Time.deltaTime;
             var locker = LockedBy;
             var locked = locker != null;
@@ -231,16 +231,12 @@ namespace BetterTogether.Gaze
             IsLockTarget = locked;
 
             var immune = IsGazeImmune;
-            var shouldFreeze = locked && locker.LockProgress >= 1f && !immune;
+            var shouldFreeze = !betweenMatches && locked && locker.LockProgress >= 1f && !immune;
             if (shouldFreeze && !IsPetrified)
                 BeginFreeze();
-            else if (!shouldFreeze && IsPetrified)
-                LoseFreeze();
 
             if (IsPetrified)
                 UpdateBreaking(dt);
-            else
-                UpdateIdle(dt);
 
             _movement.IsFrozen = IsPetrified;
             IsWatched = locked && !IsPetrified;
@@ -249,43 +245,16 @@ namespace BetterTogether.Gaze
 
         private void BeginFreeze()
         {
-            if (_keepTimer > 0f)
-            {
-                _keepTimer = 0f; // The camper came back in time: resume where it was.
-            }
-            else
-            {
-                _requiredForFreeze = ComputeRequired();
-                _timesPetrified++;
-                _frozenTime = 0f;
-                NetBreakProgress = 0f;
-            }
-
+            _requiredForFreeze = ComputeRequired();
+            _timesPetrified++;
+            NetBreakProgress = 0f;
             _sinceLastPress = 0f;
             IsPetrified = true;
             _petrifySfx.PlayAt(transform.position);
         }
 
-        // The camper stopped looking: unfreeze without immunity or hop, keeping the progress for a moment.
-        private void LoseFreeze()
-        {
-            IsPetrified = false;
-            _keepTimer = _keepProgressSeconds;
-        }
-
-        private void UpdateIdle(float dt)
-        {
-            if (_keepTimer <= 0f)
-                return;
-
-            _keepTimer -= dt;
-            if (_keepTimer <= 0f)
-                NetBreakProgress = 0f;
-        }
-
         private void UpdateBreaking(float dt)
         {
-            _frozenTime += dt;
             _sinceLastPress += dt;
 
             if (_interact != null && _interact.WasPressedThisFrame())
@@ -302,23 +271,25 @@ namespace BetterTogether.Gaze
 
             if (NetBreakProgress >= _requiredForFreeze)
                 Release(_releaseImmunity, true);
-            else if (_frozenTime >= _maxFrozenSeconds)
-                Release(_autoReleaseImmunity, true);
         }
 
         private void Release(float immunitySeconds, bool hop)
         {
-            IsPetrified = false;
+            ClearStone();
             GazeImmunity = TickTimer.CreateFromSeconds(Runner, immunitySeconds);
-            NetBreakProgress = 0f;
-            _keepTimer = 0f;
-            _frozenTime = 0f;
-            _movement.IsFrozen = false;
             ReleaseCount++;
             _releaseSfx.PlayAt(transform.position);
 
             if (hop)
                 Hop();
+        }
+
+        // Silent release: no immunity, hop, sound or release count (also used between matches).
+        private void ClearStone()
+        {
+            IsPetrified = false;
+            NetBreakProgress = 0f;
+            _movement.IsFrozen = false;
         }
 
         private void Hop()
