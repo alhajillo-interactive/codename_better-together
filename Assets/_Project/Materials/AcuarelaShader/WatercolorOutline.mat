@@ -51,9 +51,9 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _WatercolorOutlineWidth: 0.015
     - _QueueControl: 0
     - _QueueOffset: 0
+    - _WatercolorOutlineWidth: 0.009
     m_Colors:
     - _WatercolorOutlineColor: {r: 0.2, g: 0.075, b: 0.08, a: 1}
   m_BuildTextureStacks: []
