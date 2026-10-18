@@ -20,8 +20,11 @@ namespace BetterTogether.Networking
         private const string NameControl = "PlayerName";
 
         private string _roomCode = "TEST";
-        private string _playerName = LocalPlayerProfile.Name;
+        private string _playerName = "";
         private bool _rolePanelOpen;
+
+        // PlayerPrefs can't be read from a field initializer (Unity throws and the panel breaks), so load it here.
+        private void Awake() => _playerName = LocalPlayerProfile.Name;
 
         private void Update()
         {
