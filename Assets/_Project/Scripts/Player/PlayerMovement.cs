@@ -1,4 +1,6 @@
 using BetterTogether.Audio;
+using BetterTogether.Combat;
+using BetterTogether.Gaze;
 using BetterTogether.Match;
 using Fusion;
 using UnityEngine;
@@ -37,21 +39,30 @@ namespace BetterTogether.Player
         private InputAction _move;
         private InputAction _jump;
         private InputAction _sprint;
+        private InputAction _dance;
+        private Kickable _kickable;
+        private Petrifiable _petrifiable;
         private float _verticalVelocity;
         private bool _jumpQueued;
         private bool _isRiding;
 
         private static readonly int MovementParameter = Animator.StringToHash("Movement");
         private static readonly int JumpParameter = Animator.StringToHash("IsJump");
+        private static readonly int StunParameter = Animator.StringToHash("IsStun");
+        private static readonly int StatueParameter = Animator.StringToHash("IsStatue");
+        private static readonly int DancingParameter = Animator.StringToHash("IsDancing");
         private static readonly int KickParameter = Animator.StringToHash("Kick");
 
         [Networked] private float AnimationMovement { get; set; }
         [Networked] private NetworkBool AnimationJump { get; set; }
+        [Networked] private NetworkBool AnimationDancing { get; set; }
 
         private void Awake()
         {
             _controller = GetComponent<CharacterController>();
             _networkTransform = GetComponent<NetworkTransform>();
+            _kickable = GetComponent<Kickable>();
+            _petrifiable = GetComponent<Petrifiable>();
             if (_animator == null)
                 _animator = FindUsableAnimator();
         }
@@ -65,6 +76,7 @@ namespace BetterTogether.Player
             _move = actions.FindAction("Player/Move");
             _jump = actions.FindAction("Player/Jump");
             _sprint = actions.FindAction("Player/Sprint");
+            _dance = actions.FindAction("Player/Dance");
         }
 
         /// <summary>True while the player can't control movement after being knocked back.</summary>
@@ -114,6 +126,9 @@ namespace BetterTogether.Player
             _verticalVelocity = velocity.y;
             _stunTimer = Mathf.Max(_stunTimer, stunDuration);
             _jumpQueued = false;
+            AnimationMovement = 0f;
+            AnimationJump = false;
+            AnimationDancing = false;
         }
 
         /// <summary>Raised on the owner at the end of <see cref="Teleport"/>, so systems tied to the old position (e.g. riding another gnome) can let go.</summary>
@@ -133,6 +148,9 @@ namespace BetterTogether.Player
             _verticalVelocity = 0f;
             _stunTimer = 0f;
             _jumpQueued = false;
+            AnimationMovement = 0f;
+            AnimationJump = false;
+            AnimationDancing = false;
 
             if (_networkTransform != null)
                 _networkTransform.Teleport(position, rotation);
@@ -189,9 +207,12 @@ namespace BetterTogether.Player
 
             transform.rotation = Quaternion.Euler(0f, yaw, 0f);
 
-            // The blend tree uses 0 = idle, 0.5 = walk and 1 = sprint.
-            AnimationMovement = Mathf.Clamp01(move.magnitude) * (sprinting ? 1f : 0.5f);
-            AnimationJump = jumped || !_controller.isGrounded;
+            // The gnome tree ends at 0.5; the camper tree has walk at 0.5 and sprint at 1.
+            var movementScale = _petrifiable != null ? (sprinting ? 0.5f : 0.25f) : (sprinting ? 1f : 0.5f);
+            AnimationMovement = Mathf.Clamp01(move.magnitude) * movementScale;
+            AnimationJump = !stunned && (jumped || !_controller.isGrounded);
+            AnimationDancing = _petrifiable != null && _dance != null && _dance.IsPressed() && !stunned && !locked &&
+                _controller.isGrounded && move.sqrMagnitude < 0.01f && _knockback.sqrMagnitude < 0.01f;
         }
 
         // The controller is disabled while riding and the mount carries the body; only the turning and the timers go on.
@@ -205,6 +226,7 @@ namespace BetterTogether.Player
 
             AnimationMovement = 0f;
             AnimationJump = false;
+            AnimationDancing = false;
         }
 
         // Models can carry an Animator without a controller (or an inactive alternative mesh); animate only a usable one.
@@ -226,8 +248,19 @@ namespace BetterTogether.Player
             if (!CanAnimate)
                 return;
 
-            _animator.SetFloat(MovementParameter, AnimationMovement, 0.1f, Time.deltaTime);
-            _animator.SetBool(JumpParameter, AnimationJump);
+            var isGnome = _petrifiable != null;
+            var isStunned = isGnome && _kickable != null && _kickable.IsStunned;
+            var isStatue = isGnome && !isStunned && _petrifiable.IsStone;
+            var isDancing = isGnome && AnimationDancing && !isStunned && !isStatue;
+            _animator.SetFloat(MovementParameter, isStunned || isStatue || isDancing ? 0f : AnimationMovement,
+                0.1f, Time.deltaTime);
+            _animator.SetBool(JumpParameter, AnimationJump && !isStunned && !isStatue);
+            if (isGnome)
+            {
+                _animator.SetBool(StunParameter, isStunned);
+                _animator.SetBool(StatueParameter, isStatue);
+                _animator.SetBool(DancingParameter, isDancing);
+            }
         }
 
         /// <summary>Plays the camper's attack on every client, including when the kick misses.</summary>
