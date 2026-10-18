@@ -49,6 +49,23 @@ namespace BetterTogether.Player
                 Local = this;
             }
 
+            RefreshObjectName();
+        }
+
+        /// <summary>Owner only: renames this player and saves the name for next sessions.</summary>
+        public void SetDisplayName(string value)
+        {
+            LocalPlayerProfile.Name = value;
+
+            if (!_isSpawned || !HasStateAuthority)
+                return;
+
+            NetName = LocalPlayerProfile.DisplayNameOrDefault(Object.StateAuthority.PlayerId);
+            RefreshObjectName();
+        }
+
+        private void RefreshObjectName()
+        {
             name = $"{_role} {Object.StateAuthority.PlayerId} {DisplayName}{(HasStateAuthority ? " (local)" : "")}";
         }
 

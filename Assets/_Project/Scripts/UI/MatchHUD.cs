@@ -119,7 +119,7 @@ namespace BetterTogether.UI
             FindDayCycle();
 
             var match = MatchManager.Instance;
-            var phase = match != null ? match.Phase : MatchPhase.Playing;
+            var phase = match != null ? match.Phase : MatchPhase.Waiting;
             var playing = phase == MatchPhase.Playing;
 
             UpdateClock(match, phase, playing);
@@ -176,7 +176,7 @@ namespace BetterTogether.UI
 
             var seconds = Mathf.Max(0f, ClockSeconds(match, phase));
             var whole = Mathf.CeilToInt(seconds);
-            var urgent = seconds <= _urgentSeconds && (match == null || phase == MatchPhase.Playing);
+            var urgent = seconds <= _urgentSeconds && match != null && phase == MatchPhase.Playing;
             _timeLabel.color = urgent ? _urgentColor : night ? _moonColor : Color.white;
 
             if (whole != _lastClockSecond)

@@ -2,6 +2,7 @@
 using System.Linq;
 using BetterTogether.Audio;
 using BetterTogether.Gaze;
+using BetterTogether.Match;
 using BetterTogether.Player;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -16,6 +17,7 @@ namespace BetterTogether.Networking
     public class DebugConnectionUI : MonoBehaviour
     {
         private const float RolePanelWidth = 340f;
+        private const string NameControl = "PlayerName";
 
         private string _roomCode = "TEST";
         private string _playerName = LocalPlayerProfile.Name;
@@ -27,7 +29,7 @@ namespace BetterTogether.Networking
             var connected = ConnectionManager.Instance != null && ConnectionManager.Instance.IsConnected;
             if (!connected)
                 SetRolePanelOpen(false);
-            else if (Keyboard.current != null && Keyboard.current.f1Key.wasPressedThisFrame)
+            else if (!FirstPersonCamera.IsTyping && Keyboard.current != null && Keyboard.current.f1Key.wasPressedThisFrame)
                 SetRolePanelOpen(!_rolePanelOpen);
 #endif
         }
@@ -40,7 +42,22 @@ namespace BetterTogether.Networking
             if (manager == null)
                 return;
 
-            GUILayout.BeginArea(new Rect(10, 10, 260, 200), GUI.skin.box);
+            var inLobby = manager.IsConnected && MatchManager.InLobby;
+            var current = Event.current;
+            var nameFocused = GUI.GetNameOfFocusedControl() == NameControl;
+            if (inLobby && nameFocused && current.type == EventType.KeyDown
+                && (current.keyCode == KeyCode.Return || current.keyCode == KeyCode.KeypadEnter))
+            {
+                GUIUtility.keyboardControl = 0;
+                current.Use();
+            }
+            else if (manager.IsConnected && GUIUtility.keyboardControl != 0 && !(inLobby && nameFocused))
+            {
+                // Focus left over from the room-code field (or the lobby ending) would keep IsTyping on and block hotkeys.
+                GUIUtility.keyboardControl = 0;
+            }
+
+            GUILayout.BeginArea(new Rect(10, 10, 260, inLobby ? 250 : 200), GUI.skin.box);
 
             if (manager.IsConnected)
             {
@@ -48,6 +65,8 @@ namespace BetterTogether.Networking
                 GUILayout.Label($"Room: {runner.SessionInfo.Name} ({runner.SessionInfo.Region})");
                 GUILayout.Label($"Players: {runner.SessionInfo.PlayerCount}/{runner.SessionInfo.MaxPlayers}");
                 GUILayout.Label($"Ping: {runner.GetPlayerRtt(runner.LocalPlayer) * 1000:0} ms");
+                if (inLobby)
+                    DrawNameField();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 GUILayout.Label("[F1] Debug: roles y mirada");
 #endif
@@ -60,13 +79,7 @@ namespace BetterTogether.Networking
             }
             else
             {
-                GUILayout.Label("Tu nombre");
-                var newName = GUILayout.TextField(_playerName, LocalPlayerProfile.MaxNameLength);
-                if (newName != _playerName)
-                {
-                    _playerName = newName;
-                    LocalPlayerProfile.Name = newName;
-                }
+                DrawNameField();
 
                 GUILayout.Label("Room code");
                 _roomCode = GUILayout.TextField(_roomCode, 12);
@@ -78,6 +91,22 @@ namespace BetterTogether.Networking
 
             if (_rolePanelOpen)
                 DrawRolePanel();
+        }
+
+        /// <summary>Name field shared by the pre-connection screen and the lobby; renames the live player when there is one.</summary>
+        private void DrawNameField()
+        {
+            GUILayout.Label("Tu nombre");
+            GUI.SetNextControlName(NameControl);
+            var newName = GUILayout.TextField(_playerName, LocalPlayerProfile.MaxNameLength);
+            if (newName == _playerName)
+                return;
+
+            _playerName = newName;
+            if (PlayerCharacter.Local != null)
+                PlayerCharacter.Local.SetDisplayName(newName);
+            else
+                LocalPlayerProfile.Name = newName;
         }
 
         private void DrawRolePanel()
@@ -178,13 +207,6 @@ namespace BetterTogether.Networking
 
             _rolePanelOpen = open;
             FirstPersonCamera.CursorFree = open;
-
-            // Back to playing: recapture the mouse instead of waiting for a click (which could also trigger a kick).
-            if (!open && PlayerCharacter.Local != null)
-            {
-                Cursor.lockState = CursorLockMode.Locked;
-                Cursor.visible = false;
-            }
         }
     }
 }

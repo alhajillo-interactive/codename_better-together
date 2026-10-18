@@ -1,4 +1,5 @@
 using BetterTogether.Match;
+using BetterTogether.Player;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
@@ -13,10 +14,10 @@ public class StartMatchUI : MonoBehaviour
         MatchManager.OnLobby += OnLobby;
     }
 
-    // The cursor is locked in first person, so the host can also start with Enter.
+    // The lobby frees the cursor, but Enter stays as a shortcut to start (ignored while typing a name).
     void Update()
     {
-        if (Keyboard.current != null && Keyboard.current.enterKey.wasPressedThisFrame)
+        if (!FirstPersonCamera.IsTyping && Keyboard.current != null && Keyboard.current.enterKey.wasPressedThisFrame)
             StartMatchBTN();
 
         // Hide as soon as the countdown starts, not only when playing.
