@@ -3,43 +3,50 @@
 
 # Unity YAML: Unity writes these with LF, so keep LF in the working tree too
 # (avoids "modified" files that only differ in line endings on Windows).
-*.unity         text eol=lf merge=unityyamlmerge
-*.prefab        text eol=lf merge=unityyamlmerge
-*.asset         text eol=lf merge=unityyamlmerge
-*.meta          text eol=lf merge=unityyamlmerge
-*.mat           text eol=lf merge=unityyamlmerge
-*.anim          text eol=lf merge=unityyamlmerge
-*.controller    text eol=lf merge=unityyamlmerge
-*.overrideController text eol=lf merge=unityyamlmerge
-*.physicMaterial text eol=lf merge=unityyamlmerge
-*.physicsMaterial2D text eol=lf merge=unityyamlmerge
-*.playable      text eol=lf merge=unityyamlmerge
-*.mask          text eol=lf merge=unityyamlmerge
-*.brush         text eol=lf merge=unityyamlmerge
-*.flare         text eol=lf merge=unityyamlmerge
-*.fontsettings  text eol=lf merge=unityyamlmerge
-*.guiskin       text eol=lf merge=unityyamlmerge
-*.giparams      text eol=lf merge=unityyamlmerge
-*.renderTexture text eol=lf merge=unityyamlmerge
-*.spriteatlas   text eol=lf merge=unityyamlmerge
-*.terrainlayer  text eol=lf merge=unityyamlmerge
-*.lighting      text eol=lf merge=unityyamlmerge
-*.shadergraph   text eol=lf
-*.shadersubgraph text eol=lf
-*.inputactions  text eol=lf
-*.fusion        text eol=lf
-*.json          text eol=lf
+# text=auto: git still detects binary files (e.g. TerrainData, NavMesh .asset) and never converts them;
+# converting a binary file corrupts it.
+*.unity         text=auto eol=lf merge=unityyamlmerge
+*.prefab        text=auto eol=lf merge=unityyamlmerge
+*.asset         text=auto eol=lf merge=unityyamlmerge
+*.meta          text=auto eol=lf merge=unityyamlmerge
+*.mat           text=auto eol=lf merge=unityyamlmerge
+*.anim          text=auto eol=lf merge=unityyamlmerge
+*.controller    text=auto eol=lf merge=unityyamlmerge
+*.overrideController text=auto eol=lf merge=unityyamlmerge
+*.physicMaterial text=auto eol=lf merge=unityyamlmerge
+*.physicsMaterial2D text=auto eol=lf merge=unityyamlmerge
+*.playable      text=auto eol=lf merge=unityyamlmerge
+*.mask          text=auto eol=lf merge=unityyamlmerge
+*.brush         text=auto eol=lf merge=unityyamlmerge
+*.flare         text=auto eol=lf merge=unityyamlmerge
+*.fontsettings  text=auto eol=lf merge=unityyamlmerge
+*.guiskin       text=auto eol=lf merge=unityyamlmerge
+*.giparams      text=auto eol=lf merge=unityyamlmerge
+*.renderTexture text=auto eol=lf merge=unityyamlmerge
+*.spriteatlas   text=auto eol=lf merge=unityyamlmerge
+*.terrainlayer  text=auto eol=lf merge=unityyamlmerge
+*.lighting      text=auto eol=lf merge=unityyamlmerge
+*.shadergraph   text=auto eol=lf
+*.shadersubgraph text=auto eol=lf
+*.inputactions  text=auto eol=lf
+*.fusion        text=auto eol=lf
+*.json          text=auto eol=lf
 
 # Code
 *.cs            text diff=csharp
-*.asmdef        text eol=lf
-*.asmref        text eol=lf
+*.asmdef        text=auto eol=lf
+*.asmref        text=auto eol=lf
 *.shader        text
 *.hlsl          text
 *.cginc         text
 *.yarn          text
 
 # Binaries
+# Unity stores these .asset files in binary form regardless of the text serialization setting.
+Assets/CampSite.asset binary
+*NavMesh*.asset binary
+LightingData.asset binary
+*.terraindata binary
 *.png binary
 *.jpg binary
 *.jpeg binary
