@@ -86,6 +86,12 @@ namespace BetterTogether.Interaction
         /// </summary>
         public bool WasHandled { get; private set; }
 
+        /// <summary>
+        /// State authority only (not networked): the last player to hold the item was the camper. The campfire only snaps in
+        /// logs the camper handled, so a log a gnome drops in the area stays loose.
+        /// </summary>
+        public bool LastHeldByCamper { get; private set; }
+
         /// <summary>State authority only: seconds the item has been loose and under physics (no holder, not pinned); 0 otherwise.</summary>
         public float FreeTime => _freeSince < 0f ? 0f : Time.time - _freeSince;
 
@@ -152,9 +158,6 @@ namespace BetterTogether.Interaction
 
         public string GetPrompt(PlayerInteractor interactor)
         {
-            if (IsPinned && TryGetComponent<FireplaceWood>(out _))
-                return $"Sacar {_displayName}";
-
             if (HolderCount > 0)
                 return $"Ayudar a cargar {_displayName}";
 
@@ -172,8 +175,8 @@ namespace BetterTogether.Interaction
             if (Inert || FindHeldBy(interactor) != null)
                 return false;
 
-            // The camper can't undo the fire: logs resting in the campfire are for gnomes to take out.
-            if (interactor.Role == PlayerRole.Camper && IsPinned && Runner.TryFindBehaviour(PinOwnerId, out NetworkBehaviour owner) && owner is FireplaceManager)
+            // Nobody can take a log back out of the campfire once it is placed.
+            if (IsPinned && Runner.TryFindBehaviour(PinOwnerId, out NetworkBehaviour owner) && owner is FireplaceManager)
                 return false;
 
             return HolderCount == 0
@@ -215,6 +218,7 @@ namespace BetterTogether.Interaction
         public void ResetForMatch()
         {
             WasHandled = false;
+            LastHeldByCamper = false;
             ForceReleaseAll();
             Unpin();
 
@@ -347,7 +351,10 @@ namespace BetterTogether.Interaction
 
             Compact();
             if (HolderCount > 0)
+            {
                 WasHandled = true;
+                LastHeldByCamper = Holder(0).Role == PlayerRole.Camper;
+            }
 
             if (HolderCount == 2 && HorizontalDistance(Holder(0).transform.position, Holder(1).transform.position) > _maxGnomeSpan)
             {
