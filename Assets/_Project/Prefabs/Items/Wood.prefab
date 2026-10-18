@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 5521313202705560644}
   - component: {fileID: 2427449002643352461}
   - component: {fileID: 7314829560183746251}
+  - component: {fileID: -2246691864523901188}
   m_Layer: 0
   m_Name: Wood
   m_TagString: Untagged
@@ -115,8 +116,6 @@ MonoBehaviour:
   _gnomesRequired: 2
   _maxGnomeSpan: 1.6
   _maxSoloGrabDistance: 1.2
-  _HolderA: {fileID: 0}
-  _HolderB: {fileID: 0}
 --- !u!136 &2427449002643352461
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -167,6 +166,18 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 1
+--- !u!114 &-2246691864523901188
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4893570877941593127}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ec70c991f14c53593a0c9c3ad60d6950, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FireplaceWood
 --- !u!1 &8981368635913501120
 GameObject:
   m_ObjectHideFlags: 0
