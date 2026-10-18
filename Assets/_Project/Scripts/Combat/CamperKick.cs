@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Fusion;
+using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -23,6 +24,11 @@ namespace BetterTogether.Combat
         [SerializeField] private float _horizontalSpeed = 5f;
         [SerializeField] private float _upwardSpeed = 3.5f;
         [SerializeField] private float _cooldown = 0.8f;
+
+        [Header("Recoil")]
+        [Tooltip("Impulse played on the camper's own camera when the kick lands.")]
+        [SerializeField] private CinemachineImpulseSource _kickRecoil;
+        [SerializeField] private float _recoilForce = 0.25f;
 
         private readonly Collider[] _overlap = new Collider[16];
         private readonly List<Kickable> _targets = new();
@@ -74,6 +80,9 @@ namespace BetterTogether.Combat
                 var direction = (forward + toTarget).normalized;
                 target.Kick(direction * _horizontalSpeed + Vector3.up * _upwardSpeed, transform.position);
             }
+
+            if (_targets.Count > 0 && _kickRecoil != null)
+                _kickRecoil.GenerateImpulseWithForce(_recoilForce);
         }
 
         private void FindTargets()

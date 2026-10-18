@@ -4,9 +4,12 @@ using UnityEngine.InputSystem;
 namespace BetterTogether.Player
 {
     /// <summary>
-    /// Scene camera that mounts on the local player's camera anchor and handles mouse look.
-    /// Exposes <see cref="Yaw"/> so movement can walk relative to where the player is looking.
+    /// Drives the scene's Cinemachine camera: mounts on the local player's camera anchor and handles mouse look.
+    /// The Unity Camera renders through the CinemachineBrain, which adds effects such as impulse shake on top.
+    /// Exposes <see cref="Yaw"/> so movement can walk relative to where the player is looking;
+    /// gameplay raycasts use this transform, so shake never affects them.
     /// </summary>
+    [DefaultExecutionOrder(-200)]
     public class FirstPersonCamera : MonoBehaviour
     {
         public static FirstPersonCamera Instance { get; private set; }
