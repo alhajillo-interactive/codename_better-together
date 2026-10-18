@@ -21,6 +21,7 @@ namespace BetterTogether.Interaction
         private InputAction _interact;
         private PlayerMovement _movement;
         private PlayerCharacter _character;
+        private GnomeStack _stack;
 
         public static PlayerInteractor Local { get; private set; }
 
@@ -46,6 +47,7 @@ namespace BetterTogether.Interaction
         private void Awake()
         {
             _character = GetComponent<PlayerCharacter>();
+            TryGetComponent(out _stack); // Only gnomes can stack.
         }
 
         public override void Spawned()
@@ -71,6 +73,13 @@ namespace BetterTogether.Interaction
 
             // Stunned or frozen (watched by the camper) players can't pick anything up or drop it.
             if (_movement != null && (_movement.IsStunned || _movement.IsFrozen))
+            {
+                Focused = null;
+                return;
+            }
+
+            // Riding on another gnome's head leaves no hands free.
+            if (_stack != null && _stack.IsRiding)
             {
                 Focused = null;
                 return;

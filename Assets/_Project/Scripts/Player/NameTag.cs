@@ -13,6 +13,8 @@ namespace BetterTogether.Player
         [SerializeField] private PlayerCharacter _character;
         [Tooltip("Meters above the root where the text is centred.")]
         [SerializeField] private float _heightOffset = 0.6f;
+        [Tooltip("Vertical gap between names when gnomes are stacked.")]
+        [SerializeField] private float _towerLineSpacing = 0.18f;
         [Tooltip("TextMeshPro font size; 1.2 reads about 0.12 m tall.")]
         [SerializeField] private float _fontSize = 1.2f;
         [Tooltip("Distance where the name starts to fade.")]
@@ -34,6 +36,7 @@ namespace BetterTogether.Player
 
         private TextMeshPro _text;
         private Petrifiable _petrifiable;
+        private GnomeStack _stack;
         private bool _styled;
 
         private void Awake()
@@ -42,6 +45,7 @@ namespace BetterTogether.Player
                 _character = GetComponent<PlayerCharacter>();
 
             _petrifiable = GetComponent<Petrifiable>();
+            TryGetComponent(out _stack); // Only gnomes can stack.
 
             var child = new GameObject("NameTag");
             child.transform.SetParent(transform, false);
@@ -85,6 +89,10 @@ namespace BetterTogether.Player
                 return;
 
             var tagTransform = _text.transform;
+            // Raise the name above the gnomes standing on this one, or it hides under their feet.
+            if (_stack != null)
+                tagTransform.localPosition = Vector3.up * (_heightOffset + _stack.RidersAbove * (_stack.SeatHeight + _towerLineSpacing));
+
             var offset = tagTransform.position - cam.transform.position;
             var distance = offset.magnitude;
             if (offset.sqrMagnitude > 0.0001f)

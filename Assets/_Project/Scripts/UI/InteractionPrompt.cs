@@ -2,6 +2,7 @@ using BetterTogether.Combat;
 using BetterTogether.Fireplace;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
+using BetterTogether.Player;
 using UnityEngine;
 
 namespace BetterTogether.UI
@@ -62,6 +63,17 @@ namespace BetterTogether.UI
             if (local.TryGetComponent<Kickable>(out var kickable) && kickable.IsStunned)
             {
                 text = "¡Aturdido!";
+            }
+            else if (GnomeStack.Local != null && GnomeStack.Local.IsRiding && Petrifiable.Local is not { IsStone: true })
+            {
+                text = "[Espacio] Bajarte";
+            }
+            else if (local.Focused == null && carried == null && GnomeStack.Local != null && GnomeStack.Local.Aimed != null)
+            {
+                var stack = GnomeStack.Local;
+                text = stack.CanClimbAimed
+                    ? $"[Clic] Subirte a {stack.Aimed.GetComponent<PlayerCharacter>().DisplayName}"
+                    : stack.ClimbBlockReason;
             }
             else if (local.Focused != null && local.Focused.CanInteract(local))
             {
