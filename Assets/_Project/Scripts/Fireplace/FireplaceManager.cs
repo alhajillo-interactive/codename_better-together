@@ -543,6 +543,7 @@ namespace BetterTogether.Fireplace
 
         public override void Render()
         {
+            UpdateFire();
             UpdateFireScale();
             if (_block == null)
                 return;

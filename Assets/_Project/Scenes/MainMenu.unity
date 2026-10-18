@@ -144,11 +144,12 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 243416000}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4b3741d2dd446a645b0c90e2b24aa3f5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Networking.DebugConnectionUI
+  _showConnectForm: 0
 --- !u!114 &243416002
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -161,10 +162,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4fbeed3ed9c6a1942b42d7775471cbc7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Networking.ConnectionManager
-  _maxPlayers: 4
+  _maxPlayers: 8
   _gameplayScene:
     asset: {fileID: 102900000, guid: 9cb0fdcb2bbec2f4281d58aa29300541, type: 3}
     guid: 9cb0fdcb2bbec2f4281d58aa29300541
+  _menuScene:
+    asset: {fileID: 102900000, guid: c171c6aacc82eeacabeb3525857b2cac, type: 3}
+    guid: c171c6aacc82eeacabeb3525857b2cac
+  _connectTimeout: 15
 --- !u!4 &243416003
 Transform:
   m_ObjectHideFlags: 0

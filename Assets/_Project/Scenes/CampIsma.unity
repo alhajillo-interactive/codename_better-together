@@ -529,7 +529,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4fbeed3ed9c6a1942b42d7775471cbc7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Networking.ConnectionManager
-  _maxPlayers: 4
+  _maxPlayers: 8
   _gameplayScene:
     asset: {fileID: 102900000, guid: bf31174f52c1c08a9b82f3f79cc99722, type: 3}
     guid: bf31174f52c1c08a9b82f3f79cc99722
