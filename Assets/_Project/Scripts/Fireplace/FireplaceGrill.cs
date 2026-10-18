@@ -19,7 +19,7 @@ namespace BetterTogether.Fireplace
 
         [Networked] private Sausage Placed { get; set; }
 
-        public Transform PinPoint => _spot;
+        public Transform GetPinPoint(int slot) => _spot;
 
         private bool SpotFree => Placed == null || !Placed.Carryable.IsPinnedTo(this);
 

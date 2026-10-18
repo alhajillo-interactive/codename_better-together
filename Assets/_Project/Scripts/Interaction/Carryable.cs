@@ -1,4 +1,8 @@
 using System.Collections.Generic;
+using BetterTogether.Audio;
+using BetterTogether.Combat;
+using BetterTogether.Fireplace;
+using BetterTogether.Gaze;
 using BetterTogether.Player;
 using BetterTogether.Match;
 using Fusion;
@@ -25,6 +29,25 @@ namespace BetterTogether.Interaction
         [Tooltip("A lone gnome waiting for help that gets farther than this from the item lets go.")]
         [SerializeField] private float _maxSoloGrabDistance = 1.2f;
 
+        [Header("Hand-off")]
+        [Tooltip("Heard by everyone when the item passes from one gnome to another.")]
+        [SerializeField] private SoundCue _handOffSfx;
+
+        [Header("Pose blend")]
+        [Tooltip("Seconds the item takes to fly from one holder to the next (local presentation only).")]
+        [SerializeField, Min(0f)] private float _handOffBlendTime = 0.18f;
+        [Tooltip("Height of the arc the item draws while passing between holders.")]
+        [SerializeField, Min(0f)] private float _handOffArc = 0.15f;
+        [Tooltip("Seconds the item takes to settle on a pin spot, e.g. a campfire slot.")]
+        [SerializeField, Min(0f)] private float _snapBlendTime = 0.28f;
+        [Tooltip("Height of the arc the item draws while settling on a pin spot.")]
+        [SerializeField, Min(0f)] private float _snapArc = 0.25f;
+
+        private const float ReceiveFovPunch = 2f;
+        private const float ReceiveFovPunchTime = 0.12f;
+
+        private enum PoseKind : byte { None, Held, Pinned }
+
         private Collider[] _colliders;
         private Rigidbody _body;
         private NetworkTransform _networkTransform;
@@ -32,10 +55,39 @@ namespace BetterTogether.Interaction
         private Quaternion _startRotation;
         private bool _collidersEnabled = true;
         private bool _isSpawned;
+        private PoseKind _lastKind;
+        private NetworkBehaviourId _lastKeyId;
+        private int _lastKeySlot;
+        private Vector3 _drawnPosition;
+        private Quaternion _drawnRotation;
+        private bool _blending;
+        private Vector3 _blendFromPosition;
+        private Quaternion _blendFromRotation;
+        private float _blendStart;
+        private float _blendTime;
+        private float _blendArc;
+        private float _freeSince = -1f;
+        private bool _hasRested;
+        private Vector3 _restPosition;
+        private Quaternion _restRotation;
+        private PlayerInteractor _lastHolder;
+        private int _lastHolderCount;
 
         [Networked] private PlayerInteractor HolderA { get; set; }
         [Networked] private PlayerInteractor HolderB { get; set; }
         [Networked] private NetworkBehaviourId PinOwnerId { get; set; }
+        [Networked] private byte PinSlot { get; set; }
+
+        public string DisplayName => _displayName;
+
+        /// <summary>
+        /// State authority only (not networked): someone has held the item since the last match reset. The campfire only
+        /// snaps in logs that were handled, so logs lying around the camp at the start do not fill it.
+        /// </summary>
+        public bool WasHandled { get; private set; }
+
+        /// <summary>State authority only: seconds the item has been loose and under physics (no holder, not pinned); 0 otherwise.</summary>
+        public float FreeTime => _freeSince < 0f ? 0f : Time.time - _freeSince;
 
         /// <summary>True while the item follows its holders.</summary>
         public bool IsMoving
@@ -61,7 +113,8 @@ namespace BetterTogether.Interaction
         /// </summary>
         public bool Inert { get; set; }
 
-        private int HolderCount => (Valid(HolderA) != null ? 1 : 0) + (Valid(HolderB) != null ? 1 : 0);
+        /// <summary>Live holders, 0 to 2.</summary>
+        public int HolderCount => !_isSpawned ? 0 : (Valid(HolderA) != null ? 1 : 0) + (Valid(HolderB) != null ? 1 : 0);
         private bool HeldByGnomes => HolderCount > 0 && Holder(0).Role == PlayerRole.Gnome;
 
         /// <summary>The item an interactor is holding, if any.</summary>
@@ -99,6 +152,9 @@ namespace BetterTogether.Interaction
 
         public string GetPrompt(PlayerInteractor interactor)
         {
+            if (IsPinned && TryGetComponent<FireplaceWood>(out _))
+                return $"Sacar {_displayName}";
+
             if (HolderCount > 0)
                 return $"Ayudar a cargar {_displayName}";
 
@@ -114,6 +170,10 @@ namespace BetterTogether.Interaction
                 return false;
 
             if (Inert || FindHeldBy(interactor) != null)
+                return false;
+
+            // The camper can't undo the fire: logs resting in the campfire are for gnomes to take out.
+            if (interactor.Role == PlayerRole.Camper && IsPinned && Runner.TryFindBehaviour(PinOwnerId, out NetworkBehaviour owner) && owner is FireplaceManager)
                 return false;
 
             return HolderCount == 0
@@ -134,20 +194,27 @@ namespace BetterTogether.Interaction
             HolderB = null;
         }
 
-        /// <summary>Authority only: rests the item on the spot, kinematic, until someone grabs it.</summary>
-        public void Pin<T>(T spot) where T : NetworkBehaviour, IPinSpot
+        /// <summary>Authority only: rests the item on the spot (in <paramref name="slot"/> when it has several), kinematic, until someone grabs it.</summary>
+        public void Pin<T>(T spot, int slot = 0) where T : NetworkBehaviour, IPinSpot
         {
             PinOwnerId = spot.Id;
+            PinSlot = (byte)slot;
             _body.isKinematic = true;
-            transform.SetPositionAndRotation(spot.PinPoint.position, spot.PinPoint.rotation);
+            var point = spot.GetPinPoint(slot);
+            transform.SetPositionAndRotation(point.position, point.rotation);
         }
 
         /// <summary>Authority only: lets the item go back to physics.</summary>
-        public void Unpin() => PinOwnerId = default;
+        public void Unpin()
+        {
+            PinOwnerId = default;
+            PinSlot = 0;
+        }
 
         /// <summary>Authority only: drops the item and puts it back where it started.</summary>
         public void ResetForMatch()
         {
+            WasHandled = false;
             ForceReleaseAll();
             Unpin();
 
@@ -163,9 +230,83 @@ namespace BetterTogether.Interaction
         /// <summary>Whether the item currently rests on this spot.</summary>
         public bool IsPinnedTo(NetworkBehaviour spot) => IsPinned && PinOwnerId.Equals(spot.Id);
 
+        /// <summary>Whether the item currently rests on this slot of the spot.</summary>
+        public bool IsPinnedTo(NetworkBehaviour spot, int slot) => IsPinnedTo(spot) && PinSlot == slot;
+
+        /// <summary>Slot of the spot the item rests on; only meaningful while <see cref="IsPinnedTo(NetworkBehaviour)"/>.</summary>
+        public int PinnedSlot => _isSpawned ? PinSlot : 0;
+
+        /// <summary>Fills <paramref name="results"/> with the spawned items resting on the spot.</summary>
+        public static void GetPinnedTo(NetworkBehaviour spot, List<Carryable> results)
+        {
+            results.Clear();
+            foreach (var carryable in All)
+            {
+                if (carryable.IsPinnedTo(spot))
+                    results.Add(carryable);
+            }
+        }
+
         /// <summary>Hint for a holder that cannot move the item yet, or null.</summary>
         public string StatusFor(PlayerInteractor who) =>
             IsHeldBy(who) && !IsMoving ? "Esperando otro duende..." : null;
+
+        /// <summary>
+        /// Whether <paramref name="from"/> may pass this item to <paramref name="to"/>, a gnome right above or below it in a tower.
+        /// <paramref name="reason"/> explains the one case worth telling the player (full hands), otherwise null.
+        /// Mirrors the authority's rules using the replicated state.
+        /// </summary>
+        public bool CanHandOff(PlayerInteractor from, PlayerInteractor to, out string reason)
+        {
+            reason = null;
+            if (!_isSpawned || !MatchManager.AllowsInteraction || Inert || IsPinned || from == null || to == null || from == to)
+                return false;
+
+            if (HolderCount != 1 || !IsMoving || !IsHeldBy(from))
+                return false;
+
+            if (!from.TryGetComponent<GnomeStack>(out var fromStack) || !to.TryGetComponent<GnomeStack>(out var toStack)
+                || from.Role != PlayerRole.Gnome || to.Role != PlayerRole.Gnome)
+                return false;
+
+            if (toStack.Mount != fromStack && fromStack.Mount != toStack)
+                return false;
+
+            if (IsOutOfAction(from) || IsOutOfAction(to))
+                return false;
+
+            if (FindHeldBy(to) != null)
+            {
+                reason = $"{to.GetComponent<PlayerCharacter>().DisplayName} tiene las manos ocupadas";
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>Passes the item from one gnome to the next one in the tower (see <see cref="CanHandOff"/>).</summary>
+        public void RequestHandOff(PlayerInteractor from, PlayerInteractor to) => RPC_RequestHandOff(from.Id, to.Id);
+
+        // Petrified or kick-stunned gnomes can neither give nor take.
+        private static bool IsOutOfAction(PlayerInteractor who) =>
+            (who.TryGetComponent<Petrifiable>(out var petrifiable) && petrifiable.IsStone)
+            || (who.TryGetComponent<Kickable>(out var kickable) && kickable.IsStunned);
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RPC_RequestHandOff(NetworkBehaviourId fromId, NetworkBehaviourId toId, RpcInfo info = default)
+        {
+            if (!Runner.TryFindBehaviour(fromId, out PlayerInteractor from) || !Runner.TryFindBehaviour(toId, out PlayerInteractor to)
+                || !CanHandOff(from, to, out _))
+                return;
+
+            // Only the giver may pass its own item. A call made on this very peer carries no remote source.
+            var giver = from.Object.StateAuthority;
+            if (info.Source != giver && !(info.Source == PlayerRef.None && Runner.LocalPlayer == giver))
+                return;
+
+            HolderA = to;
+            HolderB = null;
+        }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         private void RPC_RequestGrab(NetworkBehaviourId interactorId)
@@ -205,6 +346,9 @@ namespace BetterTogether.Interaction
                 return;
 
             Compact();
+            if (HolderCount > 0)
+                WasHandled = true;
+
             if (HolderCount == 2 && HorizontalDistance(Holder(0).transform.position, Holder(1).transform.position) > _maxGnomeSpan)
             {
                 HolderA = null;
@@ -227,13 +371,27 @@ namespace BetterTogether.Interaction
                 }
             }
 
+            // Loose and falling under physics: the campfire waits for it to settle before snapping it in.
+            if (HolderCount == 0 && !IsPinned && !_body.isKinematic)
+            {
+                if (_freeSince < 0f)
+                    _freeSince = Time.time;
+            }
+            else
+            {
+                _freeSince = -1f;
+            }
+
             if (TryGetFollowPose(out var position, out var rotation))
                 transform.SetPositionAndRotation(position, rotation);
         }
 
         public override void Render()
         {
-            var shouldEnable = !IsMoving && !Inert;
+            UpdateHandOffFeedback();
+
+            // No colliders while the item flies between holders or into a slot, so it does not shove anything on its way.
+            var shouldEnable = !IsMoving && !Inert && !_blending;
             if (shouldEnable == _collidersEnabled)
                 return;
 
@@ -242,12 +400,101 @@ namespace BetterTogether.Interaction
                 c.enabled = shouldEnable;
         }
 
+        // The item passing from the only holder to another one: everyone hears it, the receiver also feels it.
+        private void UpdateHandOffFeedback()
+        {
+            var count = HolderCount;
+            var holder = Holder(0);
+            if (count == 1 && _lastHolderCount == 1 && holder != null && _lastHolder != null && holder != _lastHolder)
+            {
+                _handOffSfx.PlayAt(transform.position);
+                if (holder == PlayerInteractor.Local && CameraPunch.Instance != null)
+                    CameraPunch.Instance.PunchFov(ReceiveFovPunch, ReceiveFovPunchTime);
+            }
+
+            _lastHolder = holder;
+            _lastHolderCount = count;
+        }
+
         // Runs after NetworkTransform has rendered the replicated pose.
         private void LateUpdate()
         {
             // LateUpdate also runs before Spawned / after Despawned, when networked state can't be read.
-            if (_isSpawned && TryGetFollowPose(out var position, out var rotation))
-                transform.SetPositionAndRotation(position, rotation);
+            if (!_isSpawned)
+                return;
+
+            var hasPose = TryGetFollowPose(out var position, out var rotation);
+            var kind = PoseKind.None;
+            var keyId = default(NetworkBehaviourId);
+            var keySlot = 0;
+            if (hasPose)
+                kind = GetPoseKey(out keyId, out keySlot);
+
+            // Moves between two real poses blend, and so does a resting item settling into a pin spot (auto-snap).
+            // Pickups from the ground and resets just happen.
+            if (kind != PoseKind.None && _lastKind != PoseKind.None && (kind != _lastKind || !keyId.Equals(_lastKeyId) || keySlot != _lastKeySlot))
+                StartBlend(kind == PoseKind.Pinned, _drawnPosition, _drawnRotation);
+            else if (kind == PoseKind.Pinned && _lastKind == PoseKind.None && _hasRested)
+                StartBlend(true, _restPosition, _restRotation);
+
+            _lastKind = kind;
+            _lastKeyId = keyId;
+            _lastKeySlot = keySlot;
+
+            if (!hasPose)
+            {
+                _blending = false;
+                _hasRested = true;
+                _restPosition = transform.position;
+                _restRotation = transform.rotation;
+                return;
+            }
+
+            if (_blending)
+                BlendPose(ref position, ref rotation);
+
+            transform.SetPositionAndRotation(position, rotation);
+            _drawnPosition = position;
+            _drawnRotation = rotation;
+        }
+
+        private PoseKind GetPoseKey(out NetworkBehaviourId id, out int slot)
+        {
+            if (IsMoving)
+            {
+                id = Holder(0).Id;
+                slot = 0;
+                return PoseKind.Held;
+            }
+
+            id = PinOwnerId;
+            slot = PinSlot;
+            return PoseKind.Pinned;
+        }
+
+        private void StartBlend(bool toPin, Vector3 fromPosition, Quaternion fromRotation)
+        {
+            _blending = true;
+            _blendFromPosition = fromPosition;
+            _blendFromRotation = fromRotation;
+            _blendStart = Time.time;
+            _blendTime = toPin ? _snapBlendTime : _handOffBlendTime;
+            _blendArc = toPin ? _snapArc : _handOffArc;
+        }
+
+        // Ease-out cubic along the way, with an arc on top; the real pose is always the destination.
+        private void BlendPose(ref Vector3 position, ref Quaternion rotation)
+        {
+            var t = _blendTime > 0f ? (Time.time - _blendStart) / _blendTime : 1f;
+            if (t >= 1f)
+            {
+                _blending = false;
+                return;
+            }
+
+            var eased = 1f - Mathf.Pow(1f - t, 3f);
+            position = Vector3.Lerp(_blendFromPosition, position, eased) + Vector3.up * (Mathf.Sin(Mathf.PI * t) * _blendArc);
+            rotation = Quaternion.Slerp(_blendFromRotation, rotation, eased);
         }
 
         private bool TryGetFollowPose(out Vector3 position, out Quaternion rotation)
@@ -280,7 +527,7 @@ namespace BetterTogether.Interaction
             if (Inert || !IsPinned || Runner == null || !Runner.TryFindBehaviour(PinOwnerId, out NetworkBehaviour owner) || owner is not IPinSpot spot)
                 return false;
 
-            var point = spot.PinPoint;
+            var point = spot.GetPinPoint(PinSlot);
             position = point.position;
             rotation = point.rotation;
             return true;

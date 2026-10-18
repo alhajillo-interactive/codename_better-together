@@ -50,6 +50,10 @@ namespace BetterTogether.Player
         [Tooltip("Seconds without control after the hop.")]
         [SerializeField, Min(0f)] private float _dismountStun = 0.1f;
 
+        [Header("Passing items")]
+        [Tooltip("Seconds after passing an item before this gnome can pass another one.")]
+        [SerializeField, Min(0f)] private float _handOffCooldown = 0.35f;
+
         [Header("Feedback")]
         [Tooltip("Field of view added for a moment on the local camera when climbing.")]
         [SerializeField] private float _mountFovPunch = 3f;
@@ -73,6 +77,8 @@ namespace BetterTogether.Player
         private CharacterController _controller;
         private InputAction _attack;
         private InputAction _jump;
+        private InputAction _focus;
+        private float _nextHandOffTime;
         private GnomeStack _aimed;
         private float _nextClimbTime;
         private bool _dismountRequested;
@@ -103,6 +109,9 @@ namespace BetterTogether.Player
         }
 
         public bool IsRiding => Mount != null;
+
+        /// <summary>The interactor that carries things for this gnome.</summary>
+        public PlayerInteractor Interactor => _interactor;
 
         /// <summary>The gnome standing directly on this one; if several claim it, the one with the lowest player id.</summary>
         public GnomeStack Rider
@@ -231,6 +240,7 @@ namespace BetterTogether.Player
             _movement.Teleported += HandleTeleported;
             _attack = InputSystem.actions.FindAction("Player/Attack");
             _jump = InputSystem.actions.FindAction("Player/Jump");
+            _focus = InputSystem.actions.FindAction("Player/Focus");
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -249,17 +259,47 @@ namespace BetterTogether.Player
 
             UpdateAim();
 
-            if (IsRiding)
-            {
-                // The hop itself runs in LateUpdate, after PlayerMovement.Update has seen (and ignored) this same press.
-                if (_jump != null && _jump.WasPressedThisFrame() && !_movement.IsFrozen)
-                    _dismountRequested = true;
+            // The hop itself runs in LateUpdate, after PlayerMovement.Update has seen (and ignored) this same press.
+            if (IsRiding && _jump != null && _jump.WasPressedThisFrame() && !_movement.IsFrozen)
+                _dismountRequested = true;
+
+            // Holding something while next to another gnome in a tower: the clicks pass it on (climbing needs empty hands).
+            if (TryHandOff() || IsRiding)
                 return;
-            }
 
             // Left click also re-locks the cursor (FirstPersonCamera), so ignore it while the cursor is free.
             if (_attack != null && _attack.WasPressedThisFrame() && Cursor.lockState == CursorLockMode.Locked)
                 TryClimb();
+        }
+
+        // Attack passes the item to the rider above, Focus (right click) to the mount below.
+        private bool TryHandOff()
+        {
+            if (_interactor == null || Time.time < _nextHandOffTime || Cursor.lockState != CursorLockMode.Locked)
+                return false;
+
+            var carried = _interactor.Carried;
+            if (carried == null)
+                return false;
+
+            GnomeStack target;
+            if (_attack != null && _attack.WasPressedThisFrame())
+                target = Rider;
+            else if (_focus != null && _focus.WasPressedThisFrame())
+                target = Mount;
+            else
+                return false;
+
+            if (target == null || target._interactor == null)
+                return false;
+
+            if (carried.CanHandOff(_interactor, target._interactor, out _))
+            {
+                carried.RequestHandOff(_interactor, target._interactor);
+                _nextHandOffTime = Time.time + _handOffCooldown;
+            }
+
+            return true;
         }
 
         public override void FixedUpdateNetwork()
@@ -280,6 +320,8 @@ namespace BetterTogether.Player
             if (mount == null || !MatchManager.AllowsInteraction || _movement.IsStunned)
             {
                 // A stun here usually is a knockback already applied (e.g. Petrifiable's release hop), which flies the gnome off.
+                if (mount != null && _movement.IsStunned)
+                    DropCarried();
                 ClearMount();
                 return;
             }
@@ -290,6 +332,7 @@ namespace BetterTogether.Player
             _mountHadMount = mountRides;
             if (mountLeft || TowerToppled(mount))
             {
+                DropCarried();
                 ClearMount();
                 _movement.ApplyKnockback(TopplePushDirection(mount) * _dismountForward + Vector3.up * _dismountUp, _dismountStun);
                 return;
@@ -303,6 +346,14 @@ namespace BetterTogether.Player
 
             // Replicate roughly the right spot, so the camper's gaze and raycasts see the rider where it sits.
             transform.position = mount.SeatPosition;
+        }
+
+        // Falling off with something in the hands: it stays where the gnome was.
+        private void DropCarried()
+        {
+            var carried = _interactor != null ? _interactor.Carried : null;
+            if (carried != null)
+                carried.RequestRelease(_interactor, transform.position);
         }
 
         private void HandleTeleported()

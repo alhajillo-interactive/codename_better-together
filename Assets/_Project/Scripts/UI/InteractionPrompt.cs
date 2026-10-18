@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using BetterTogether.Combat;
 using BetterTogether.Fireplace;
 using BetterTogether.Gaze;
@@ -42,6 +43,57 @@ namespace BetterTogether.UI
                 "¡El campista te está mirando! No te muevas", _watchedStyle);
         }
 
+        // What to tell a player with something in the hands: status, passing it on (gnomes in a tower), what E does, getting off.
+        private static string BuildCarriedText(PlayerInteractor local, Carryable carried)
+        {
+            var lines = new List<string>(4);
+            var status = carried.StatusFor(local);
+            if (status == null && carried.TryGetComponent<Sausage>(out var sausage))
+                status = $"Salchicha: {sausage.StateLabel}";
+
+            var fire = FireplaceManager.Instance;
+            if (status == null && fire != null && !fire.IsLit && !fire.HasEnoughWood && carried.TryGetComponent<Matches>(out _))
+                status = $"Faltan {fire.RequiredWood - fire.WoodCount} leños";
+
+            if (status != null)
+                lines.Add(status);
+
+            var stack = GnomeStack.Local;
+            if (stack != null)
+            {
+                AddLine(lines, PassLine(local, carried, stack.Rider, "[Clic]", "arriba"));
+                AddLine(lines, PassLine(local, carried, stack.Mount, "[Clic der.]", "abajo"));
+            }
+
+            if (fire != null && fire.CanPlace(local))
+                lines.Add($"[E] Colocar {carried.DisplayName} ({fire.WoodCount + 1}/{fire.RequiredWood})");
+            else
+                lines.Add(local.EdibleCarried != null ? "[E] Comer salchicha" : "[E] Soltar");
+
+            if (stack != null && stack.IsRiding && Petrifiable.Local is not { IsStone: true })
+                lines.Add("[Espacio] Bajarte");
+
+            return string.Join("\n", lines);
+        }
+
+        private static string PassLine(PlayerInteractor local, Carryable carried, GnomeStack target, string key, string direction)
+        {
+            if (target == null || target.Interactor == null)
+                return null;
+
+            if (carried.CanHandOff(local, target.Interactor, out var reason))
+                return $"{key} Pasar {carried.DisplayName} {direction}";
+
+            return reason;
+        }
+
+        private static void AddLine(List<string> lines, string line)
+        {
+            if (line != null)
+                lines.Add(line);
+        }
+
+
         private void OnGUI()
         {
             var local = PlayerInteractor.Local;
@@ -64,7 +116,7 @@ namespace BetterTogether.UI
             {
                 text = "¡Aturdido!";
             }
-            else if (GnomeStack.Local != null && GnomeStack.Local.IsRiding && Petrifiable.Local is not { IsStone: true })
+            else if (carried == null && GnomeStack.Local != null && GnomeStack.Local.IsRiding && Petrifiable.Local is not { IsStone: true })
             {
                 text = "[Espacio] Bajarte";
             }
@@ -85,12 +137,7 @@ namespace BetterTogether.UI
             }
             else if (carried != null)
             {
-                var status = carried.StatusFor(local);
-                if (status == null && carried.TryGetComponent<Sausage>(out var sausage))
-                    status = $"Salchicha: {sausage.StateLabel}";
-
-                var action = local.EdibleCarried != null ? "[E] Comer salchicha" : "[E] Soltar";
-                text = status != null ? status + "\n" + action : action;
+                text = BuildCarriedText(local, carried);
             }
 
             if (text == null)
@@ -104,7 +151,7 @@ namespace BetterTogether.UI
             _style.fontSize = _fontSize;
             _style.normal.textColor = _textColor;
 
-            GUI.Label(new Rect(center.x - 200f, center.y + _promptOffset - 15f, 400f, 60f), text, _style);
+            GUI.Label(new Rect(center.x - 200f, center.y + _promptOffset - 15f, 400f, 120f), text, _style);
         }
     }
 }

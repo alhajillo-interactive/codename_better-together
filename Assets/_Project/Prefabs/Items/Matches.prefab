@@ -116,6 +116,11 @@ MonoBehaviour:
   _gnomesRequired: 1
   _maxGnomeSpan: 1.6
   _maxSoloGrabDistance: 1.2
+  _handOffSfx: {fileID: 11400000, guid: efdcfbc4017178e1d68f4205c06124be, type: 2}
+  _handOffBlendTime: 0.18
+  _handOffArc: 0.15
+  _snapBlendTime: 0.28
+  _snapArc: 0.25
   _HolderA: {fileID: 0}
   _HolderB: {fileID: 0}
 --- !u!114 &2248810394776205119

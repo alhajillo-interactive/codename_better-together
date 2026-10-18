@@ -909,6 +909,7 @@ MonoBehaviour:
   _dismountForward: 1.5
   _dismountUp: 3
   _dismountStun: 0.1
+  _handOffCooldown: 0.35
   _mountFovPunch: 3
   _mountFovPunchTime: 0.2
   _mountSfx: {fileID: 0}

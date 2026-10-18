@@ -8,7 +8,7 @@ namespace BetterTogether.Interaction
     /// </summary>
     public interface IPinSpot
     {
-        /// <summary>Where the pinned item is posed.</summary>
-        Transform PinPoint { get; }
+        /// <summary>Where the item pinned in <paramref name="slot"/> is posed; spots with a single place ignore the slot.</summary>
+        Transform GetPinPoint(int slot);
     }
 }
