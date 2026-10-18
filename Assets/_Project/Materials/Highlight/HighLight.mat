@@ -38,12 +38,12 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _HighlightEdgeStrength: 1.44
+    - _HighlightLineScale: 7.2
+    - _HighlightOpacity: 0.834
+    - _HighlightPulseSpeed: 4.01
     - _QueueControl: 0
     - _QueueOffset: 0
-    - _HighlightOpacity: 0.42
-    - _HighlightEdgeStrength: 1.8
-    - _HighlightLineScale: 7
-    - _HighlightPulseSpeed: 1.2
     m_Colors:
     - _HighlightColor: {r: 0.12, g: 0.76, b: 1, a: 1}
   m_BuildTextureStacks: []
