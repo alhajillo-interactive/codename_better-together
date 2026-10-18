@@ -1,4 +1,3 @@
-#if FUSION_WEAVER
 using BetterTogether.Interaction;
 using BetterTogether.Player;
 using Fusion;
@@ -7,41 +6,65 @@ using UnityEngine;
 namespace BetterTogether.Networking
 {
     /// <summary>
-    /// In Shared mode each client spawns its own player when it joins.
-    /// Added by ConnectionManager on the same GameObject as the NetworkRunner so it receives runner callbacks.
+    /// Scene object that spawns the players. In Shared mode each client spawns its own character: a gnome (the lobby
+    /// avatar) when it joins, then the role chosen by the match (see MatchManager) when the countdown starts.
     /// </summary>
-    public class PlayerSpawner : SimulationBehaviour, IPlayerJoined
+    public class PlayerSpawner : NetworkBehaviour, IPlayerJoined
     {
-        private NetworkObject _gnomePrefab;
-        private NetworkObject _camperPrefab;
-        private Vector3[] _spawnPoints;
+        [SerializeField] private NetworkObject _gnomePrefab;
+        [SerializeField] private NetworkObject _camperPrefab;
+        [Tooltip("Children of this object. The player with PlayerId n starts at index n (wrapping around).")]
+        [SerializeField] private Transform[] _spawnPoints;
 
-        public void Init(NetworkObject gnomePrefab, NetworkObject camperPrefab, Vector3[] spawnPoints)
+        private bool _localRequested;
+
+        public static PlayerSpawner Instance { get; private set; }
+
+        public override void Spawned()
         {
-            _gnomePrefab = gnomePrefab;
-            _camperPrefab = camperPrefab;
-            _spawnPoints = spawnPoints;
+            Instance = this;
+            SpawnLocalIfMissing();
+        }
+
+        public override void Despawned(NetworkRunner runner, bool hasState)
+        {
+            _localRequested = false;
+            if (Instance == this)
+                Instance = null;
         }
 
         public void PlayerJoined(PlayerRef player)
         {
-            if (player != Runner.LocalPlayer)
-                return;
+            if (player == Runner.LocalPlayer)
+                SpawnLocalIfMissing();
+        }
 
-            if (_gnomePrefab == null)
+        /// <summary>Where this player starts a match; this object's own pose if no spawn points are set.</summary>
+        public (Vector3 position, Quaternion rotation) GetSpawnPose(PlayerRef player)
+        {
+            if (_spawnPoints is not { Length: > 0 })
+                return (transform.position, transform.rotation);
+
+            var point = _spawnPoints[Mathf.Abs(player.PlayerId) % _spawnPoints.Length];
+            return point != null ? (point.position, point.rotation) : (transform.position, transform.rotation);
+        }
+
+        /// <summary>
+        /// Puts the local player at its spawn point as <paramref name="role"/>. Respawns only when the role differs;
+        /// otherwise just teleports the current character.
+        /// </summary>
+        public void RespawnLocal(PlayerRole role)
+        {
+            var (position, rotation) = GetSpawnPose(Runner.LocalPlayer);
+            var current = PlayerCharacter.Local;
+            if (current != null && current.Role == role)
             {
-                Debug.LogError("[PlayerSpawner] No gnome prefab assigned on ConnectionManager.");
+                if (current.TryGetComponent<PlayerMovement>(out var movement))
+                    movement.Teleport(position, rotation);
                 return;
             }
 
-            // Temporary rule until a lobby assigns roles: the room creator (shared mode master client) is the camper.
-            var prefab = Runner.IsSharedModeMasterClient && _camperPrefab != null ? _camperPrefab : _gnomePrefab;
-
-            var position = _spawnPoints is { Length: > 0 }
-                ? _spawnPoints[player.PlayerId % _spawnPoints.Length]
-                : Vector3.zero;
-
-            Runner.Spawn(prefab, position, Quaternion.identity, player);
+            Replace(current, role, position, rotation);
         }
 
         /// <summary>
@@ -50,23 +73,38 @@ namespace BetterTogether.Networking
         /// </summary>
         public void ChangeRole(PlayerCharacter current, PlayerRole role)
         {
+            var currentTransform = current.transform;
+            Replace(current, role, currentTransform.position, currentTransform.rotation);
+        }
+
+        private void SpawnLocalIfMissing()
+        {
+            if (_localRequested || PlayerCharacter.Local != null)
+                return;
+
+            _localRequested = true;
+            var (position, rotation) = GetSpawnPose(Runner.LocalPlayer);
+            Replace(null, PlayerRole.Gnome, position, rotation);
+        }
+
+        private void Replace(PlayerCharacter current, PlayerRole role, Vector3 position, Quaternion rotation)
+        {
             var prefab = role == PlayerRole.Camper ? _camperPrefab : _gnomePrefab;
             if (prefab == null)
             {
-                Debug.LogWarning($"[PlayerSpawner] No prefab assigned for role {role} on ConnectionManager.");
+                Debug.LogWarning($"[PlayerSpawner] No prefab assigned for role {role}.", this);
                 return;
             }
 
-            if (current.TryGetComponent<PlayerInteractor>(out var interactor) && interactor.Carried != null)
-                interactor.Carried.RequestRelease(interactor);
+            if (current != null)
+            {
+                if (current.TryGetComponent<PlayerInteractor>(out var interactor) && interactor.Carried != null)
+                    interactor.Carried.RequestRelease(interactor);
 
-            var currentTransform = current.transform;
-            var position = currentTransform.position;
-            var rotation = currentTransform.rotation;
+                Runner.Despawn(current.Object);
+            }
 
-            Runner.Despawn(current.Object);
             Runner.Spawn(prefab, position, rotation, Runner.LocalPlayer);
         }
     }
 }
-#endif

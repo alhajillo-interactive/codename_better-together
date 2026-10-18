@@ -5,7 +5,6 @@ using UnityEngine;
 
 namespace BetterTogether.Player
 {
-    //Claude TODO: add a boolean flag that disables movement until the static event MatchManager.OnGameStarted is called
     /// <summary>
     /// Identity of a spawned player: its role (set on the prefab) and a handle to the local player's character.
     /// </summary>
@@ -49,7 +48,8 @@ namespace BetterTogether.Player
             if (role == _role)
                 return;
 
-            if (Runner.TryGetComponent<PlayerSpawner>(out var spawner))
+            var spawner = PlayerSpawner.Instance;
+            if (spawner != null)
                 spawner.ChangeRole(this, role);
         }
     }

@@ -1,4 +1,5 @@
 using BetterTogether.Audio;
+using BetterTogether.Match;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -8,6 +9,7 @@ namespace BetterTogether.Player
     /// <summary>
     /// First-person walk/sprint/jump on a CharacterController. Shared mode: only the state authority
     /// simulates; NetworkTransform replicates the result. All tuning lives on the prefab so it can be reused per role.
+    /// Walking, sprinting and jumping are locked while <see cref="MatchManager.AllowsMovement"/> is false.
     /// </summary>
     [RequireComponent(typeof(CharacterController))]
     public class PlayerMovement : NetworkBehaviour
@@ -128,14 +130,16 @@ namespace BetterTogether.Player
 
             var dt = Runner.DeltaTime;
             var stunned = IsStunned || IsFrozen;
+            var locked = !MatchManager.AllowsMovement;
             _stunTimer = Mathf.Max(0f, _stunTimer - dt);
 
             var yaw = FirstPersonCamera.Instance != null && !IsFrozen ? FirstPersonCamera.Instance.Yaw : transform.eulerAngles.y;
-            var move = stunned ? Vector2.zero : _move.ReadValue<Vector2>();
+            var move = stunned || locked ? Vector2.zero : _move.ReadValue<Vector2>();
             var direction = Vector3.ClampMagnitude(Quaternion.Euler(0f, yaw, 0f) * new Vector3(move.x, 0f, move.y), 1f);
-            var speed = _sprint.IsPressed() ? _sprintSpeed : _walkSpeed;
+            var sprinting = !locked && _sprint.IsPressed();
+            var speed = sprinting ? _sprintSpeed : _walkSpeed;
 
-            var jumped = _jumpQueued && grounded && !stunned;
+            var jumped = _jumpQueued && grounded && !stunned && !locked;
             if (jumped)
                 _verticalVelocity = Mathf.Sqrt(2f * _jumpHeight * -_gravity);
             _jumpQueued = false;
@@ -148,7 +152,7 @@ namespace BetterTogether.Player
             transform.rotation = Quaternion.Euler(0f, yaw, 0f);
 
             // The blend tree uses 0 = idle, 0.5 = walk and 1 = sprint.
-            AnimationMovement = Mathf.Clamp01(move.magnitude) * (_sprint.IsPressed() ? 1f : 0.5f);
+            AnimationMovement = Mathf.Clamp01(move.magnitude) * (sprinting ? 1f : 0.5f);
             AnimationJump = jumped || !_controller.isGrounded;
         }
 

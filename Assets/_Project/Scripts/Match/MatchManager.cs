@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using BetterTogether.Fireplace;
 using BetterTogether.Networking;
 using BetterTogether.Player;
@@ -21,6 +22,9 @@ namespace BetterTogether.Match
         [Tooltip("Start the countdown as soon as there are enough players, without waiting for the lobby button.")]
         [SerializeField] private bool _autoStart;
 
+        [Tooltip("Each rematch the next player (by PlayerId) becomes the camper; off picks a random player every time.")]
+        [SerializeField] private bool _rotateCamper = true;
+
         [Tooltip("Seconds of countdown before the match starts.")]
         [SerializeField] private float _countdown = 3f;
 
@@ -32,8 +36,10 @@ namespace BetterTogether.Match
 
         private MatchPhase _lastPhase = MatchPhase.Waiting;
         private bool _isSpawned;
+        private bool _roleApplied;
 
         [Networked] private MatchPhase CurrentPhase { get; set; }
+        [Networked] private PlayerRef CurrentCamper { get; set; }
         [Networked] private MatchResult CurrentResult { get; set; }
         [Networked] private TickTimer PhaseTimer { get; set; }
         [Networked] private TickTimer MatchTimer { get; set; }
@@ -55,7 +61,13 @@ namespace BetterTogether.Match
         /// <summary>True when there is no match system (free play) or the match is running.</summary>
         public static bool AllowsInteraction => Instance == null || Instance.Phase == MatchPhase.Playing;
 
+        /// <summary>Players can't move in the lobby or during the countdown, i.e. until <see cref="OnGameStarted"/>.</summary>
+        public static bool AllowsMovement => Instance == null || Instance.Phase == MatchPhase.Playing || Instance.Phase == MatchPhase.Ended;
+
         public MatchPhase Phase => _isSpawned ? CurrentPhase : MatchPhase.Waiting;
+
+        /// <summary>The player chosen as the camper for the current match; <see cref="PlayerRef.None"/> before the first countdown.</summary>
+        public PlayerRef Camper => _isSpawned ? CurrentCamper : PlayerRef.None;
 
         public MatchResult Result => _isSpawned ? CurrentResult : MatchResult.None;
 
@@ -169,9 +181,33 @@ namespace BetterTogether.Match
         private void BeginCountdown()
         {
             ResetWorld();
+            CurrentCamper = ChooseCamper();
             CurrentResult = MatchResult.None;
             CurrentPhase = MatchPhase.Countdown;
             PhaseTimer = TickTimer.CreateFromSeconds(Runner, _countdown);
+        }
+
+        private PlayerRef ChooseCamper()
+        {
+            var players = new List<PlayerRef>();
+            foreach (var player in Runner.ActivePlayers)
+                players.Add(player);
+
+            if (players.Count == 0)
+                return PlayerRef.None;
+
+            var previous = CurrentCamper;
+            if (!_rotateCamper || previous == PlayerRef.None)
+                return players[UnityEngine.Random.Range(0, players.Count)];
+
+            players.Sort((a, b) => a.PlayerId.CompareTo(b.PlayerId));
+            foreach (var player in players)
+            {
+                if (player.PlayerId > previous.PlayerId)
+                    return player;
+            }
+
+            return players[0];
         }
 
         private void UpdateCountdown()
@@ -245,12 +281,15 @@ namespace BetterTogether.Match
         {
             var phase = CurrentPhase;
             MatchProgress = ComputeProgress(phase);
+            if (phase != MatchPhase.Countdown)
+                _roleApplied = false;
+            else if (!_roleApplied)
+                ApplyLocalRole();
+
             if (phase == _lastPhase)
                 return;
 
             _lastPhase = phase;
-            if (phase == MatchPhase.Countdown)
-                SendLocalPlayerToSpawn();
 
             PhaseChanged?.Invoke(phase);
             RaiseGlobalEvents(phase);
@@ -285,24 +324,20 @@ namespace BetterTogether.Match
             }
         }
 
-        private void SendLocalPlayerToSpawn()
+        /// <summary>
+        /// Once per countdown: respawns the local player as camper or gnome at its spawn point. Camper may replicate
+        /// a tick after the phase, so this waits until it is known.
+        /// </summary>
+        private void ApplyLocalRole()
         {
-            var character = PlayerCharacter.Local;
-            var connection = ConnectionManager.Instance;
-            if (character == null || connection == null || !character.TryGetComponent<PlayerMovement>(out var movement))
+            var camper = CurrentCamper;
+            var spawner = PlayerSpawner.Instance;
+            if (camper == PlayerRef.None || spawner == null)
                 return;
 
-            var position = connection.GetSpawnPoint(Runner.LocalPlayer.PlayerId);
-            var rotation = character.transform.rotation;
-            var fireplace = FireplaceManager.Instance;
-            if (fireplace != null)
-            {
-                var toFire = Vector3.ProjectOnPlane(fireplace.transform.position - position, Vector3.up);
-                if (toFire.sqrMagnitude > 1e-4f)
-                    rotation = Quaternion.LookRotation(toFire, Vector3.up);
-            }
-
-            movement.Teleport(position, rotation);
+            _roleApplied = true;
+            var role = Runner.LocalPlayer == camper ? PlayerRole.Camper : PlayerRole.Gnome;
+            spawner.RespawnLocal(role);
         }
     }
 }

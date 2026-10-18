@@ -7,7 +7,6 @@ using Fusion;
 using Photon.Voice.Fusion;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using UnityEngine.Serialization;
 
 namespace BetterTogether.Networking
 {
@@ -19,11 +18,6 @@ namespace BetterTogether.Networking
     {
         public static ConnectionManager Instance { get; private set; }
 
-        [FormerlySerializedAs("_playerPrefab")]
-        [SerializeField] private NetworkObject _gnomePrefab;
-        [Tooltip("Optional. Spawned for the room creator; if empty everyone spawns as a gnome.")]
-        [SerializeField] private NetworkObject _camperPrefab;
-        [SerializeField] private Vector3[] _spawnPoints = { Vector3.zero };
         [SerializeField] private int _maxPlayers = 4;
         [Tooltip("Gameplay scene to load after connecting. Must be in Build Settings.")]
         [SerializeField] private SceneReference _gameplayScene;
@@ -44,14 +38,6 @@ namespace BetterTogether.Networking
 
             Instance = this;
             DontDestroyOnLoad(gameObject);
-        }
-
-        /// <summary>Where the player with this id starts a match; the world origin if no spawn points are set.</summary>
-        public Vector3 GetSpawnPoint(int index)
-        {
-            return _spawnPoints is { Length: > 0 }
-                ? _spawnPoints[Mathf.Abs(index) % _spawnPoints.Length]
-                : Vector3.zero;
         }
 
         public async Task<bool> JoinOrCreate(string roomCode)
@@ -75,11 +61,6 @@ namespace BetterTogether.Networking
             _runner.ProvideInput = true;
             // Joins the matching voice room automatically; players' VoiceNetworkObject uses it.
             runnerObject.AddComponent<FusionVoiceClient>();
-
-            // CLAUDE TODO: refactor to have a separate player spawner in a scene object 
-            // so we can have better control on who is the camper and when to spawn the players 
-            // based on teh game manager onGameStart
-            runnerObject.AddComponent<PlayerSpawner>().Init(_gnomePrefab, _camperPrefab, _spawnPoints);
 
             // CLAUDE TODO: use the scene reference _gameplayScene in this game object to load said scene so we can easily reference it on the unity editor
             var sceneManager = runnerObject.AddComponent<PathSceneManager>();
