@@ -618,7 +618,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5b36fc386cd14678bf9d6ee8dc81b1bb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Player.CameraFocus
-  _focusFov: 45
+  _focusFov: 35
   _transitionTime: 0.2
   _focusSensitivity: 0.55
 --- !u!1 &1711334501

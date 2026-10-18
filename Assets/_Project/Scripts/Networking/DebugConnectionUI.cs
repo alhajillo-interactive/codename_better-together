@@ -18,6 +18,7 @@ namespace BetterTogether.Networking
         private const float RolePanelWidth = 340f;
 
         private string _roomCode = "TEST";
+        private string _playerName = LocalPlayerProfile.Name;
         private bool _rolePanelOpen;
 
         private void Update()
@@ -59,6 +60,14 @@ namespace BetterTogether.Networking
             }
             else
             {
+                GUILayout.Label("Tu nombre");
+                var newName = GUILayout.TextField(_playerName, LocalPlayerProfile.MaxNameLength);
+                if (newName != _playerName)
+                {
+                    _playerName = newName;
+                    LocalPlayerProfile.Name = newName;
+                }
+
                 GUILayout.Label("Room code");
                 _roomCode = GUILayout.TextField(_roomCode, 12);
                 if (GUILayout.Button("Join / Create"))
@@ -89,7 +98,7 @@ namespace BetterTogether.Networking
             {
                 GUILayout.BeginHorizontal();
                 var you = player.HasStateAuthority ? " (tú)" : "";
-                GUILayout.Label($"Jugador {player.Object.StateAuthority.PlayerId}{you}: {RoleName(player.Role)}", GUILayout.Width(170f));
+                GUILayout.Label($"{player.DisplayName}{you}: {RoleName(player.Role)}", GUILayout.Width(170f));
                 RoleButton(player, PlayerRole.Camper);
                 RoleButton(player, PlayerRole.Gnome);
                 GUILayout.EndHorizontal();

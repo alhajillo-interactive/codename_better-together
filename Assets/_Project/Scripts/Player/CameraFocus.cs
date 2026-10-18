@@ -12,7 +12,7 @@ namespace BetterTogether.Player
     public class CameraFocus : MonoBehaviour
     {
         [Tooltip("Field of view while focusing; the normal one is the camera lens.")]
-        [SerializeField] private float _focusFov = 45f;
+        [SerializeField] private float _focusFov = 35f;
         [Tooltip("Seconds to ease between normal and focused.")]
         [SerializeField] private float _transitionTime = 0.2f;
         [Tooltip("Mouse sensitivity multiplier while focusing.")]
