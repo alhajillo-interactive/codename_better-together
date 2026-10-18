@@ -15,6 +15,12 @@ Shader "Project/Watercolor/InkOutline"
             Cull Front
             ZWrite Off
             ZTest LEqual
+            Stencil
+            {
+                Ref 1
+                Comp NotEqual
+                Pass Keep
+            }
 
             HLSLPROGRAM
             #pragma vertex Vert

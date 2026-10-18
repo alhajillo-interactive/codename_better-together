@@ -42,10 +42,11 @@ float WatercolorCells(float3 p)
 }
 
 void WatercolorShade_float(float3 NormalWS, float4 ScreenPosition, float4 BaseColor,
-    float4 InkColor, float WashScale, float EdgeBleed, float Ambient,
-    float3 PositionWS, float4 ShadowColor, float4 MidColor, float4 HighlightColor,
-    float ShadowThreshold, float MidThreshold, float HighlightThreshold,
+    float WashScale, float EdgeBleed, float Ambient,
+    float3 PositionWS, float ShadowMultiplier, float HighlightMultiplier,
+    float ShadowThreshold, float HighlightThreshold,
     float LightStrength, float LightColorInfluence, float PaperStrength,
+    UnityTexture2D MainTexture, float2 UV, float TextureStrength,
     out float3 Color)
 {
 #ifdef SHADERGRAPH_PREVIEW
@@ -89,22 +90,20 @@ void WatercolorShade_float(float3 NormalWS, float4 ScreenPosition, float4 BaseCo
     float washLight = saturate(light + variation * bleed);
 
     float shadowCut = saturate(ShadowThreshold);
-    float midCut = max(shadowCut + 0.001, saturate(MidThreshold));
-    float highlightCut = max(midCut + 0.001, saturate(HighlightThreshold));
+    float highlightCut = max(shadowCut + 0.001, saturate(HighlightThreshold));
     float softness = lerp(0.025, 0.12, bleed);
-    float3 pigment = ShadowColor.rgb;
-    pigment = lerp(pigment, MidColor.rgb,
+    float3 shadowPigment = BaseColor.rgb * saturate(ShadowMultiplier);
+    float3 highlightPigment = BaseColor.rgb * max(1.0, HighlightMultiplier);
+    float3 pigment = lerp(shadowPigment, BaseColor.rgb,
         smoothstep(shadowCut - softness, shadowCut + softness, washLight));
-    pigment = lerp(pigment, BaseColor.rgb,
-        smoothstep(midCut - softness, midCut + softness, washLight));
-    pigment = lerp(pigment, HighlightColor.rgb,
+    pigment = lerp(pigment, highlightPigment,
         smoothstep(highlightCut - softness, highlightCut + softness, washLight));
 
     // Pigment settles at wash boundaries and into the grain of the paper.
     float borderDistance = min(abs(washLight - shadowCut),
-        min(abs(washLight - midCut), abs(washLight - highlightCut)));
+        abs(washLight - highlightCut));
     float pooledEdge = (1.0 - smoothstep(0.007, 0.055, borderDistance)) * bleed;
-    pigment = lerp(pigment, InkColor.rgb, pooledEdge * 0.2);
+    pigment *= 1.0 - pooledEdge * 0.2;
     pigment *= 1.0 + (medium - 0.5) * bleed * 0.2;
 
     float2 paperPixel = floor(ScreenPosition.xy * 0.5);
@@ -114,7 +113,11 @@ void WatercolorShade_float(float3 NormalWS, float4 ScreenPosition, float4 BaseCo
     pigment *= 1.0 + granulation;
     float dryPaper = saturate(PaperStrength) *
         saturate((fine - 0.62) * 2.0) * 0.18;
-    pigment = lerp(pigment, HighlightColor.rgb, dryPaper);
+    pigment = lerp(pigment, highlightPigment, dryPaper);
+    float3 textureColor = SAMPLE_TEXTURE2D(MainTexture.tex,
+        MainTexture.samplerstate, UV).rgb;
+    pigment *= lerp(float3(1.0, 1.0, 1.0), textureColor,
+        saturate(TextureStrength));
 
     float3 lightTint = incomingLight / max(luminance, 0.001);
     Color = saturate(pigment * lerp(float3(1.0, 1.0, 1.0),
@@ -123,17 +126,19 @@ void WatercolorShade_float(float3 NormalWS, float4 ScreenPosition, float4 BaseCo
 }
 
 void WatercolorShade_half(half3 NormalWS, half4 ScreenPosition, half4 BaseColor,
-    half4 InkColor, half WashScale, half EdgeBleed, half Ambient,
-    half3 PositionWS, half4 ShadowColor, half4 MidColor, half4 HighlightColor,
-    half ShadowThreshold, half MidThreshold, half HighlightThreshold,
+    half WashScale, half EdgeBleed, half Ambient,
+    half3 PositionWS, half ShadowMultiplier, half HighlightMultiplier,
+    half ShadowThreshold, half HighlightThreshold,
     half LightStrength, half LightColorInfluence, half PaperStrength,
+    UnityTexture2D MainTexture, half2 UV, half TextureStrength,
     out half3 Color)
 {
     float3 result;
-    WatercolorShade_float(NormalWS, ScreenPosition, BaseColor, InkColor,
-        WashScale, EdgeBleed, Ambient, PositionWS, ShadowColor, MidColor,
-        HighlightColor, ShadowThreshold, MidThreshold, HighlightThreshold,
-        LightStrength, LightColorInfluence, PaperStrength, result);
+    WatercolorShade_float(NormalWS, ScreenPosition, BaseColor,
+        WashScale, EdgeBleed, Ambient, PositionWS, ShadowMultiplier,
+        HighlightMultiplier, ShadowThreshold, HighlightThreshold,
+        LightStrength, LightColorInfluence, PaperStrength,
+        MainTexture, UV, TextureStrength, result);
     Color = result;
 }
 

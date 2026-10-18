@@ -54,19 +54,16 @@ Material:
     - _QueueControl: 0
     - _QueueOffset: 0
     - _WatercolorAmbient: 0.01
-    - _WatercolorEdgeBleed: 3
+    - _WatercolorEdgeBleed: 1
+    - _WatercolorHighlightMultiplier: 1.5
     - _WatercolorHighlightThreshold: 0.75
     - _WatercolorLightColorInfluence: 1
     - _WatercolorLightStrength: 0.6
-    - _WatercolorMidThreshold: 0.6
-    - _WatercolorPaperStrength: 0.01
+    - _WatercolorPaperStrength: 0.6
+    - _WatercolorShadowMultiplier: 0.5
     - _WatercolorShadowThreshold: 0.5
     - _WatercolorWashScale: 36.12
     m_Colors:
     - _WatercolorBaseColor: {r: 0.015485938, g: 0.087609395, b: 0.11320752, a: 1}
-    - _WatercolorHighlightColor: {r: 0.07157149, g: 0.0754717, b: 0.041651834, a: 1}
-    - _WatercolorInkColor: {r: 0.026032396, g: 0.14150941, b: 0.10911952, a: 1}
-    - _WatercolorMidColor: {r: 0.034980383, g: 0.03773582, b: 0.0051619764, a: 1}
-    - _WatercolorShadowColor: {r: 0.006727155, g: 0.009433985, b: 0.003070495, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
