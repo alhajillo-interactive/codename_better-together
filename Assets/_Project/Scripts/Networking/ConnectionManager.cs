@@ -61,7 +61,8 @@ namespace BetterTogether.Networking
             // Joins the matching voice room automatically; players' VoiceNetworkObject uses it.
             runnerObject.AddComponent<FusionVoiceClient>();
 
-            var sceneManager = runnerObject.AddComponent<NetworkSceneManagerDefault>();
+            // Path-based scene refs; see PathSceneManager for why the default (index-based) one must not be used.
+            var sceneManager = runnerObject.AddComponent<PathSceneManager>();
 
             var sceneInfo = new NetworkSceneInfo();
             sceneInfo.AddSceneRef(gameplaySceneRef, LoadSceneMode.Single);
@@ -111,8 +112,8 @@ namespace BetterTogether.Networking
         }
 
         /// <summary>
-        /// Resolves a scene picked in the inspector to the networked scene to load (its Build Settings index).
-        /// Every player must have the same scene list, which is versioned in ProjectSettings/EditorBuildSettings.
+        /// Resolves a scene picked in the inspector to the networked scene to load. It is sent by asset path, never by
+        /// Build Settings index: the index depends on each machine's scene list (see <see cref="PathSceneManager"/>).
         /// </summary>
         private static bool TryGetSceneRef(SceneReference scene, out SceneRef sceneRef, out string error)
         {
@@ -126,7 +127,7 @@ namespace BetterTogether.Networking
                 return false;
             }
 
-            sceneRef = SceneRef.FromIndex(scene.BuildIndex);
+            sceneRef = SceneRef.FromPath(scene.Path);
             error = null;
             return true;
         }

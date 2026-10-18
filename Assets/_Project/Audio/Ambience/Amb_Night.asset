@@ -1,0 +1,17 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c3ee35520324d4c8c071fe2d69c9c3b, type: 3}
+  m_Name: Amb_Night
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Audio.MusicTrack
+  Clip: {fileID: 8300000, guid: 5c80cb9419d001648b8ee44b0173320e, type: 3}
+  Volume: 0.8
+  Loop: 1

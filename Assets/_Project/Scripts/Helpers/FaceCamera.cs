@@ -2,7 +2,16 @@ using UnityEngine;
 
 public class FaceCamera : MonoBehaviour
 {
+
     private Camera m_Camera;
+
+    void Awake()
+    {
+        if (TryGetComponent<Canvas>(out var canvas))
+        {
+            canvas.worldCamera = Camera.main;
+        }
+    }
 
     void LateUpdate()
     {
