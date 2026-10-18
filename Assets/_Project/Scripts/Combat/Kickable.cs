@@ -1,6 +1,7 @@
 using BetterTogether.Interaction;
 using BetterTogether.Player;
 using Fusion;
+using Unity.Cinemachine;
 using UnityEngine;
 
 namespace BetterTogether.Combat
@@ -22,6 +23,11 @@ namespace BetterTogether.Combat
         [Tooltip("Where the dropped item lands between this player (0) and the kicker (1).")]
         [Range(0f, 1f)]
         [SerializeField] private float _dropTowardKicker = 0.5f;
+
+        [Header("Camera shake")]
+        [Tooltip("Impulse played on this player's own camera when kicked.")]
+        [SerializeField] private CinemachineImpulseSource _kickShake;
+        [SerializeField] private float _kickShakeForce = 0.6f;
 
         [Header("Dizzy effect")]
         [Tooltip("Visual-only child that wobbles while stunned (not the root, which carries the collider).")]
@@ -76,6 +82,10 @@ namespace BetterTogether.Combat
             StunTimer = TickTimer.CreateFromSeconds(Runner, _stunDuration);
             DropCarried(kickerPosition);
             _movement.ApplyKnockback(Vector3.ClampMagnitude(velocity, _maxKickSpeed), _stunDuration);
+
+            // Runs on the kicked player's own client, so only their camera shakes.
+            if (_kickShake != null)
+                _kickShake.GenerateImpulseWithVelocity(velocity.normalized * _kickShakeForce);
         }
 
         private void DropCarried(Vector3 kickerPosition)
