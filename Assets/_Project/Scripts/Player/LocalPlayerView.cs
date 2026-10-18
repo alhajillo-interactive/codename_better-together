@@ -24,10 +24,23 @@ namespace BetterTogether.Player
             else
                 Debug.LogWarning("[LocalPlayerView] No FirstPersonCamera found in the scene.");
 
-            if (_body == null)
+            HideBody(_body);
+
+            // The character prefabs can contain alternative meshes. Hide those too so
+            // activating a different model never exposes the local body to the camera.
+            foreach (var animator in GetComponentsInChildren<Animator>(true))
+            {
+                if (animator.transform.parent == transform && animator.transform != _body)
+                    HideBody(animator.transform);
+            }
+        }
+
+        private static void HideBody(Transform body)
+        {
+            if (body == null)
                 return;
 
-            foreach (var bodyRenderer in _body.GetComponentsInChildren<Renderer>(true))
+            foreach (var bodyRenderer in body.GetComponentsInChildren<Renderer>(true))
                 bodyRenderer.shadowCastingMode = ShadowCastingMode.ShadowsOnly;
         }
 

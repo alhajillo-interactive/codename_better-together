@@ -2124,7 +2124,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Player.LocalPlayerView
   _cameraAnchor: {fileID: 8654765146232553351}
-  _body: {fileID: 3508261187052106375}
+  _body: {fileID: 4591997852132141630}
 --- !u!114 &4307647866129598102
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2267,7 +2267,7 @@ MonoBehaviour:
   _kickFlashColor: {r: 1, g: 0.1, b: 0.1, a: 0.3}
   _kickFlashTime: 0.3
   _kickedSfx: {fileID: 11400000, guid: 2d8e4c348a2b4c6986d3e4bd3b83e232, type: 2}
-  _wobbleTarget: {fileID: 3508261187052106375}
+  _wobbleTarget: {fileID: 4591997852132141630}
   _wobbleAngle: 12
   _starsHeight: 0.55
   _starsRadius: 0.15
@@ -2303,7 +2303,7 @@ MonoBehaviour:
   _hopForward: 2
   _hopUp: 2.5
   _hopStun: 0.25
-  _visual: {fileID: 3508261187052106375}
+  _visual: {fileID: 4591997852132141630}
   _stoneColor: {r: 0.55, g: 0.55, b: 0.58, a: 1}
   _stoneBlendTime: 0.2
   _watchedSfx: {fileID: 11400000, guid: e4ceecb347e64e91a56ceaf3b780cb51, type: 2}
