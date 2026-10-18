@@ -16,15 +16,26 @@ namespace BetterTogether.Networking
     /// </summary>
     public class DebugConnectionUI : MonoBehaviour
     {
+        [Tooltip("Show the room-code form while disconnected. Turn off when a real menu handles connecting.")]
+        [SerializeField] private bool _showConnectForm = true;
+
         private const float RolePanelWidth = 340f;
         private const string NameControl = "PlayerName";
 
+        private static GUIStyle _roomStyle;
         private string _roomCode = "TEST";
         private string _playerName = "";
         private bool _rolePanelOpen;
 
         // PlayerPrefs can't be read from a field initializer (Unity throws and the panel breaks), so load it here.
         private void Awake() => _playerName = LocalPlayerProfile.Name;
+
+        /// <summary>Large bold style so the room code is easy to read out to friends.</summary>
+        private static GUIStyle RoomStyle => _roomStyle ??= new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 18,
+            fontStyle = FontStyle.Bold,
+        };
 
         private void Update()
         {
@@ -45,6 +56,9 @@ namespace BetterTogether.Networking
             if (manager == null)
                 return;
 
+            if (!_showConnectForm && !manager.IsConnected && !manager.IsConnecting)
+                return;
+
             var inLobby = manager.IsConnected && MatchManager.InLobby;
             var current = Event.current;
             var nameFocused = GUI.GetNameOfFocusedControl() == NameControl;
@@ -60,12 +74,13 @@ namespace BetterTogether.Networking
                 GUIUtility.keyboardControl = 0;
             }
 
-            GUILayout.BeginArea(new Rect(10, 10, 260, inLobby ? 250 : 200), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(10, 10, 260, inLobby ? 270 : 220), GUI.skin.box);
 
             if (manager.IsConnected)
             {
                 var runner = manager.Runner;
-                GUILayout.Label($"Room: {runner.SessionInfo.Name} ({runner.SessionInfo.Region})");
+                GUILayout.Label($"Sala: {runner.SessionInfo.Name}", RoomStyle);
+                GUILayout.Label($"Región: {runner.SessionInfo.Region}");
                 GUILayout.Label($"Players: {runner.SessionInfo.PlayerCount}/{runner.SessionInfo.MaxPlayers}");
                 GUILayout.Label($"Ping: {runner.GetPlayerRtt(runner.LocalPlayer) * 1000:0} ms");
                 if (inLobby)
@@ -73,8 +88,8 @@ namespace BetterTogether.Networking
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 GUILayout.Label("[F1] Debug: roles y mirada");
 #endif
-                if (GUILayout.Button("Disconnect"))
-                    _ = manager.Disconnect();
+                if (GUILayout.Button("Salir al menú"))
+                    _ = manager.ReturnToMenu();
             }
             else if (manager.IsConnecting)
             {

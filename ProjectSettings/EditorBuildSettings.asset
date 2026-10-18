@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/_Project/Scenes/MainMenu.unity
+    guid: c171c6aacc82eeacabeb3525857b2cac
+  - enabled: 1
     path: Assets/_Project/Scenes/CampBryan.unity
     guid: 9cb0fdcb2bbec2f4281d58aa29300541
   - enabled: 1
