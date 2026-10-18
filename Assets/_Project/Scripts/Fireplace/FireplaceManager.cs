@@ -1,63 +1,50 @@
+using System.Collections.Generic;
 using Fusion;
 using TMPro;
 using UnityEngine;
 
 public class FireplaceManager : NetworkBehaviour
 {
+    private const int maxColliders = 20;
     [SerializeField] TextMeshProUGUI amountLabel;
     [SerializeField] int requiredAmount = 6;
-    private const int MAX_TRACKED = 32;
+    [Header("Logs detection")]
+    [SerializeField] LayerMask logsLayer;
+    [SerializeField] float detectorRadius = 1;
 
-    // The replicated list — all clients see the same set of object IDs
-    [Networked, Capacity(MAX_TRACKED)]
-    private NetworkLinkedList<NetworkObject> Tracked { get; }
+    [Networked, OnChangedRender(nameof(UpdateFireplaceCount))]
+    int LogsInside { get; set; }
 
-    private ChangeDetector _detector;
+    readonly HashSet<FireplaceWood> logCounter = new();
+
+    private Collider[] results = new Collider[maxColliders];
 
     public override void Spawned()
     {
-        _detector = GetChangeDetector(ChangeDetector.Source.SimulationState);
+        UpdateFireplaceCount();
     }
-
-    private void OnTriggerStay(Collider other)
+    public override void FixedUpdateNetwork()
     {
         if (!HasStateAuthority) return;
 
-        // Only track objects that have a NetworkObject
-        if (!other.TryGetComponent<FireplaceWood>(out var wood)) return;
-
-        // If not already in the list, add it (this is the "enter" detection)
-        if (!Tracked.Contains(wood.NObject))
+        logCounter.Clear();
+        int itemsFound = Physics.OverlapSphereNonAlloc(transform.position, detectorRadius, results, logsLayer);
+        for (int i = 0; i < itemsFound; i++)
         {
-            Tracked.Add(wood.NObject);
+            if (!results[i].TryGetComponent<FireplaceWood>(out var wood)) continue;
+            logCounter.Add(wood);
         }
-    }
-
-    private void OnTriggerExit(Collider other)
-    {
-        if (!HasStateAuthority) return;
-
-        if (!other.TryGetComponent<FireplaceWood>(out var wood)) return;
-
-        Tracked.Remove(wood.NObject);
-    }
-
-    // ─── RENDERING (all clients) ─────────────────────────────────────
-
-    public override void Render()
-    {
-        foreach (var change in _detector.DetectChanges(this))
-        {
-            if (change == nameof(Tracked))
-            {
-                UpdateFireplaceCount();
-            }
-        }
+        LogsInside = logCounter.Count;
     }
 
     private void UpdateFireplaceCount()
     {
+        amountLabel.text = $"{LogsInside}/{requiredAmount}";
+    }
 
-        amountLabel.text = $"{Tracked.Count}/{requiredAmount}";
+    void OnDrawGizmosSelected()
+    {
+        Gizmos.color = Color.green;
+        Gizmos.DrawWireSphere(transform.position, detectorRadius);
     }
 }

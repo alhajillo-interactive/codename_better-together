@@ -70,7 +70,7 @@ namespace BetterTogether.Player
             }
             else if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
                 SetCursorLocked(false);
-            else if (!cursorLocked && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+            else if (!cursorLocked && Mouse.current != null && Mouse.current.leftButton.wasReleasedThisFrame)
                 SetCursorLocked(true);
             else if (cursorLocked)
                 ApplyLook();
