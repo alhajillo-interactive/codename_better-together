@@ -447,6 +447,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4b3741d2dd446a645b0c90e2b24aa3f5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Networking.DebugConnectionUI
+  _showConnectForm: 1
 --- !u!114 &1428246799
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -463,6 +464,10 @@ MonoBehaviour:
   _gameplayScene:
     asset: {fileID: 102900000, guid: 077958a61dadec0449f45f5abd5d35d0, type: 3}
     guid: 077958a61dadec0449f45f5abd5d35d0
+  _menuScene:
+    asset: {fileID: 0}
+    guid: 00000000000000000000000000000000
+  _connectTimeout: 15
 --- !u!4 &1428246800
 Transform:
   m_ObjectHideFlags: 0
@@ -1456,6 +1461,7 @@ MonoBehaviour:
   - {fileID: 1980241223855773941}
   - {fileID: 3856957381441106266}
   - {fileID: 5082513833886728665}
+  _overflowSpacing: 0.9
 --- !u!1 &8390539027135319669
 GameObject:
   m_ObjectHideFlags: 0
@@ -1565,33 +1571,6 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 0}
     - targetCorrespondingSourceObject: {fileID: 3695087565340718200, guid: ebc7ee7cb6f99c148a800ccc3f6f32cb, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 0}
-    - targetCorrespondingSourceObject: {fileID: 5560809154047146660, guid: ebc7ee7cb6f99c148a800ccc3f6f32cb, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 0}
-    - targetCorrespondingSourceObject: {fileID: 6574919120383202249, guid: ebc7ee7cb6f99c148a800ccc3f6f32cb, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 0}
-    - targetCorrespondingSourceObject: {fileID: 8250645285316010391, guid: ebc7ee7cb6f99c148a800ccc3f6f32cb, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 0}
-    - targetCorrespondingSourceObject: {fileID: 7058066572330816273, guid: ebc7ee7cb6f99c148a800ccc3f6f32cb, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 0}
-    - targetCorrespondingSourceObject: {fileID: 8295586452101555423, guid: ebc7ee7cb6f99c148a800ccc3f6f32cb, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 0}
-    - targetCorrespondingSourceObject: {fileID: 1375673699773195228, guid: ebc7ee7cb6f99c148a800ccc3f6f32cb, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 0}
-    - targetCorrespondingSourceObject: {fileID: 6019563775260790359, guid: ebc7ee7cb6f99c148a800ccc3f6f32cb, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 0}
-    - targetCorrespondingSourceObject: {fileID: 1436742020726210215, guid: ebc7ee7cb6f99c148a800ccc3f6f32cb, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 0}
-    - targetCorrespondingSourceObject: {fileID: 6775499485869589606, guid: ebc7ee7cb6f99c148a800ccc3f6f32cb, type: 3}
       insertIndex: -1
       addedObject: {fileID: 0}
   m_SourcePrefab: {fileID: 100100000, guid: ebc7ee7cb6f99c148a800ccc3f6f32cb, type: 3}
