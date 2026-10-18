@@ -3,8 +3,9 @@ using UnityEngine;
 namespace BetterTogether.Audio
 {
     /// <summary>
-    /// A piece of music. Create with Create > Better Together > Audio > Music Track and play it with
-    /// <see cref="AudioManager.PlayMusic"/>; switching tracks crossfades automatically.
+    /// A long looping piece: music (<see cref="AudioManager.PlayMusic"/>) or a background ambience bed
+    /// (<see cref="AudioManager.PlayAmbience"/>). Create with Create > Better Together > Audio > Music Track;
+    /// switching tracks crossfades automatically.
     /// </summary>
     [CreateAssetMenu(fileName = "Music_", menuName = "Better Together/Audio/Music Track")]
     public class MusicTrack : ScriptableObject

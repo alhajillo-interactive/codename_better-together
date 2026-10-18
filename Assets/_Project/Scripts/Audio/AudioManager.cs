@@ -28,8 +28,10 @@ namespace BetterTogether.Audio
         // Music starts at half so it doesn't cover voice chat.
         private static readonly float[] DefaultVolumes = { 1f, 0.5f, 0.8f, 1f };
 
-        [Tooltip("Seconds to fade between tracks.")]
+        [Tooltip("Seconds to fade between music tracks.")]
         [SerializeField, Min(0f)] private float _musicFade = 1.5f;
+        [Tooltip("Default seconds to fade between ambience beds (e.g. day to night).")]
+        [SerializeField, Min(0f)] private float _ambienceFade = 3f;
 
         private static AudioManager _instance;
         private static bool _quitting;
@@ -37,12 +39,12 @@ namespace BetterTogether.Audio
         private static bool _mixerLoaded;
 
         private readonly List<AudioSource> _sfxSources = new();
-        private readonly MusicChannel[] _music = new MusicChannel[2];
         private AudioMixerGroup _sfxGroup;
-        private int _activeMusic;
-        private MusicTrack _currentTrack;
+        private TrackPlayer _music;
+        private TrackPlayer _ambience;
 
-        public static MusicTrack CurrentTrack => _instance != null ? _instance._currentTrack : null;
+        public static MusicTrack CurrentTrack => _instance != null ? _instance._music.Current : null;
+        public static MusicTrack CurrentAmbience => _instance != null ? _instance._ambience.Current : null;
 
         public static AudioMixer Mixer
         {
@@ -104,13 +106,31 @@ namespace BetterTogether.Audio
             if (track == null)
                 StopMusic();
             else
-                Instance?.SwitchMusic(track);
+                Instance?._music.Play(track, Instance._musicFade);
         }
 
         public static void StopMusic()
         {
             if (_instance != null)
-                _instance.SwitchMusic(null);
+                _instance._music.Play(null, _instance._musicFade);
+        }
+
+        /// <summary>
+        /// Crossfades the background ambience (independent from music) to <paramref name="track"/>; null stops it.
+        /// Ambience goes through the SFX group. <paramref name="fadeSeconds"/> overrides the default fade.
+        /// </summary>
+        public static void PlayAmbience(MusicTrack track, float? fadeSeconds = null)
+        {
+            if (track == null)
+                StopAmbience(fadeSeconds);
+            else
+                Instance?._ambience.Play(track, fadeSeconds ?? Instance._ambienceFade);
+        }
+
+        public static void StopAmbience(float? fadeSeconds = null)
+        {
+            if (_instance != null)
+                _instance._ambience.Play(null, fadeSeconds ?? _instance._ambienceFade);
         }
 
         // Exists from the start so saved volumes (including voice) apply before anything plays.
@@ -159,8 +179,8 @@ namespace BetterTogether.Audio
 
             _sfxGroup = SfxGroup;
             var musicGroup = MusicGroup;
-            for (var i = 0; i < _music.Length; i++)
-                _music[i] = new MusicChannel(CreateSource("Music", musicGroup));
+            _music = new TrackPlayer(CreateSource("Music", musicGroup), CreateSource("Music", musicGroup));
+            _ambience = new TrackPlayer(CreateSource("Ambience", _sfxGroup), CreateSource("Ambience", _sfxGroup));
         }
 
         // Mixer values set during Awake can be ignored by Unity, so apply them here.
@@ -180,9 +200,8 @@ namespace BetterTogether.Audio
 
         private void Update()
         {
-            var step = _musicFade > 0f ? Time.unscaledDeltaTime / _musicFade : 1f;
-            foreach (var channel in _music)
-                channel.Tick(step);
+            _music.Tick(Time.unscaledDeltaTime);
+            _ambience.Tick(Time.unscaledDeltaTime);
         }
 
         private void PlaySfxInternal(SoundCue cue, Vector3? position)
@@ -214,22 +233,6 @@ namespace BetterTogether.Audio
             return created;
         }
 
-        private void SwitchMusic(MusicTrack track)
-        {
-            // A non-looping track that already ended can be played again.
-            if (track == _currentTrack && (track == null || _music[_activeMusic].IsPlaying))
-                return;
-
-            _currentTrack = track;
-            _music[_activeMusic].FadeOut();
-
-            if (track == null || track.Clip == null)
-                return;
-
-            _activeMusic = 1 - _activeMusic;
-            _music[_activeMusic].FadeIn(track);
-        }
-
         private AudioSource CreateSource(string sourceName, AudioMixerGroup group)
         {
             var child = new GameObject(sourceName);
@@ -240,15 +243,51 @@ namespace BetterTogether.Audio
             return source;
         }
 
-        /// <summary>One of the two music sources used for crossfading.</summary>
-        private sealed class MusicChannel
+        /// <summary>Plays one looping track at a time and crossfades between two sources when it changes.</summary>
+        private sealed class TrackPlayer
+        {
+            private readonly Channel[] _channels;
+            private int _active;
+            private float _fade;
+
+            public TrackPlayer(AudioSource a, AudioSource b) => _channels = new[] { new Channel(a), new Channel(b) };
+
+            public MusicTrack Current { get; private set; }
+
+            public void Play(MusicTrack track, float fadeSeconds)
+            {
+                // A non-looping track that already ended can be played again.
+                if (track == Current && (track == null || _channels[_active].IsPlaying))
+                    return;
+
+                Current = track;
+                _fade = fadeSeconds;
+                _channels[_active].FadeOut();
+
+                if (track == null || track.Clip == null)
+                    return;
+
+                _active = 1 - _active;
+                _channels[_active].FadeIn(track);
+            }
+
+            public void Tick(float deltaTime)
+            {
+                var step = _fade > 0f ? deltaTime / _fade : 1f;
+                foreach (var channel in _channels)
+                    channel.Tick(step);
+            }
+        }
+
+        /// <summary>One of the two sources of a <see cref="TrackPlayer"/>.</summary>
+        private sealed class Channel
         {
             private readonly AudioSource _source;
             private float _level;
             private float _target;
             private float _trackVolume;
 
-            public MusicChannel(AudioSource source)
+            public Channel(AudioSource source)
             {
                 _source = source;
                 _source.spatialBlend = 0f;
