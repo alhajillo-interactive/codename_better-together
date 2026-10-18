@@ -946,6 +946,7 @@ MonoBehaviour:
   _jumpHeight: 1
   _gravity: -20
   _animator: {fileID: 9079837355192595333}
+  _kickSwingSfx: {fileID: 11400000, guid: 7aa6b956ba554a34b988b9859c5085ca, type: 2}
   _knockbackAirDrag: 1.5
   _knockbackGroundDrag: 12
 --- !u!114 &1482589445214074440

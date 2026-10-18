@@ -1,3 +1,4 @@
+using BetterTogether.Audio;
 using BetterTogether.Player;
 using Fusion;
 using UnityEngine;
@@ -13,6 +14,8 @@ namespace BetterTogether.Gaze
     {
         [Tooltip("Heights above the feet that are checked; seeing any of them counts (e.g. feet and head).")]
         [SerializeField] private float[] _checkHeights = { 0.1f, 0.4f };
+        [Tooltip("Tension sting when the camper starts looking at you. Only you hear it; set the cue to not Spatial.")]
+        [SerializeField] private SoundCue _watchedSfx;
 
         private PlayerMovement _movement;
 
@@ -40,7 +43,11 @@ namespace BetterTogether.Gaze
             if (Local != this)
                 return;
 
-            IsWatched = IsSeenByAnyCamper();
+            var watched = IsSeenByAnyCamper();
+            if (watched && !IsWatched)
+                _watchedSfx.Play(); // Only this gnome hears it (2D), like the HUD warning.
+
+            IsWatched = watched;
             _movement.IsFrozen = IsWatched;
         }
 

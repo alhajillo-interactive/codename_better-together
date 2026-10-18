@@ -1,3 +1,4 @@
+using BetterTogether.Audio;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -18,6 +19,9 @@ namespace BetterTogether.Player
         [Header("Animation")]
         [Tooltip("Animator on the visual child (Mesh). Leave empty to find it automatically.")]
         [SerializeField] private Animator _animator;
+        [Header("Sound")]
+        [Tooltip("Swing of the camper's kick, heard by everyone even when it misses.")]
+        [SerializeField] private SoundCue _kickSwingSfx;
         [Header("Knockback")]
         [Tooltip("How fast knockback slows down while airborne (m/s per second).")]
         [SerializeField] private float _knockbackAirDrag = 1.5f;
@@ -145,6 +149,7 @@ namespace BetterTogether.Player
         {
             _animator.ResetTrigger(KickParameter);
             _animator.SetTrigger(KickParameter);
+            _kickSwingSfx.PlayAt(transform.position);
         }
     }
 }

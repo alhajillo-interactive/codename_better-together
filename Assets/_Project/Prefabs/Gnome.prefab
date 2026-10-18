@@ -733,6 +733,7 @@ MonoBehaviour:
   _dropTowardKicker: 0.5
   _kickShake: {fileID: 8800000000000000001}
   _kickShakeForce: 0.6
+  _kickedSfx: {fileID: 11400000, guid: 2d8e4c348a2b4c6986d3e4bd3b83e232, type: 2}
   _wobbleTarget: {fileID: 0}
   _wobbleAngle: 12
   _starsHeight: 0.55
@@ -754,6 +755,7 @@ MonoBehaviour:
   _checkHeights:
   - 0.1
   - 0.4
+  _watchedSfx: {fileID: 11400000, guid: e4ceecb347e64e91a56ceaf3b780cb51, type: 2}
 --- !u!114 &8800000000000000001
 MonoBehaviour:
   m_ObjectHideFlags: 0
