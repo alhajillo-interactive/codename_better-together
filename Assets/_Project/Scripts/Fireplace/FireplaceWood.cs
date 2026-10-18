@@ -1,12 +1,19 @@
 using Fusion;
 using UnityEngine;
 
-[RequireComponent(typeof(NetworkObject))]
-public class FireplaceWood : MonoBehaviour
+namespace BetterTogether.Fireplace
 {
-    public NetworkObject NObject { get; private set; }
-    void Awake()
+    /// <summary>
+    /// Marks a log so the campfire zone counts it, and gives the campfire its <see cref="NetworkObject"/>.
+    /// </summary>
+    [RequireComponent(typeof(NetworkObject))]
+    public class FireplaceWood : MonoBehaviour
     {
-        NObject = GetComponent<NetworkObject>();
+        public NetworkObject NObject { get; private set; }
+
+        private void Awake()
+        {
+            NObject = GetComponent<NetworkObject>();
+        }
     }
 }

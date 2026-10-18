@@ -22,6 +22,7 @@ namespace BetterTogether.Player
         [SerializeField] private float _knockbackGroundDrag = 12f;
 
         private CharacterController _controller;
+        private NetworkTransform _networkTransform;
         private Vector3 _knockback;
         private float _stunTimer;
         private InputAction _move;
@@ -33,6 +34,7 @@ namespace BetterTogether.Player
         private void Awake()
         {
             _controller = GetComponent<CharacterController>();
+            _networkTransform = GetComponent<NetworkTransform>();
         }
 
         public override void Spawned()
@@ -67,6 +69,28 @@ namespace BetterTogether.Player
             _verticalVelocity = velocity.y;
             _stunTimer = Mathf.Max(_stunTimer, stunDuration);
             _jumpQueued = false;
+        }
+
+        /// <summary>Moves the player instantly (e.g. back to its spawn point). State authority only.</summary>
+        public void Teleport(Vector3 position, Quaternion rotation)
+        {
+            if (!HasStateAuthority)
+                return;
+
+            _controller.enabled = false;
+            transform.SetPositionAndRotation(position, rotation);
+            _controller.enabled = true;
+
+            _knockback = Vector3.zero;
+            _verticalVelocity = 0f;
+            _stunTimer = 0f;
+            _jumpQueued = false;
+
+            if (_networkTransform != null)
+                _networkTransform.Teleport(position, rotation);
+
+            if (FirstPersonCamera.Instance != null)
+                FirstPersonCamera.Instance.SetYaw(rotation.eulerAngles.y);
         }
 
         private void Update()

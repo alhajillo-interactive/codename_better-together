@@ -1,8 +1,10 @@
 using System.Collections.Generic;
+using BetterTogether.Player;
 using Fusion;
 using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 
 namespace BetterTogether.Combat
 {
@@ -23,12 +25,20 @@ namespace BetterTogether.Combat
         [Tooltip("With the defaults a gnome lands about 2.5 m away after a ~0.3 m hop.")]
         [SerializeField] private float _horizontalSpeed = 5f;
         [SerializeField] private float _upwardSpeed = 3.5f;
-        [SerializeField] private float _cooldown = 0.8f;
+        [Tooltip("Delay after a kick that landed.")]
+        [FormerlySerializedAs("_cooldown")]
+        [SerializeField] private float _hitCooldown = 0.8f;
+        [Tooltip("Delay after a kick that hit nothing; longer, so spamming is punished.")]
+        [SerializeField] private float _missCooldown = 1.2f;
 
         [Header("Recoil")]
-        [Tooltip("Impulse played on the camper's own camera when the kick lands.")]
+        [Tooltip("Impulse played on the camper's own camera when kicking.")]
         [SerializeField] private CinemachineImpulseSource _kickRecoil;
-        [SerializeField] private float _recoilForce = 0.25f;
+        [SerializeField] private float _recoilForce = 0.4f;
+        [SerializeField] private float _missRecoilForce = 0.1f;
+        [Tooltip("Field of view added for a moment when the kick lands.")]
+        [SerializeField] private float _hitFovPunch = 4f;
+        [SerializeField] private float _hitFovPunchTime = 0.25f;
 
         private readonly Collider[] _overlap = new Collider[16];
         private readonly List<Kickable> _targets = new();
@@ -70,7 +80,8 @@ namespace BetterTogether.Combat
 
         private void Kick()
         {
-            _readyTime = Time.time + _cooldown;
+            var hit = _targets.Count > 0;
+            _readyTime = Time.time + (hit ? _hitCooldown : _missCooldown);
 
             var forward = Flat(transform.forward).normalized;
             foreach (var target in _targets)
@@ -81,8 +92,11 @@ namespace BetterTogether.Combat
                 target.Kick(direction * _horizontalSpeed + Vector3.up * _upwardSpeed, transform.position);
             }
 
-            if (_targets.Count > 0 && _kickRecoil != null)
-                _kickRecoil.GenerateImpulseWithForce(_recoilForce);
+            if (_kickRecoil != null)
+                _kickRecoil.GenerateImpulseWithForce(hit ? _recoilForce : _missRecoilForce);
+
+            if (hit && CameraPunch.Instance != null)
+                CameraPunch.Instance.PunchFov(_hitFovPunch, _hitFovPunchTime);
         }
 
         private void FindTargets()

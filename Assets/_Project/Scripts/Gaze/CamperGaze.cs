@@ -30,6 +30,11 @@ namespace BetterTogether.Gaze
         /// <summary>Every spawned camper gaze, local and remote.</summary>
         public static IReadOnlyList<CamperGaze> All => _all;
 
+        /// <summary>The local camper's gaze (state authority).</summary>
+        public static CamperGaze Local { get; private set; }
+
+        public float HalfAngle => _halfAngle;
+
         [Networked] private float Pitch { get; set; }
         [Networked] public NetworkBool IsGazeEnabled { get; private set; }
 
@@ -39,11 +44,19 @@ namespace BetterTogether.Gaze
         public override void Spawned()
         {
             _all.Add(this);
-            if (HasStateAuthority)
-                IsGazeEnabled = _enabledOnSpawn;
+            if (!HasStateAuthority)
+                return;
+
+            Local = this;
+            IsGazeEnabled = _enabledOnSpawn;
         }
 
-        public override void Despawned(NetworkRunner runner, bool hasState) => _all.Remove(this);
+        public override void Despawned(NetworkRunner runner, bool hasState)
+        {
+            _all.Remove(this);
+            if (Local == this)
+                Local = null;
+        }
 
         public override void FixedUpdateNetwork()
         {

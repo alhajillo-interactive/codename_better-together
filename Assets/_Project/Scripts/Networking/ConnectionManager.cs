@@ -46,6 +46,14 @@ namespace BetterTogether.Networking
             DontDestroyOnLoad(gameObject);
         }
 
+        /// <summary>Where the player with this id starts a match; the world origin if no spawn points are set.</summary>
+        public Vector3 GetSpawnPoint(int index)
+        {
+            return _spawnPoints is { Length: > 0 }
+                ? _spawnPoints[Mathf.Abs(index) % _spawnPoints.Length]
+                : Vector3.zero;
+        }
+
         public async Task<bool> JoinOrCreate(string roomCode)
         {
             if (IsConnecting || IsConnected)

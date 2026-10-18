@@ -1,4 +1,5 @@
 using BetterTogether.Combat;
+using BetterTogether.Fireplace;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using UnityEngine;
@@ -73,7 +74,11 @@ namespace BetterTogether.UI
             else if (carried != null)
             {
                 var status = carried.StatusFor(local);
-                text = status != null ? status + "\n[E] Soltar" : "[E] Soltar";
+                if (status == null && carried.TryGetComponent<Sausage>(out var sausage))
+                    status = $"Salchicha: {sausage.StateLabel}";
+
+                var action = local.EdibleCarried != null ? "[E] Comer salchicha" : "[E] Soltar";
+                text = status != null ? status + "\n" + action : action;
             }
 
             if (text == null)

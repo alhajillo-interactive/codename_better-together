@@ -1097,9 +1097,11 @@ MonoBehaviour:
     m_Bits: 4294967295
   _horizontalSpeed: 5
   _upwardSpeed: 3.5
-  _cooldown: 0.8
+  _hitCooldown: 0.8
+  _missCooldown: 1.2
   _kickRecoil: {fileID: 8800000000000000002}
-  _recoilForce: 0.25
+  _recoilForce: 0.4
+  _missRecoilForce: 0.1
 --- !u!114 &6152230495412790016
 MonoBehaviour:
   m_ObjectHideFlags: 0

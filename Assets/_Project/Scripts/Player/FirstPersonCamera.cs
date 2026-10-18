@@ -47,6 +47,12 @@ namespace BetterTogether.Player
             SetCursorLocked(true);
         }
 
+        /// <summary>Turns the view to face <paramref name="yaw"/> degrees (e.g. after a teleport).</summary>
+        public void SetYaw(float yaw)
+        {
+            Yaw = yaw;
+        }
+
         public void Release(Transform anchor)
         {
             if (_target != anchor)

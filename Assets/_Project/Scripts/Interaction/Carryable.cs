@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BetterTogether.Player;
+using BetterTogether.Match;
 using Fusion;
 using UnityEngine;
 
@@ -12,7 +13,7 @@ namespace BetterTogether.Interaction
     /// NetworkTransform: the authority keeps it kinematic while carried and lets physics drop it otherwise.
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
-    public class Carryable : NetworkBehaviour, IInteractable
+    public class Carryable : NetworkBehaviour, IInteractable, IMatchResettable
     {
         private static readonly List<Carryable> All = new();
 
@@ -26,11 +27,15 @@ namespace BetterTogether.Interaction
 
         private Collider[] _colliders;
         private Rigidbody _body;
+        private NetworkTransform _networkTransform;
+        private Vector3 _startPosition;
+        private Quaternion _startRotation;
         private bool _collidersEnabled = true;
         private bool _isSpawned;
 
         [Networked] private PlayerInteractor HolderA { get; set; }
         [Networked] private PlayerInteractor HolderB { get; set; }
+        [Networked] private NetworkBehaviourId PinOwnerId { get; set; }
 
         /// <summary>True while the item follows its holders.</summary>
         public bool IsMoving
@@ -43,6 +48,18 @@ namespace BetterTogether.Interaction
                 return count == 2 && HeldByGnomes;
             }
         }
+
+        /// <summary>True while someone holds the item, even if it can't move yet.</summary>
+        public bool IsHeld => _isSpawned && HolderCount > 0;
+
+        /// <summary>True while the item rests on an <see cref="IPinSpot"/>, e.g. a grill.</summary>
+        public bool IsPinned => _isSpawned && PinOwnerId.IsValid;
+
+        /// <summary>
+        /// When set, the item has no colliders, can't be grabbed and stays frozen (e.g. an eaten sausage).
+        /// Set it on every peer; it is not networked.
+        /// </summary>
+        public bool Inert { get; set; }
 
         private int HolderCount => (Valid(HolderA) != null ? 1 : 0) + (Valid(HolderB) != null ? 1 : 0);
         private bool HeldByGnomes => HolderCount > 0 && Holder(0).Role == PlayerRole.Gnome;
@@ -63,6 +80,9 @@ namespace BetterTogether.Interaction
         {
             _colliders = GetComponentsInChildren<Collider>();
             _body = GetComponent<Rigidbody>();
+            _networkTransform = GetComponent<NetworkTransform>();
+            _startPosition = transform.position;
+            _startRotation = transform.rotation;
         }
 
         public override void Spawned()
@@ -90,10 +110,10 @@ namespace BetterTogether.Interaction
         /// <summary>Mirrors the authority's rules using the replicated state.</summary>
         public bool CanInteract(PlayerInteractor interactor)
         {
-            if (!_isSpawned)
+            if (!_isSpawned || !MatchManager.AllowsInteraction)
                 return false;
 
-            if (FindHeldBy(interactor) != null)
+            if (Inert || FindHeldBy(interactor) != null)
                 return false;
 
             return HolderCount == 0
@@ -107,6 +127,42 @@ namespace BetterTogether.Interaction
         /// <summary>Releases the item and moves it to <paramref name="dropPoint"/> first (e.g. knocked out of a kicked gnome's hands).</summary>
         public void RequestRelease(PlayerInteractor who, Vector3 dropPoint) => RPC_RequestRelease(who.Id, true, dropPoint);
 
+        /// <summary>Authority only: makes every holder let go.</summary>
+        public void ForceReleaseAll()
+        {
+            HolderA = null;
+            HolderB = null;
+        }
+
+        /// <summary>Authority only: rests the item on the spot, kinematic, until someone grabs it.</summary>
+        public void Pin<T>(T spot) where T : NetworkBehaviour, IPinSpot
+        {
+            PinOwnerId = spot.Id;
+            _body.isKinematic = true;
+            transform.SetPositionAndRotation(spot.PinPoint.position, spot.PinPoint.rotation);
+        }
+
+        /// <summary>Authority only: lets the item go back to physics.</summary>
+        public void Unpin() => PinOwnerId = default;
+
+        /// <summary>Authority only: drops the item and puts it back where it started.</summary>
+        public void ResetForMatch()
+        {
+            ForceReleaseAll();
+            Unpin();
+
+            _body.isKinematic = false;
+            _body.linearVelocity = Vector3.zero;
+            _body.angularVelocity = Vector3.zero;
+
+            transform.SetPositionAndRotation(_startPosition, _startRotation);
+            if (_networkTransform != null)
+                _networkTransform.Teleport(_startPosition, _startRotation);
+        }
+
+        /// <summary>Whether the item currently rests on this spot.</summary>
+        public bool IsPinnedTo(NetworkBehaviour spot) => IsPinned && PinOwnerId.Equals(spot.Id);
+
         /// <summary>Hint for a holder that cannot move the item yet, or null.</summary>
         public string StatusFor(PlayerInteractor who) =>
             IsHeldBy(who) && !IsMoving ? "Esperando otro duende..." : null;
@@ -117,6 +173,7 @@ namespace BetterTogether.Interaction
             if (!Runner.TryFindBehaviour(interactorId, out PlayerInteractor who) || !CanInteract(who))
                 return;
 
+            Unpin();
             Compact();
             if (Valid(HolderA) == null)
                 HolderA = who;
@@ -159,7 +216,7 @@ namespace BetterTogether.Interaction
             }
 
             // Kinematic while carried; dynamic (falls under gravity) otherwise. Proxies are left to NetworkTransform.
-            var shouldBeKinematic = IsMoving;
+            var shouldBeKinematic = IsMoving || IsPinned || Inert;
             if (_body.isKinematic != shouldBeKinematic)
             {
                 _body.isKinematic = shouldBeKinematic;
@@ -176,7 +233,7 @@ namespace BetterTogether.Interaction
 
         public override void Render()
         {
-            var shouldEnable = !IsMoving;
+            var shouldEnable = !IsMoving && !Inert;
             if (shouldEnable == _collidersEnabled)
                 return;
 
@@ -198,7 +255,7 @@ namespace BetterTogether.Interaction
             position = default;
             rotation = transform.rotation;
             if (!IsMoving)
-                return false;
+                return TryGetPinPose(out position, out rotation);
 
             var first = Holder(0).CarryAnchor;
             if (HolderCount == 1)
@@ -213,6 +270,19 @@ namespace BetterTogether.Interaction
             var across = Vector3.ProjectOnPlane(second.position - first.position, Vector3.up);
             if (across.sqrMagnitude > 1e-4f)
                 rotation = Quaternion.AngleAxis(Mathf.Atan2(-across.z, across.x) * Mathf.Rad2Deg, Vector3.up);
+            return true;
+        }
+
+        private bool TryGetPinPose(out Vector3 position, out Quaternion rotation)
+        {
+            position = default;
+            rotation = transform.rotation;
+            if (Inert || !IsPinned || Runner == null || !Runner.TryFindBehaviour(PinOwnerId, out NetworkBehaviour owner) || owner is not IPinSpot spot)
+                return false;
+
+            var point = spot.PinPoint;
+            position = point.position;
+            rotation = point.rotation;
             return true;
         }
 

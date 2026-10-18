@@ -1,5 +1,6 @@
 using BetterTogether.Interaction;
 using BetterTogether.Player;
+using BetterTogether.UI;
 using Fusion;
 using Unity.Cinemachine;
 using UnityEngine;
@@ -17,9 +18,11 @@ namespace BetterTogether.Combat
         [Tooltip("Upper bound for the kick speed, so a modified client can't send players to orbit.")]
         [SerializeField] private float _maxKickSpeed = 8f;
         [Tooltip("Seconds without movement control after being kicked.")]
-        [SerializeField] private float _stunDuration = 2f;
+        [SerializeField] private float _stunDuration = 1.5f;
         [Tooltip("Ignore kicks while still stunned, so a gnome can't be kicked again and again.")]
         [SerializeField] private bool _immuneWhileStunned = true;
+        [Tooltip("Extra seconds without being kickable once the stun has ended.")]
+        [SerializeField] private float _immunityAfterStun = 3f;
         [Tooltip("Where the dropped item lands between this player (0) and the kicker (1).")]
         [Range(0f, 1f)]
         [SerializeField] private float _dropTowardKicker = 0.5f;
@@ -28,6 +31,11 @@ namespace BetterTogether.Combat
         [Tooltip("Impulse played on this player's own camera when kicked.")]
         [SerializeField] private CinemachineImpulseSource _kickShake;
         [SerializeField] private float _kickShakeForce = 0.6f;
+        [Tooltip("Roll of the camera when kicked, flipped depending on the side the kick came from.")]
+        [SerializeField] private float _kickRollDegrees = 15f;
+        [SerializeField] private float _kickRollTime = 0.4f;
+        [SerializeField] private Color _kickFlashColor = new(1f, 0.1f, 0.1f, 0.3f);
+        [SerializeField] private float _kickFlashTime = 0.3f;
 
         [Header("Dizzy effect")]
         [Tooltip("Visual-only child that wobbles while stunned (not the root, which carries the collider).")]
@@ -39,27 +47,42 @@ namespace BetterTogether.Combat
         [SerializeField] private float _starSize = 0.05f;
         [SerializeField] private Color _starColor = new(1f, 0.85f, 0.2f);
 
+        [Header("Hit reaction")]
+        [Tooltip("Seconds at the start of the stun the visual spends spinning around Y.")]
+        [SerializeField] private float _spinTime = 0.45f;
+        [SerializeField] private float _spinTurns = 2f;
+        [Tooltip("Squash right after the kick: Y scale, and XZ scale.")]
+        [SerializeField] private Vector2 _squashScale = new(0.6f, 1.3f);
+        [SerializeField] private float _squashTime = 0.25f;
+
         private const int StarCount = 3;
 
         private PlayerMovement _movement;
         private PlayerInteractor _interactor;
         private Transform _stars;
         private Quaternion _wobbleRest;
+        private Vector3 _scaleRest;
+        private float _stunStartTime;
+        private bool _wasStunned;
         private bool _showingDizzy;
         private bool _isSpawned;
 
         [Networked] private TickTimer StunTimer { get; set; }
+        [Networked] private TickTimer ProtectedTimer { get; set; }
 
         // Other clients query these every frame, also before Spawned / after Despawned, when networked state can't be read.
         public bool IsStunned => _isSpawned && !StunTimer.ExpiredOrNotRunning(Runner);
-        public bool CanBeKicked => _isSpawned && !(_immuneWhileStunned && IsStunned);
+        public bool CanBeKicked => _isSpawned && ProtectedTimer.ExpiredOrNotRunning(Runner);
 
         private void Awake()
         {
             _movement = GetComponent<PlayerMovement>();
             _interactor = GetComponent<PlayerInteractor>();
-            if (_wobbleTarget != null)
-                _wobbleRest = _wobbleTarget.localRotation;
+            if (_wobbleTarget == null)
+                return;
+
+            _wobbleRest = _wobbleTarget.localRotation;
+            _scaleRest = _wobbleTarget.localScale;
         }
 
         public override void Spawned()
@@ -80,12 +103,29 @@ namespace BetterTogether.Combat
                 return;
 
             StunTimer = TickTimer.CreateFromSeconds(Runner, _stunDuration);
+            var protectedFor = (_immuneWhileStunned ? _stunDuration : 0f) + _immunityAfterStun;
+            ProtectedTimer = TickTimer.CreateFromSeconds(Runner, protectedFor);
             DropCarried(kickerPosition);
             _movement.ApplyKnockback(Vector3.ClampMagnitude(velocity, _maxKickSpeed), _stunDuration);
 
             // Runs on the kicked player's own client, so only their camera shakes.
             if (_kickShake != null)
                 _kickShake.GenerateImpulseWithVelocity(velocity.normalized * _kickShakeForce);
+
+            PlayHitFeedback(kickerPosition);
+        }
+
+        private void PlayHitFeedback(Vector3 kickerPosition)
+        {
+            if (CameraPunch.Instance != null)
+            {
+                var fromKicker = Vector3.ProjectOnPlane(transform.position - kickerPosition, Vector3.up);
+                var side = Vector3.Dot(fromKicker, CameraPunch.Instance.transform.right) >= 0f ? 1f : -1f;
+                CameraPunch.Instance.PunchRoll(side * _kickRollDegrees, _kickRollTime);
+            }
+
+            if (ScreenFlash.Instance != null)
+                ScreenFlash.Instance.Flash(_kickFlashColor, _kickFlashTime);
         }
 
         private void DropCarried(Vector3 kickerPosition)
@@ -102,13 +142,14 @@ namespace BetterTogether.Combat
         public override void Render()
         {
             var stunned = IsStunned;
+            if (stunned && !_wasStunned)
+                _stunStartTime = Time.time;
+            _wasStunned = stunned;
+
             if (stunned)
             {
-                var t = Time.time;
-                _stars.localRotation = Quaternion.Euler(0f, t * 240f, 0f);
-                if (_wobbleTarget != null)
-                    _wobbleTarget.localRotation = _wobbleRest * Quaternion.Euler(
-                        Mathf.Sin(t * 9f) * _wobbleAngle, 0f, Mathf.Cos(t * 7f) * _wobbleAngle);
+                _stars.localRotation = Quaternion.Euler(0f, Time.time * 240f, 0f);
+                AnimateBody(Time.time - _stunStartTime);
             }
 
             if (stunned == _showingDizzy)
@@ -117,7 +158,39 @@ namespace BetterTogether.Combat
             _showingDizzy = stunned;
             _stars.gameObject.SetActive(stunned);
             if (!stunned && _wobbleTarget != null)
+            {
                 _wobbleTarget.localRotation = _wobbleRest;
+                _wobbleTarget.localScale = _scaleRest;
+            }
+        }
+
+        /// <summary>Spin and squash right after the kick, then the dizzy wobble.</summary>
+        private void AnimateBody(float sinceStun)
+        {
+            if (_wobbleTarget == null)
+                return;
+
+            var t = Time.time;
+            var spin = 0f;
+            if (sinceStun < _spinTime)
+            {
+                var remaining = 1f - sinceStun / _spinTime;
+                spin = 360f * _spinTurns * (1f - remaining * remaining);
+            }
+
+            _wobbleTarget.localRotation = _wobbleRest * Quaternion.Euler(0f, spin, 0f) * Quaternion.Euler(
+                Mathf.Sin(t * 9f) * _wobbleAngle, 0f, Mathf.Cos(t * 7f) * _wobbleAngle);
+
+            if (sinceStun >= _squashTime)
+            {
+                _wobbleTarget.localScale = _scaleRest;
+                return;
+            }
+
+            var back = 1f - (1f - sinceStun / _squashTime) * (1f - sinceStun / _squashTime);
+            var y = Mathf.Lerp(_squashScale.x, 1f, back);
+            var xz = Mathf.Lerp(_squashScale.y, 1f, back);
+            _wobbleTarget.localScale = Vector3.Scale(_scaleRest, new Vector3(xz, y, xz));
         }
 
         /// <summary>Small ring of glowing spheres above the head; built in code so no art asset is needed yet.</summary>

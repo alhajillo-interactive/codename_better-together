@@ -725,8 +725,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Combat.Kickable
   _maxKickSpeed: 8
-  _stunDuration: 2
+  _stunDuration: 1.5
   _immuneWhileStunned: 1
+  _immunityAfterStun: 3
   _dropTowardKicker: 0.5
   _wobbleTarget: {fileID: 1544159409446623205}
   _wobbleAngle: 12
@@ -751,6 +752,8 @@ MonoBehaviour:
   _checkHeights:
   - 0.1
   - 0.4
+  _graceTime: 0.25
+  _visual: {fileID: 1544159409446623205}
 --- !u!1 &8087498446399852310
 GameObject:
   m_ObjectHideFlags: 0

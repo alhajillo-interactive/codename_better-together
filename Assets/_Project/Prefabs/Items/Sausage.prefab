@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 5343063126279201983}
   - component: {fileID: 2980815583348175896}
   - component: {fileID: 7314829560183746253}
+  - component: {fileID: 6120458837193254071}
   m_Layer: 0
   m_Name: Sausage
   m_TagString: Untagged
@@ -57,6 +58,7 @@ MonoBehaviour:
   NetworkedBehaviours:
   - {fileID: 2775015634307180751}
   - {fileID: 5343063126279201983}
+  - {fileID: 6120458837193254071}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &2775015634307180751
 MonoBehaviour:
@@ -117,6 +119,25 @@ MonoBehaviour:
   _maxSoloGrabDistance: 1.2
   _HolderA: {fileID: 0}
   _HolderB: {fileID: 0}
+--- !u!114 &6120458837193254071
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1531457764762274690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b1e8d3a7c2f4e90a6d4b2c8e0f17a36, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Fireplace.Sausage
+  _cookedAt: 15
+  _burntAt: 25
+  _resetDelay: 4
+  _visual: {fileID: 4737430231874366731}
+  _rawColor: {r: 0.9, g: 0.45, b: 0.45, a: 1}
+  _cookedColor: {r: 0.65, g: 0.3, b: 0.1, a: 1}
+  _burntColor: {r: 0.08, g: 0.06, b: 0.05, a: 1}
 --- !u!136 &2980815583348175896
 CapsuleCollider:
   m_ObjectHideFlags: 0

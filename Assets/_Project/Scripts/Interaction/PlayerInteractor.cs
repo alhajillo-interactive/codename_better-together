@@ -1,3 +1,4 @@
+using BetterTogether.Fireplace;
 using BetterTogether.Player;
 using Fusion;
 using UnityEngine;
@@ -29,6 +30,18 @@ namespace BetterTogether.Interaction
 
         public Carryable Carried => Carryable.FindHeldBy(this);
         public IInteractable Focused { get; private set; }
+
+        /// <summary>The cooked sausage this player is holding and can eat, if any.</summary>
+        public Sausage EdibleCarried
+        {
+            get
+            {
+                var carried = Carried;
+                return carried != null && carried.TryGetComponent<Sausage>(out var sausage) && sausage.CanBeEatenBy(this)
+                    ? sausage
+                    : null;
+            }
+        }
 
         private void Awake()
         {
@@ -73,7 +86,13 @@ namespace BetterTogether.Interaction
             if (Focused != null && Focused.CanInteract(this))
                 Focused.Interact(this);
             else if (carried != null)
-                carried.RequestRelease(this);
+            {
+                var edible = EdibleCarried;
+                if (edible != null)
+                    edible.RequestEat(this);
+                else
+                    carried.RequestRelease(this);
+            }
         }
 
         private void UpdateFocus()
@@ -86,7 +105,20 @@ namespace BetterTogether.Interaction
             var origin = view.transform;
             if (Physics.SphereCast(origin.position, _aimRadius, origin.forward, out var hit, _reach, _interactionMask, QueryTriggerInteraction.Ignore)
                 && !hit.transform.IsChildOf(transform))
-                Focused = hit.collider.GetComponentInParent<IInteractable>();
+                Focused = PickInteractable(hit.collider);
+        }
+
+        // Nested interactables (e.g. the grill inside the campfire): prefer the first one that accepts this player right now.
+        private IInteractable PickInteractable(Collider collider)
+        {
+            var candidates = collider.GetComponentsInParent<IInteractable>();
+            foreach (var candidate in candidates)
+            {
+                if (candidate.CanInteract(this))
+                    return candidate;
+            }
+
+            return candidates.Length > 0 ? candidates[0] : null;
         }
     }
 }
