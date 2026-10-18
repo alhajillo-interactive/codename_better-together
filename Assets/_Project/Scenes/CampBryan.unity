@@ -458,6 +458,7 @@ GameObject:
   - component: {fileID: 1443689714}
   - component: {fileID: 1443689712}
   - component: {fileID: 1443689790}
+  - component: {fileID: 1443689791}
   m_Layer: 0
   m_Name: PlayerCamera
   m_TagString: Untagged
@@ -605,6 +606,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5dd78c5c933f488a83e9bf602a34a70b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Player.CameraPunch
+--- !u!114 &1443689791
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1443689710}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b36fc386cd14678bf9d6ee8dc81b1bb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Player.CameraFocus
+  _focusFov: 45
+  _transitionTime: 0.2
+  _focusSensitivity: 0.55
 --- !u!1 &1711334501
 GameObject:
   m_ObjectHideFlags: 0

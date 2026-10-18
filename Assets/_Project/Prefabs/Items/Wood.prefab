@@ -113,7 +113,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Interaction.Carryable
   _displayName: "le\xF1o"
-  _gnomesRequired: 2
+  _gnomesRequired: 1
   _maxGnomeSpan: 1.6
   _maxSoloGrabDistance: 1.2
 --- !u!136 &2427449002643352461

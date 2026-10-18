@@ -23,6 +23,10 @@ namespace BetterTogether.Gaze
         [SerializeField] private Shader _shader;
 
         [Header("Colours")]
+        [Tooltip("Faint cone shown while the camper is not focusing, so gnomes can tell where it looks.")]
+        [SerializeField] private Color _dormantColor = new(0.55f, 0.45f, 1f, 0.03f);
+        [Tooltip("Show the dormant cone; off hides the cone until the camper focuses.")]
+        [SerializeField] private bool _showDormant = true;
         [SerializeField] private Color _searchColor = new(0.55f, 0.45f, 1f, 0.10f);
         [Tooltip("Alpha swing of the 1 Hz breathing while searching.")]
         [SerializeField] private float _breathingAmplitude = 0.02f;
@@ -61,6 +65,7 @@ namespace BetterTogether.Gaze
         private float _builtRange = -1f;
         private float _builtAngle = -1f;
         private float _lockBlend;
+        private float _focusBlend;
 
         private void Awake()
         {
@@ -103,10 +108,13 @@ namespace BetterTogether.Gaze
 
         private void LateUpdate()
         {
-            var active = _gaze != null && _gaze.IsActive;
-            UpdateMarker(active ? _gaze.LockedTarget : null);
+            var on = _gaze != null && _gaze.IsGazeOn;
+            var focusing = on && _gaze.Focusing;
+            UpdateMarker(focusing ? _gaze.LockedTarget : null);
 
-            var showCone = active && PlayerCharacter.Local != null && PlayerCharacter.Local.Role == PlayerRole.Gnome;
+            var isGnomeView = on && PlayerCharacter.Local != null && PlayerCharacter.Local.Role == PlayerRole.Gnome;
+            var color = isGnomeView ? ComputeColor(focusing) : default;
+            var showCone = isGnomeView && color.a > 0.001f;
             _coneRenderer.enabled = showCone;
             if (!showCone)
             {
@@ -115,7 +123,9 @@ namespace BetterTogether.Gaze
             }
 
             RebuildIfNeeded();
-            UpdateColors();
+            _coneMaterial.SetColor(ColorId, color);
+            _footprintMaterial.SetColor(ColorId, color);
+            _footprintMaterial.SetFloat(AlphaId, _footprintAlphaScale);
 
             var eye = _gaze.EyePosition;
             var look = _gaze.LookDirection;
@@ -123,21 +133,28 @@ namespace BetterTogether.Gaze
             UpdateFootprint(eye, look);
         }
 
-        private void UpdateColors()
+        // Dormant when the camper isn't focusing, search colour while focusing, locked colour on a target.
+        private Color ComputeColor(bool focusing)
         {
-            var wanted = _gaze.LockedTarget != null ? 1f : 0f;
-            _lockBlend = _colorTransition > 0f ? Mathf.MoveTowards(_lockBlend, wanted, Time.deltaTime / _colorTransition) : wanted;
+            _focusBlend = MoveBlend(_focusBlend, focusing ? 1f : 0f);
+            _lockBlend = MoveBlend(_lockBlend, focusing && _gaze.LockedTarget != null ? 1f : 0f);
+
+            var dormant = _dormantColor;
+            if (!_showDormant)
+                dormant.a = 0f;
 
             var searching = _searchColor;
             searching.a += Mathf.Sin(Time.time * Mathf.PI * 2f) * _breathingAmplitude;
-            var color = Color.Lerp(searching, _lockedColor, _lockBlend);
+            var active = Color.Lerp(searching, _lockedColor, _lockBlend);
+            var color = Color.Lerp(dormant, active, _focusBlend);
             if (_gaze.NightFactor > 0f)
                 color.a *= _nightAlphaScale;
 
-            _coneMaterial.SetColor(ColorId, color);
-            _footprintMaterial.SetColor(ColorId, color);
-            _footprintMaterial.SetFloat(AlphaId, _footprintAlphaScale);
+            return color;
         }
+
+        private float MoveBlend(float current, float wanted)
+            => _colorTransition > 0f ? Mathf.MoveTowards(current, wanted, Time.deltaTime / _colorTransition) : wanted;
 
         private void UpdateFootprint(Vector3 eye, Vector3 look)
         {

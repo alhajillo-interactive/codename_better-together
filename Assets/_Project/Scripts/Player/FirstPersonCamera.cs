@@ -25,6 +25,9 @@ namespace BetterTogether.Player
         public float Yaw { get; private set; }
         public float Pitch => _pitch;
 
+        /// <summary>Multiplies the mouse sensitivity, e.g. lowered while the camper focuses.</summary>
+        public float SensitivityScale { get; set; } = 1f;
+
         /// <summary>While true the cursor stays unlocked and mouse look is paused, e.g. while a debug panel is open.</summary>
         public static bool CursorFree { get; set; }
 
@@ -89,8 +92,9 @@ namespace BetterTogether.Player
             _look ??= InputSystem.actions.FindAction("Player/Look");
             var delta = _look.ReadValue<Vector2>();
 
-            Yaw += delta.x * _mouseSensitivity;
-            _pitch = Mathf.Clamp(_pitch - delta.y * _mouseSensitivity, -_maxPitch, _maxPitch);
+            var sensitivity = _mouseSensitivity * SensitivityScale;
+            Yaw += delta.x * sensitivity;
+            _pitch = Mathf.Clamp(_pitch - delta.y * sensitivity, -_maxPitch, _maxPitch);
         }
 
         private static void SetCursorLocked(bool locked)

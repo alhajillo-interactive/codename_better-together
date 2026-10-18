@@ -75,6 +75,9 @@ namespace BetterTogether.Player
         /// </summary>
         public bool IsFrozen { get; set; }
 
+        /// <summary>Multiplies walk and sprint speed, e.g. lowered while the camper focuses its gaze.</summary>
+        public float SpeedMultiplier { get; set; } = 1f;
+
         /// <summary>
         /// Launches the player. Only has effect on the state authority, which is the one simulating movement.
         /// </summary>
@@ -137,7 +140,7 @@ namespace BetterTogether.Player
             var move = stunned || locked ? Vector2.zero : _move.ReadValue<Vector2>();
             var direction = Vector3.ClampMagnitude(Quaternion.Euler(0f, yaw, 0f) * new Vector3(move.x, 0f, move.y), 1f);
             var sprinting = !locked && _sprint.IsPressed();
-            var speed = sprinting ? _sprintSpeed : _walkSpeed;
+            var speed = (sprinting ? _sprintSpeed : _walkSpeed) * SpeedMultiplier;
 
             var jumped = _jumpQueued && grounded && !stunned && !locked;
             if (jumped)

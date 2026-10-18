@@ -42,8 +42,10 @@ namespace BetterTogether.Player
 
         public static CameraPunch Instance { get; private set; }
 
+        /// <summary>Field of view the punches add to; <see cref="CameraFocus"/> moves it for the focus zoom.</summary>
+        public float BaseFieldOfView { get; set; }
+
         private CinemachineCamera _camera;
-        private float _baseFov;
         private float _baseDutch;
         private Punch _fov;
         private Punch _roll;
@@ -52,7 +54,7 @@ namespace BetterTogether.Player
         {
             Instance = this;
             _camera = GetComponent<CinemachineCamera>();
-            _baseFov = _camera.Lens.FieldOfView;
+            BaseFieldOfView = _camera.Lens.FieldOfView;
             _baseDutch = _camera.Lens.Dutch;
         }
 
@@ -72,7 +74,7 @@ namespace BetterTogether.Player
         {
             _fov.Elapsed += Time.deltaTime;
             _roll.Elapsed += Time.deltaTime;
-            _camera.Lens.FieldOfView = _baseFov + _fov.Value;
+            _camera.Lens.FieldOfView = BaseFieldOfView + _fov.Value;
             _camera.Lens.Dutch = _baseDutch + _roll.Value;
         }
     }

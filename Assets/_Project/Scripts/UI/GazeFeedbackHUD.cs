@@ -36,6 +36,16 @@ namespace BetterTogether.UI
         [SerializeField] private float _pulseAlpha = 0.35f;
         [SerializeField] private float _pulseDuration = 0.3f;
 
+        [Header("Stamina bar")]
+        [SerializeField] private Vector2 _staminaSize = new(260f, 14f);
+        [SerializeField] private float _staminaBottomOffset = 70f;
+        [SerializeField] private Color _staminaColor = new(0.6f, 0.5f, 1f, 0.95f);
+        [SerializeField] private Color _exhaustedColor = new(1f, 0.2f, 0.2f, 0.95f);
+        [SerializeField] private Color _staminaBackColor = new(0f, 0f, 0f, 0.5f);
+        [SerializeField] private Color _thresholdColor = new(1f, 1f, 1f, 0.85f);
+        [Tooltip("Blinks per second of the bar while exhausted.")]
+        [SerializeField] private float _exhaustedBlinkHz = 3f;
+
         private Texture2D _edgeTexture;
         private Texture2D _coneTexture;
         private float _coneTextureRadius = -1f;
@@ -47,6 +57,7 @@ namespace BetterTogether.UI
         private int _lastReleases;
         private GUIStyle _title;
         private GUIStyle _subtitle;
+        private GUIStyle _staminaLabel;
 
         private void OnDestroy()
         {
@@ -173,6 +184,10 @@ namespace BetterTogether.UI
                 _coneTextureRadius = radius;
             }
 
+            DrawStamina(gaze);
+            if (!gaze.Focusing)
+                return;
+
             var alpha = _coneVignetteAlpha;
             if (_pulseTime < _pulseDuration)
                 alpha = Mathf.Lerp(_pulseAlpha, _coneVignetteAlpha, _pulseTime / _pulseDuration);
@@ -181,6 +196,50 @@ namespace BetterTogether.UI
             color.a = alpha;
             var rect = new Rect(Screen.width * 0.5f - half, Screen.height * 0.5f - half, half * 2f, half * 2f);
             DrawTexture(rect, _coneTexture, color);
+        }
+
+        private void DrawStamina(CamperGaze gaze)
+        {
+            if (!gaze.IsGazeOn)
+                return;
+
+            _staminaLabel ??= CreateStyle(16, FontStyle.Bold);
+            var exhausted = gaze.Exhausted;
+            var bar = new Rect((Screen.width - _staminaSize.x) * 0.5f, Screen.height - _staminaBottomOffset - _staminaSize.y, _staminaSize.x, _staminaSize.y);
+            DrawTexture(bar, Texture2D.whiteTexture, _staminaBackColor);
+
+            var color = _staminaColor;
+            if (exhausted)
+            {
+                var on = Mathf.Repeat(Time.time * _exhaustedBlinkHz, 1f) < 0.5f;
+                color = _exhaustedColor;
+                color.a *= on ? 1f : 0.35f;
+            }
+
+            var fill = bar;
+            fill.width *= gaze.StaminaFraction;
+            DrawTexture(fill, Texture2D.whiteTexture, color);
+
+            var tickX = bar.x + bar.width * gaze.ReuseThreshold;
+            DrawTexture(new Rect(tickX - 1f, bar.y - 3f, 2f, bar.height + 6f), Texture2D.whiteTexture, _thresholdColor);
+
+            if (exhausted)
+            {
+                DrawLabel(new Rect(bar.x, bar.y - 28f, bar.width, 24f), "Mirada agotada", _exhaustedColor);
+                return;
+            }
+
+            if (!gaze.Focusing && gaze.StaminaFraction >= 0.999f)
+                DrawLabel(new Rect(bar.xMax + 10f, bar.y - 5f, 200f, 24f), "[Clic der.] Mirada", Color.white, TextAnchor.MiddleLeft);
+        }
+
+        private void DrawLabel(Rect rect, string text, Color color, TextAnchor alignment = TextAnchor.MiddleCenter)
+        {
+            _staminaLabel.alignment = alignment;
+            var previous = GUI.color;
+            GUI.color = color;
+            GUI.Label(rect, text, _staminaLabel);
+            GUI.color = previous;
         }
 
         private static float ConeRadiusPixels(float halfAngle)

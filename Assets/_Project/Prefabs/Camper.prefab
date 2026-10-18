@@ -1132,6 +1132,11 @@ MonoBehaviour:
   _hysteresisAngle: 4
   _hysteresisRange: 1
   _distanceWeight: 0.5
+  _staminaSeconds: 4
+  _regenDelay: 1
+  _regenSeconds: 6
+  _reuseThreshold: 0.35
+  _focusMoveMultiplier: 0.5
   _IsGazeEnabled:
     RawValue: 0
 --- !u!114 &8800000000000000004
@@ -1148,6 +1153,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Gaze.GazeConeVisual
   _gaze: {fileID: 6152230495412790016}
   _shader: {fileID: 4800000, guid: c3a1f0e57b2d4e9a8f6d1b0c9e7a5d42, type: 3}
+  _dormantColor: {r: 0.55, g: 0.45, b: 1, a: 0.03}
+  _showDormant: 1
   _searchColor: {r: 0.55, g: 0.45, b: 1, a: 0.1}
   _breathingAmplitude: 0.02
   _lockedColor: {r: 1, g: 0.35, b: 0.25, a: 0.22}

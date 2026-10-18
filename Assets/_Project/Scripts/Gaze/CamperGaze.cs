@@ -4,6 +4,7 @@ using BetterTogether.Match;
 using BetterTogether.Player;
 using Fusion;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace BetterTogether.Gaze
 {
@@ -12,6 +13,7 @@ namespace BetterTogether.Gaze
     /// picks the gnome closest to the view axis, keeps it while it stays inside a slightly wider cone, and the lock
     /// fills up during a short grace. Once full, the gnome's owner freezes it. The screen edges stay outside the cone,
     /// so gnomes can still move in the camper's peripheral vision.
+    /// The gaze only works while the camper holds the focus button; focusing drains a stamina bar and slows the camper.
     /// </summary>
     public class CamperGaze : NetworkBehaviour
     {
@@ -46,12 +48,29 @@ namespace BetterTogether.Gaze
         [Tooltip("Candidate score = angle to the view axis (deg) + this × distance (m); lowest wins.")]
         [SerializeField] private float _distanceWeight = 0.5f;
 
+        [Header("Focus")]
+        [Tooltip("Seconds of continuous focus from a full bar to empty.")]
+        [SerializeField] private float _staminaSeconds = 4f;
+        [Tooltip("Seconds after releasing focus before the bar starts to refill.")]
+        [SerializeField] private float _regenDelay = 1f;
+        [Tooltip("Seconds to refill the bar from empty to full.")]
+        [SerializeField] private float _regenSeconds = 6f;
+        [Tooltip("After running dry, the gaze can't be used again until the bar reaches this fraction.")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _reuseThreshold = 0.35f;
+        [Tooltip("Walk and sprint speed multiplier while focusing.")]
+        [Range(0.1f, 1f)]
+        [SerializeField] private float _focusMoveMultiplier = 0.5f;
+
         private static readonly List<CamperGaze> _all = new();
         private static readonly RaycastHit[] _hits = new RaycastHit[16];
 
         private float _retargetTimer;
         private float _lostSightTime;
+        private float _sinceFocus;
         private bool _isSpawned;
+        private PlayerMovement _movement;
+        private InputAction _focus;
 
         /// <summary>Every spawned camper gaze, local and remote.</summary>
         public static IReadOnlyList<CamperGaze> All => _all;
@@ -65,6 +84,24 @@ namespace BetterTogether.Gaze
         [Networked] private Petrifiable Target { get; set; }
         [Networked] private float Progress { get; set; }
         [Networked] public NetworkBool IsGazeEnabled { get; private set; }
+        [Networked] private NetworkBool IsFocusing { get; set; }
+        [Networked] private float Stamina { get; set; }
+        [Networked] private NetworkBool IsExhausted { get; set; }
+
+        /// <summary>True while the camper holds the focus button and has stamina; only then the gaze petrifies.</summary>
+        public bool Focusing => _isSpawned && IsFocusing;
+
+        /// <summary>0..1 gaze stamina.</summary>
+        public float StaminaFraction => _isSpawned ? Stamina : 1f;
+
+        /// <summary>True after the stamina ran out, until it refills to <see cref="ReuseThreshold"/>.</summary>
+        public bool Exhausted => _isSpawned && IsExhausted;
+
+        /// <summary>Stamina fraction needed to use the gaze again after running dry.</summary>
+        public float ReuseThreshold => _reuseThreshold;
+
+        /// <summary>True once spawned with the gaze switched on, whether or not the camper is focusing.</summary>
+        public bool IsGazeOn => _isSpawned && IsGazeEnabled;
 
         /// <summary>The gnome currently locked (or frozen) by this gaze; null if none.</summary>
         public Petrifiable LockedTarget => _isSpawned ? Target : null;
@@ -72,8 +109,8 @@ namespace BetterTogether.Gaze
         /// <summary>0..1 fill of the lock grace; at 1 the target is frozen.</summary>
         public float LockProgress => _isSpawned ? Progress : 0f;
 
-        /// <summary>True once spawned with the gaze turned on.</summary>
-        public bool IsActive => _isSpawned && IsGazeEnabled;
+        /// <summary>True once spawned with the gaze turned on and the camper focusing.</summary>
+        public bool IsActive => _isSpawned && IsGazeEnabled && IsFocusing;
 
         /// <summary>Current reach: the base range plus the night bonus.</summary>
         public float Range => _range + NightRangeBonus;
@@ -97,6 +134,8 @@ namespace BetterTogether.Gaze
 
         public Vector3 LookDirection => Quaternion.Euler(_isSpawned ? Pitch : 0f, transform.eulerAngles.y, 0f) * Vector3.forward;
 
+        private void Awake() => _movement = GetComponent<PlayerMovement>();
+
         public override void Spawned()
         {
             _isSpawned = true;
@@ -106,14 +145,37 @@ namespace BetterTogether.Gaze
 
             Local = this;
             IsGazeEnabled = _enabledOnSpawn;
+            Stamina = 1f;
+            IsExhausted = false;
+            IsFocusing = false;
+            _focus = InputSystem.actions.FindAction("Player/Focus");
+            MatchManager.OnGameStarted += HandleGameStarted;
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             _isSpawned = false;
             _all.Remove(this);
+            MatchManager.OnGameStarted -= HandleGameStarted;
             if (Local == this)
+            {
                 Local = null;
+                if (CameraFocus.Instance != null)
+                    CameraFocus.Instance.SetFocused(false);
+            }
+        }
+
+        private void HandleGameStarted()
+        {
+            Stamina = 1f;
+            IsExhausted = false;
+            _sinceFocus = 0f;
+        }
+
+        public override void Render()
+        {
+            if (HasStateAuthority && CameraFocus.Instance != null)
+                CameraFocus.Instance.SetFocused(IsFocusing);
         }
 
         public override void FixedUpdateNetwork()
@@ -125,7 +187,38 @@ namespace BetterTogether.Gaze
             if (FirstPersonCamera.Instance != null)
                 Pitch = FirstPersonCamera.Instance.Pitch;
 
-            UpdateLock(Runner.DeltaTime);
+            var dt = Runner.DeltaTime;
+            UpdateFocus(dt);
+            UpdateLock(dt);
+        }
+
+        private void UpdateFocus(float dt)
+        {
+            var wantsFocus = _focus != null && _focus.IsPressed() && Cursor.lockState == CursorLockMode.Locked;
+            var focusing = wantsFocus && !IsExhausted && Stamina > 0f && IsGazeEnabled;
+            if (focusing)
+            {
+                _sinceFocus = 0f;
+                Stamina = Mathf.Max(0f, Stamina - dt / Mathf.Max(_staminaSeconds, 0.01f));
+                if (Stamina <= 0f)
+                {
+                    IsExhausted = true;
+                    focusing = false;
+                }
+            }
+            else
+            {
+                _sinceFocus += dt;
+                if (_sinceFocus >= _regenDelay)
+                    Stamina = Mathf.Min(1f, Stamina + dt / Mathf.Max(_regenSeconds, 0.01f));
+
+                if (IsExhausted && Stamina >= _reuseThreshold)
+                    IsExhausted = false;
+            }
+
+            IsFocusing = focusing;
+            if (_movement != null)
+                _movement.SpeedMultiplier = focusing ? _focusMoveMultiplier : 1f;
         }
 
         /// <summary>Turns the gaze on or off. Anyone may call it (debug panel); the camper's owner applies it.</summary>
@@ -167,6 +260,12 @@ namespace BetterTogether.Gaze
                 return;
             }
 
+            if (!IsFocusing)
+            {
+                ReleaseLock(dt);
+                return;
+            }
+
             var current = Target;
             if (current != null && TryKeep(current, dt))
             {
@@ -193,6 +292,15 @@ namespace BetterTogether.Gaze
             Target = best;
             Progress = 0f;
             _lostSightTime = 0f;
+        }
+
+        // Same as losing sight: the gnome is released at once, and the lock drains.
+        private void ReleaseLock(float dt)
+        {
+            Target = null;
+            _retargetTimer = 0f;
+            _lostSightTime = 0f;
+            Progress = Mathf.Max(0f, Progress - 2f * dt / Mathf.Max(_lockGrace, 0.01f));
         }
 
         private void ClearLock()
