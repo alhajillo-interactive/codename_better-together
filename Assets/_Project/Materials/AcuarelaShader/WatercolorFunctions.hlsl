@@ -119,10 +119,15 @@ void WatercolorShade_float(float3 NormalWS, float4 ScreenPosition, float4 BaseCo
     pigment *= lerp(float3(1.0, 1.0, 1.0), textureColor,
         saturate(TextureStrength));
 
-    float3 lightTint = incomingLight / max(luminance, 0.001);
-    Color = saturate(pigment * lerp(float3(1.0, 1.0, 1.0),
-        min(lightTint, float3(2.0, 2.0, 2.0)),
-        saturate(LightColorInfluence) * light));
+#ifdef SHADERGRAPH_PREVIEW
+    float3 sceneAmbient = float3(0.55, 0.6, 0.7);
+#else
+    float3 sceneAmbient = SampleSH(normal);
+#endif
+    float3 sceneLighting = saturate(sceneAmbient + incomingLight * max(0.0, LightStrength));
+    float neutralLighting = dot(sceneLighting, float3(0.2126, 0.7152, 0.0722));
+    Color = saturate(pigment * lerp(neutralLighting.xxx, sceneLighting,
+        saturate(LightColorInfluence)));
 }
 
 void WatercolorShade_half(half3 NormalWS, half4 ScreenPosition, half4 BaseColor,

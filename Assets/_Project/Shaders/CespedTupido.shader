@@ -19,7 +19,7 @@ Shader "Project/Cesped Tupido"
         _WaveStrength ("Fuerza ondas", Range(0, 0.25)) = 0.06
         _WaveColor ("Color ondas", Range(0, 0.5)) = 0.16
         _ShadowStrength ("Fuerza sombras", Range(0, 1)) = 0.75
-        _LightInfluence ("Influencia luz", Range(0, 1)) = 0.55
+        _LightInfluence ("Influencia luz directa", Range(0, 1)) = 0.55
         _Saturation ("Saturacion", Range(0, 2)) = 1.12
         [HideInInspector] _TerrainOriginSize ("Terreno origen y escala", Vector) = (0, 0, 1, 1)
     }
@@ -132,7 +132,7 @@ Shader "Project/Cesped Tupido"
                 half3 ambient = SampleSH(half3(0, 1, 0));
                 half shadow = lerp(1, mainLight.shadowAttenuation, _ShadowStrength);
                 half3 direct = mainLight.color * saturate(mainLight.direction.y) * 0.6 * shadow;
-                half3 lighting = lerp(half3(1, 1, 1), saturate(ambient + direct), _LightInfluence);
+                half3 lighting = saturate(ambient + direct * _LightInfluence);
                 half3 color = gradient * textureColor.rgb * lighting;
                 half luminance = dot(color, half3(0.2126, 0.7152, 0.0722));
                 color = saturate(lerp(half3(luminance, luminance, luminance), color, _Saturation));
