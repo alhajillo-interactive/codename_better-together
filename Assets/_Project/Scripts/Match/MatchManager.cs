@@ -1,15 +1,15 @@
 using System;
-using BetterTogether.Environment;
 using BetterTogether.Fireplace;
 using BetterTogether.Networking;
 using BetterTogether.Player;
 using Fusion;
 using UnityEngine;
+using UnityEngine.Events;
 
 namespace BetterTogether.Match
 {
     /// <summary>
-    /// Runs the match: waits for enough players, counts down, plays until the camper eats the sausage or night falls,
+    /// Runs the match: waits for the start (button or enough players), counts down, plays until the camper eats the sausage or the match timer runs out,
     /// shows the result and starts over. Master-client object: the state authority drives the phases and every
     /// client reads the replicated state.
     /// </summary>
@@ -18,21 +18,39 @@ namespace BetterTogether.Match
         [Tooltip("Players needed to start a match.")]
         [Min(1)] [SerializeField] private int _minPlayers = 2;
 
+        [Tooltip("Start the countdown as soon as there are enough players, without waiting for the lobby button.")]
+        [SerializeField] private bool _autoStart;
+
         [Tooltip("Seconds of countdown before the match starts.")]
         [SerializeField] private float _countdown = 3f;
+
+        [Tooltip("Seconds the match lasts; the gnomes win when it runs out.")]
+        [Min(10)] [SerializeField] private float _matchDuration = 150f;
 
         [Tooltip("Seconds the result stays on screen before the next match.")]
         [SerializeField] private float _endScreen = 6f;
 
-        private DayNightCycle _dayNight;
         private MatchPhase _lastPhase = MatchPhase.Waiting;
         private bool _isSpawned;
 
         [Networked] private MatchPhase CurrentPhase { get; set; }
         [Networked] private MatchResult CurrentResult { get; set; }
         [Networked] private TickTimer PhaseTimer { get; set; }
+        [Networked] private TickTimer MatchTimer { get; set; }
+
+        /// <summary>Raised on every client when a match starts (the phase becomes Playing).</summary>
+        public static event UnityAction OnGameStarted;
+
+        /// <summary>Raised on every client when a match ends.</summary>
+        public static event UnityAction OnGameOver;
+
+        /// <summary>Raised on every client when the lobby is shown again (the phase becomes Waiting).</summary>
+        public static event UnityAction OnLobby;
 
         public static MatchManager Instance { get; private set; }
+
+        /// <summary>Elapsed fraction of the match timer: 0 before the match starts, 1 once it has ended.</summary>
+        public static float MatchProgress { get; private set; }
 
         /// <summary>True when there is no match system (free play) or the match is running.</summary>
         public static bool AllowsInteraction => Instance == null || Instance.Phase == MatchPhase.Playing;
@@ -52,6 +70,22 @@ namespace BetterTogether.Match
                 return PhaseTimer.RemainingTime(Runner) ?? 0f;
             }
         }
+
+        /// <summary>Seconds left on the match timer while playing, otherwise 0.</summary>
+        public float TimeRemaining
+        {
+            get
+            {
+                if (!_isSpawned || CurrentPhase != MatchPhase.Playing)
+                    return 0f;
+
+                return MatchTimer.RemainingTime(Runner) ?? 0f;
+            }
+        }
+
+        public float MatchDuration => _matchDuration;
+
+        public bool AutoStart => _autoStart;
 
         public int PlayerCount
         {
@@ -76,14 +110,37 @@ namespace BetterTogether.Match
         {
             _isSpawned = true;
             Instance = this;
-            _dayNight = FindFirstObjectByType<DayNightCycle>();
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             _isSpawned = false;
             if (Instance == this)
+            {
                 Instance = null;
+                MatchProgress = 0f;
+            }
+        }
+
+        /// <summary>Starts the countdown from the lobby when there are enough players. Any client can ask for it.</summary>
+        public void StartMatch()
+        {
+            if (!_isSpawned)
+                return;
+
+            if (HasStateAuthority)
+                DoStartMatch();
+            else
+                RPC_StartMatch();
+        }
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RPC_StartMatch() => DoStartMatch();
+
+        private void DoStartMatch()
+        {
+            if (CurrentPhase == MatchPhase.Waiting && PlayerCount >= _minPlayers)
+                BeginCountdown();
         }
 
         public override void FixedUpdateNetwork()
@@ -94,7 +151,7 @@ namespace BetterTogether.Match
             switch (CurrentPhase)
             {
                 case MatchPhase.Waiting:
-                    if (PlayerCount >= _minPlayers)
+                    if (_autoStart && PlayerCount >= _minPlayers)
                         BeginCountdown();
                     break;
                 case MatchPhase.Countdown:
@@ -131,21 +188,21 @@ namespace BetterTogether.Match
 
             PhaseTimer = default;
             CurrentPhase = MatchPhase.Playing;
-            if (_dayNight != null)
-                _dayNight.StartMatchDay();
+            MatchTimer = TickTimer.CreateFromSeconds(Runner, _matchDuration);
         }
 
         private void UpdatePlaying()
         {
             if (Sausage.Instance != null && Sausage.Instance.Eaten)
                 End(MatchResult.CamperWins);
-            else if (_dayNight != null && _dayNight.IsNight)
+            else if (MatchTimer.Expired(Runner))
                 End(MatchResult.GnomesWin);
         }
 
         private void End(MatchResult result)
         {
             CurrentResult = result;
+            MatchTimer = default;
             CurrentPhase = MatchPhase.Ended;
             PhaseTimer = TickTimer.CreateFromSeconds(Runner, _endScreen);
         }
@@ -187,6 +244,7 @@ namespace BetterTogether.Match
         public override void Render()
         {
             var phase = CurrentPhase;
+            MatchProgress = ComputeProgress(phase);
             if (phase == _lastPhase)
                 return;
 
@@ -195,6 +253,36 @@ namespace BetterTogether.Match
                 SendLocalPlayerToSpawn();
 
             PhaseChanged?.Invoke(phase);
+            RaiseGlobalEvents(phase);
+        }
+
+        private float ComputeProgress(MatchPhase phase)
+        {
+            // Keep the sky where the match ended (an early camper win shouldn't jump to night).
+            if (phase == MatchPhase.Ended)
+                return MatchProgress > 0f ? MatchProgress : 1f;
+
+            if (phase != MatchPhase.Playing)
+                return 0f;
+
+            var remaining = MatchTimer.RemainingTime(Runner);
+            return remaining.HasValue ? Mathf.Clamp01(1f - remaining.Value / _matchDuration) : 0f;
+        }
+
+        private static void RaiseGlobalEvents(MatchPhase phase)
+        {
+            switch (phase)
+            {
+                case MatchPhase.Waiting:
+                    OnLobby?.Invoke();
+                    break;
+                case MatchPhase.Playing:
+                    OnGameStarted?.Invoke();
+                    break;
+                case MatchPhase.Ended:
+                    OnGameOver?.Invoke();
+                    break;
+            }
         }
 
         private void SendLocalPlayerToSpawn()

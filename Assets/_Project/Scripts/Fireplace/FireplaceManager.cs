@@ -12,11 +12,11 @@ namespace BetterTogether.Fireplace
     /// <summary>
     /// The campfire. Counts the logs inside its zone and, once there are enough, a camper holding the matches can light it.
     /// If gnomes pull logs out and the count drops below the requirement, the fire goes out.
-    /// Master-client object: the state authority tracks the logs and validates requests.
+    /// Master-client object: the state authority counts the logs and validates requests.
     /// </summary>
     public class FireplaceManager : NetworkBehaviour, IInteractable, IMatchResettable
     {
-        private const int MaxTracked = 32;
+        private const int MaxColliders = 32;
 
         [FormerlySerializedAs("amountLabel")]
         [SerializeField] private TextMeshProUGUI _amountLabel;
@@ -24,27 +24,32 @@ namespace BetterTogether.Fireplace
         [SerializeField] private int _requiredWood = 5;
         [SerializeField] private GameObject _fire;
 
-        private readonly List<NetworkObject> _scratch = new();
-        private ChangeDetector _detector;
+        [Header("Logs detection")]
+        [FormerlySerializedAs("logsLayer")]
+        [SerializeField] private LayerMask _logsLayer = ~0;
+        [FormerlySerializedAs("detectorRadius")]
+        [SerializeField] private float _detectorRadius = 1f;
+
+        private readonly Collider[] _results = new Collider[MaxColliders];
+        private readonly HashSet<FireplaceWood> _counted = new();
         private bool _isSpawned;
 
-        // The replicated list: all clients see the same set of object ids.
-        [Networked, Capacity(MaxTracked)]
-        private NetworkLinkedList<NetworkObject> Tracked { get; }
+        [Networked, OnChangedRender(nameof(OnLogsChanged))]
+        private int LogsInside { get; set; }
 
-        [Networked] public NetworkBool IsLit { get; private set; }
+        [Networked, OnChangedRender(nameof(OnLitChanged))]
+        public NetworkBool IsLit { get; private set; }
 
         public static FireplaceManager Instance { get; private set; }
 
         public int RequiredWood => _requiredWood;
-        public int WoodCount => _isSpawned ? Tracked.Count : 0;
-        public bool HasEnoughWood => _isSpawned && Tracked.Count >= _requiredWood;
+        public int WoodCount => _isSpawned ? LogsInside : 0;
+        public bool HasEnoughWood => _isSpawned && LogsInside >= _requiredWood;
 
         public override void Spawned()
         {
             _isSpawned = true;
             Instance = this;
-            _detector = GetChangeDetector(ChangeDetector.Source.SimulationState);
             UpdateLabel();
             UpdateFire();
         }
@@ -56,12 +61,8 @@ namespace BetterTogether.Fireplace
                 Instance = null;
         }
 
-        /// <summary>Authority only: the fire is out and no log counts until it is back in the zone.</summary>
-        public void ResetForMatch()
-        {
-            IsLit = false;
-            Tracked.Clear();
-        }
+        /// <summary>Authority only: the fire is out; logs are counted again from the zone.</summary>
+        public void ResetForMatch() => IsLit = false;
 
         public string GetPrompt(PlayerInteractor interactor) => "Prender fogata";
 
@@ -86,80 +87,41 @@ namespace BetterTogether.Fireplace
             IsLit = true;
         }
 
-        private void OnTriggerEnter(Collider other) => Track(other);
-
-        private void OnTriggerStay(Collider other) => Track(other);
-
-        private void OnTriggerExit(Collider other)
-        {
-            if (!_isSpawned || !HasStateAuthority)
-                return;
-
-            if (!other.TryGetComponent<FireplaceWood>(out var wood))
-                return;
-
-            Tracked.Remove(wood.NObject);
-        }
-
-        private void Track(Collider other)
-        {
-            if (!_isSpawned || !HasStateAuthority)
-                return;
-
-            if (!other.TryGetComponent<FireplaceWood>(out var wood))
-                return;
-
-            // A log in somebody's hands is not in the zone.
-            if (wood.TryGetComponent<Carryable>(out var carryable) && carryable.IsMoving)
-                return;
-
-            if (!Tracked.Contains(wood.NObject))
-                Tracked.Add(wood.NObject);
-        }
-
         public override void FixedUpdateNetwork()
         {
             if (!HasStateAuthority)
                 return;
 
-            PruneTracked();
+            LogsInside = CountLogs();
 
             if (IsLit && !HasEnoughWood)
                 IsLit = false;
         }
 
-        /// <summary>Drops logs that despawned or are being carried off (colliders of carried items don't report exits).</summary>
-        private void PruneTracked()
+        /// <summary>Logs inside the zone; one being carried never counts.</summary>
+        private int CountLogs()
         {
-            _scratch.Clear();
-            var changed = false;
-            foreach (var obj in Tracked)
+            _counted.Clear();
+            var found = Physics.OverlapSphereNonAlloc(transform.position, _detectorRadius, _results, _logsLayer);
+            for (var i = 0; i < found; i++)
             {
-                var valid = obj != null
-                    && obj.IsValid
-                    && !(obj.TryGetComponent<Carryable>(out var carryable) && carryable.IsMoving);
-                if (valid)
-                    _scratch.Add(obj);
-                else
-                    changed = true;
+                if (!_results[i].TryGetComponent<FireplaceWood>(out var wood))
+                    continue;
+
+                if (wood.TryGetComponent<Carryable>(out var carryable) && carryable.IsMoving)
+                    continue;
+
+                _counted.Add(wood);
             }
 
-            if (!changed)
-                return;
-
-            Tracked.Clear();
-            foreach (var obj in _scratch)
-                Tracked.Add(obj);
+            return _counted.Count;
         }
 
-        public override void Render()
-        {
-            foreach (var change in _detector.DetectChanges(this))
-            {
-                if (change == nameof(Tracked) || change == nameof(IsLit))
-                    UpdateLabel();
-            }
+        private void OnLogsChanged() => UpdateLabel();
 
+        private void OnLitChanged()
+        {
+            UpdateLabel();
             UpdateFire();
         }
 
@@ -168,13 +130,19 @@ namespace BetterTogether.Fireplace
             if (_amountLabel == null)
                 return;
 
-            _amountLabel.text = IsLit ? "¡Encendida!" : $"{Tracked.Count}/{_requiredWood}";
+            _amountLabel.text = IsLit ? "¡Encendida!" : $"{LogsInside}/{_requiredWood}";
         }
 
         private void UpdateFire()
         {
             if (_fire != null && _fire.activeSelf != IsLit)
                 _fire.SetActive(IsLit);
+        }
+
+        private void OnDrawGizmosSelected()
+        {
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(transform.position, _detectorRadius);
         }
     }
 }

@@ -1,3 +1,4 @@
+using BetterTogether.Audio;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -15,6 +16,12 @@ namespace BetterTogether.Player
         [SerializeField] private float _sprintSpeed = 3.5f;
         [SerializeField] private float _jumpHeight = 0.5f;
         [SerializeField] private float _gravity = -20f;
+        [Header("Animation")]
+        [Tooltip("Animator on the visual child (Mesh). Leave empty to find it automatically.")]
+        [SerializeField] private Animator _animator;
+        [Header("Sound")]
+        [Tooltip("Swing of the camper's kick, heard by everyone even when it misses.")]
+        [SerializeField] private SoundCue _kickSwingSfx;
         [Header("Knockback")]
         [Tooltip("How fast knockback slows down while airborne (m/s per second).")]
         [SerializeField] private float _knockbackAirDrag = 1.5f;
@@ -31,10 +38,19 @@ namespace BetterTogether.Player
         private float _verticalVelocity;
         private bool _jumpQueued;
 
+        private static readonly int MovementParameter = Animator.StringToHash("Movement");
+        private static readonly int JumpParameter = Animator.StringToHash("IsJump");
+        private static readonly int KickParameter = Animator.StringToHash("Kick");
+
+        [Networked] private float AnimationMovement { get; set; }
+        [Networked] private NetworkBool AnimationJump { get; set; }
+
         private void Awake()
         {
             _controller = GetComponent<CharacterController>();
             _networkTransform = GetComponent<NetworkTransform>();
+            if (_animator == null)
+                _animator = FindUsableAnimator();
         }
 
         public override void Spawned()
@@ -119,7 +135,8 @@ namespace BetterTogether.Player
             var direction = Vector3.ClampMagnitude(Quaternion.Euler(0f, yaw, 0f) * new Vector3(move.x, 0f, move.y), 1f);
             var speed = _sprint.IsPressed() ? _sprintSpeed : _walkSpeed;
 
-            if (_jumpQueued && grounded && !stunned)
+            var jumped = _jumpQueued && grounded && !stunned;
+            if (jumped)
                 _verticalVelocity = Mathf.Sqrt(2f * _jumpHeight * -_gravity);
             _jumpQueued = false;
 
@@ -129,6 +146,51 @@ namespace BetterTogether.Player
             _controller.Move((direction * speed + _knockback + Vector3.up * _verticalVelocity) * dt);
 
             transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+
+            // The blend tree uses 0 = idle, 0.5 = walk and 1 = sprint.
+            AnimationMovement = Mathf.Clamp01(move.magnitude) * (_sprint.IsPressed() ? 1f : 0.5f);
+            AnimationJump = jumped || !_controller.isGrounded;
+        }
+
+        // Models can carry an Animator without a controller (or an inactive alternative mesh); animate only a usable one.
+        private Animator FindUsableAnimator()
+        {
+            foreach (var animator in GetComponentsInChildren<Animator>())
+            {
+                if (animator.runtimeAnimatorController != null)
+                    return animator;
+            }
+
+            return null;
+        }
+
+        private bool CanAnimate => _animator != null && _animator.isActiveAndEnabled && _animator.runtimeAnimatorController != null;
+
+        public override void Render()
+        {
+            if (!CanAnimate)
+                return;
+
+            _animator.SetFloat(MovementParameter, AnimationMovement, 0.1f, Time.deltaTime);
+            _animator.SetBool(JumpParameter, AnimationJump);
+        }
+
+        /// <summary>Plays the camper's attack on every client, including when the kick misses.</summary>
+        public void PlayKickAnimation()
+        {
+            if (HasStateAuthority)
+                RPC_PlayKickAnimation();
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        private void RPC_PlayKickAnimation()
+        {
+            _kickSwingSfx.PlayAt(transform.position);
+            if (!CanAnimate)
+                return;
+
+            _animator.ResetTrigger(KickParameter);
+            _animator.SetTrigger(KickParameter);
         }
     }
 }

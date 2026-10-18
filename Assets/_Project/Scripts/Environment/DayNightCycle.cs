@@ -1,121 +1,68 @@
 using BetterTogether.Match;
-using Fusion;
 using UnityEngine;
 
 namespace BetterTogether.Environment
 {
     /// <summary>
-    /// Shared day clock. The state authority (master client) advances the elapsed time and every client reads
-    /// the replicated value, so all players see the same time of day; if the master leaves, the new one carries on.
-    /// Day and night run at different speeds. Without a <see cref="MatchManager"/> they loop forever; with one,
-    /// the clock only runs while a match is playing and stops shortly after nightfall.
-    /// Night is the camper's deadline.
+    /// Presentation of the day: the sky follows the match timer, from <c>_startTimeOfDay</c> when the match begins to
+    /// <c>_endTimeOfDay</c> when it runs out. It owns no state; without a <see cref="MatchManager"/> in the scene it
+    /// just loops through the day slowly.
     /// </summary>
     [RequireComponent(typeof(SkyLighting))]
-    public class DayNightCycle : NetworkBehaviour, IMatchResettable
+    public class DayNightCycle : MonoBehaviour
     {
-        [Tooltip("Seconds from sunrise to sunset.")]
-        [Min(1)] [SerializeField] private float _dayDuration = 120f;
+        private const float SunsetTime = 0.5f;
 
-        [Tooltip("Seconds from sunset to the next sunrise.")]
-        [Min(1)] [SerializeField] private float _nightDuration = 60f;
-
-        [Tooltip("Time of day when the session starts (0 sunrise, 0.5 sunset).")]
-        [Range(0f, 1f)] [SerializeField] private float _startTimeOfDay = 0.02f;
-
-        [Tooltip("Without a match manager, keep looping day and night forever. Otherwise the clock stops at night.")]
-        [SerializeField] private bool _loopWithoutMatch = true;
-
-        [Tooltip("Seconds of night the clock runs after sunset during a match, so the sky gets dark.")]
-        [Min(0)] [SerializeField] private float _nightHoldSeconds = 8f;
+        [Tooltip("Time of day when the match starts (0 sunrise, 0.5 sunset).")]
+        [Range(0f, 1f)][SerializeField] private float _startTimeOfDay = 0.02f;
+        [Tooltip("Time of day when the match ends (0.5 sunset, 1 next sunrise).")]
+        [Range(0f, 1f)][SerializeField] private float _endTimeOfDay = 0.6f;
+        [Tooltip("Seconds a full day takes when there is no match manager in the scene.")]
+        [Min(1)][SerializeField] private float _loopDuration = 240f;
 
         private SkyLighting _lighting;
-        private bool _isSpawned;
-
-        [Networked] private float Elapsed { get; set; }
-        [Networked] private NetworkBool Started { get; set; }
 
         /// <summary>0 at sunrise, 0.5 at sunset, back to 1 (= 0) at the next sunrise.</summary>
-        public float TimeOfDay => _isSpawned ? ToTimeOfDay(Elapsed) : _startTimeOfDay;
+        public float TimeOfDay
+        {
+            get
+            {
+                if (MatchManager.Instance != null)
+                    return Mathf.Lerp(_startTimeOfDay, _endTimeOfDay, MatchManager.MatchProgress);
 
-        public bool IsNight => TimeOfDay >= 0.5f;
+                return Mathf.Repeat(_startTimeOfDay + Time.time / _loopDuration, 1f);
+            }
+        }
 
-        /// <summary>Seconds of daylight left; 0 at night or before the clock exists.</summary>
-        public float SecondsUntilNight => _isSpawned && !IsNight ? Mathf.Max(0f, _dayDuration - CycleSeconds) : 0f;
+        public bool IsNight => TimeOfDay >= SunsetTime;
 
         /// <summary>0 at the start of the day, 1 at nightfall (and during the night).</summary>
-        public float DayProgress01 => _isSpawned ? Mathf.Clamp01(CycleSeconds / _dayDuration) : 0f;
+        public float DayProgress01 => Mathf.Clamp01(Mathf.InverseLerp(_startTimeOfDay, SunsetTime, TimeOfDay));
 
-        private float CycleSeconds => Mathf.Repeat(Elapsed, _dayDuration + _nightDuration);
+        /// <summary>Seconds of daylight left; 0 at night.</summary>
+        public float SecondsUntilNight
+        {
+            get
+            {
+                var match = MatchManager.Instance;
+                if (match != null)
+                    return Mathf.Max(0f, (SunsetProgress - MatchManager.MatchProgress) * match.MatchDuration);
 
-        /// <summary>1 for the first day, then one more per completed day/night cycle.</summary>
-        public int DayNumber => _isSpawned ? Mathf.FloorToInt(Elapsed / (_dayDuration + _nightDuration)) + 1 : 1;
+                return Mathf.Max(0f, (SunsetTime - TimeOfDay) * _loopDuration);
+            }
+        }
+
+        /// <summary>Fraction of the match at which the sky reaches sunset.</summary>
+        private float SunsetProgress => Mathf.Clamp01(Mathf.InverseLerp(_startTimeOfDay, _endTimeOfDay, SunsetTime));
 
         private void Awake()
         {
             _lighting = GetComponent<SkyLighting>();
         }
 
-        public override void Spawned()
-        {
-            _isSpawned = true;
-
-            if (HasStateAuthority && !Started)
-            {
-                Elapsed = ToSeconds(_startTimeOfDay);
-                Started = true;
-            }
-        }
-
-        public override void FixedUpdateNetwork()
-        {
-            if (!HasStateAuthority)
-                return;
-
-            var match = MatchManager.Instance;
-            if (match == null)
-            {
-                if (_loopWithoutMatch)
-                    Elapsed += Runner.DeltaTime;
-                else
-                    Elapsed = Mathf.Min(Elapsed + Runner.DeltaTime, _dayDuration + _nightHoldSeconds);
-                return;
-            }
-
-            if (match.Phase == MatchPhase.Playing)
-                Elapsed = Mathf.Min(Elapsed + Runner.DeltaTime, _dayDuration + _nightHoldSeconds);
-        }
-
-        /// <summary>Authority only: the day starts over, at the configured start time.</summary>
-        public void StartMatchDay()
-        {
-            Elapsed = ToSeconds(_startTimeOfDay);
-            Started = true;
-        }
-
-        /// <summary>Authority only: back to the start of the day.</summary>
-        public void ResetForMatch() => StartMatchDay();
-
-        public override void Despawned(NetworkRunner runner, bool hasState) => _isSpawned = false;
-
-        public override void Render()
+        private void LateUpdate()
         {
             _lighting.SetTimeOfDay(TimeOfDay);
-        }
-
-        private float ToTimeOfDay(float seconds)
-        {
-            float t = Mathf.Repeat(seconds, _dayDuration + _nightDuration);
-            return t < _dayDuration
-                ? 0.5f * t / _dayDuration
-                : 0.5f + 0.5f * (t - _dayDuration) / _nightDuration;
-        }
-
-        private float ToSeconds(float timeOfDay)
-        {
-            return timeOfDay < 0.5f
-                ? timeOfDay * 2f * _dayDuration
-                : _dayDuration + (timeOfDay - 0.5f) * 2f * _nightDuration;
         }
     }
 }

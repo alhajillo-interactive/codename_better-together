@@ -10,7 +10,7 @@ using UnityEngine.UI;
 namespace BetterTogether.UI
 {
     /// <summary>
-    /// Match overlay: day clock, camper objectives, announcer, waiting notice and end screen.
+    /// Match overlay: match clock, camper objectives, announcer, waiting notice and end screen.
     /// Purely local: it polls the shared state every frame and reacts to transitions, so it works
     /// even when the match manager is missing (then only the clock and objectives show).
     /// </summary>
@@ -88,6 +88,7 @@ namespace BetterTogether.UI
         private int _lastCountdown = -1;
         private int _lastTickSecond = -1;
         private float _prevSecondsUntilNight = -1f;
+        private float _prevRemaining = -1f;
         private bool _hasFireState;
         private bool _prevLit;
         private bool _hasSausageState;
@@ -97,7 +98,6 @@ namespace BetterTogether.UI
         private int _lastRematch = -1;
         private int _lastWaitingKey = -1;
         private int _lastClockSecond = -1;
-        private bool _lastNight;
 
         private void Awake()
         {
@@ -133,10 +133,10 @@ namespace BetterTogether.UI
             var phase = match != null ? match.Phase : MatchPhase.Playing;
             var playing = phase == MatchPhase.Playing;
 
-            UpdateClock(playing);
+            UpdateClock(match, phase, playing);
             UpdateObjectives(playing);
             DetectPhase(match, phase);
-            DetectNight(playing);
+            DetectNight(match, playing);
             DetectFire(playing);
             DetectSausage(playing);
             UpdateWaiting(match, phase);
@@ -161,7 +161,21 @@ namespace BetterTogether.UI
 
         #region Clock
 
-        private void UpdateClock(bool playing)
+        /// <summary>Seconds on the clock: the match timer when there is a match, otherwise the daylight left.</summary>
+        private float ClockSeconds(MatchManager match, MatchPhase phase)
+        {
+            if (match == null)
+                return _dayCycle.SecondsUntilNight;
+
+            return phase switch
+            {
+                MatchPhase.Playing => match.TimeRemaining,
+                MatchPhase.Ended => 0f,
+                _ => match.MatchDuration,
+            };
+        }
+
+        private void UpdateClock(MatchManager match, MatchPhase phase, bool playing)
         {
             var visible = _dayCycle != null;
             if (_clock.gameObject.activeSelf != visible)
@@ -174,27 +188,13 @@ namespace BetterTogether.UI
             var half = _track.rect.width * 0.5f;
             _sun.anchoredPosition = new Vector2(Mathf.Lerp(-half, half, progress), 0f);
 
-            if (_dayCycle.IsNight)
-            {
-                _sunImage.color = _moonColor;
-                _timeLabel.color = _moonColor;
-                if (!_lastNight)
-                {
-                    _lastNight = true;
-                    _timeLabel.text = "Noche";
-                }
+            var night = _dayCycle.IsNight;
+            _sunImage.color = night ? _moonColor : _sunColor;
 
-                _lastTickSecond = -1;
-                _lastClockSecond = -1;
-                return;
-            }
-
-            _lastNight = false;
-            _sunImage.color = _sunColor;
-            var seconds = Mathf.Max(0f, _dayCycle.SecondsUntilNight);
+            var seconds = Mathf.Max(0f, ClockSeconds(match, phase));
             var whole = Mathf.CeilToInt(seconds);
-            var urgent = seconds <= _urgentSeconds;
-            _timeLabel.color = urgent ? _urgentColor : Color.white;
+            var urgent = seconds <= _urgentSeconds && (match == null || phase == MatchPhase.Playing);
+            _timeLabel.color = urgent ? _urgentColor : night ? _moonColor : Color.white;
 
             if (whole != _lastClockSecond)
             {
@@ -318,7 +318,13 @@ namespace BetterTogether.UI
             Announce(remaining.ToString(), new Color(1f, 0.92f, 0.5f), true, 0.7f);
         }
 
-        private void DetectNight(bool playing)
+        private void DetectNight(MatchManager match, bool playing)
+        {
+            DetectNightfall(playing);
+            DetectLastSeconds(match, playing);
+        }
+
+        private void DetectNightfall(bool playing)
         {
             if (_dayCycle == null || _dayCycle.IsNight)
             {
@@ -330,15 +336,25 @@ namespace BetterTogether.UI
             var previous = _prevSecondsUntilNight;
             _prevSecondsUntilNight = now;
 
-            if (previous < 0f || !playing)
-                return;
-
-            if (previous > 30f && now <= 30f)
+            if (previous > 30f && now <= 30f && playing)
                 Announce("¡Se acerca la noche!", new Color(0.6f, 0.7f, 1f));
+        }
 
-            if (previous > 10f && now <= 10f)
+        private void DetectLastSeconds(MatchManager match, bool playing)
+        {
+            if (match == null || !playing)
             {
-                Announce("¡10 segundos!", _urgentColor);
+                _prevRemaining = -1f;
+                return;
+            }
+
+            var now = match.TimeRemaining;
+            var previous = _prevRemaining;
+            _prevRemaining = now;
+
+            if (previous > _urgentSeconds && now <= _urgentSeconds)
+            {
+                Announce($"¡{Mathf.CeilToInt(_urgentSeconds)} segundos!", _urgentColor);
                 Flash(new Color(0.2f, 0.3f, 0.8f, 0.15f), 0.4f);
             }
         }
@@ -465,12 +481,15 @@ namespace BetterTogether.UI
             if (!show)
                 return;
 
-            var key = match.PlayerCount * 1000 + match.MinPlayers;
+            var ready = match.PlayerCount >= match.MinPlayers;
+            var key = match.PlayerCount * 1000 + match.MinPlayers * 2 + (ready ? 1 : 0);
             if (key == _lastWaitingKey)
                 return;
 
             _lastWaitingKey = key;
-            _waiting.text = $"Esperando jugadores ({match.PlayerCount}/{match.MinPlayers})";
+            _waiting.text = ready && !match.AutoStart
+                ? "Pulsa Iniciar partida o Enter"
+                : $"Esperando jugadores ({match.PlayerCount}/{match.MinPlayers})";
         }
 
         private void UpdateEndScreen(MatchManager match, MatchPhase phase)

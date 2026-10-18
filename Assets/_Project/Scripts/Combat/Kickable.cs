@@ -1,3 +1,4 @@
+using BetterTogether.Audio;
 using BetterTogether.Interaction;
 using BetterTogether.Player;
 using BetterTogether.UI;
@@ -36,6 +37,10 @@ namespace BetterTogether.Combat
         [SerializeField] private float _kickRollTime = 0.4f;
         [SerializeField] private Color _kickFlashColor = new(1f, 0.1f, 0.1f, 0.3f);
         [SerializeField] private float _kickFlashTime = 0.3f;
+
+        [Header("Sound")]
+        [Tooltip("Hit when this player gets kicked. Heard by everyone, from where it happens.")]
+        [SerializeField] private SoundCue _kickedSfx;
 
         [Header("Dizzy effect")]
         [Tooltip("Visual-only child that wobbles while stunned (not the root, which carries the collider).")]
@@ -157,6 +162,9 @@ namespace BetterTogether.Combat
 
             _showingDizzy = stunned;
             _stars.gameObject.SetActive(stunned);
+            // The stun is networked, so this runs on every client: everyone hears the hit.
+            if (stunned)
+                _kickedSfx.PlayAt(transform.position);
             if (!stunned && _wobbleTarget != null)
             {
                 _wobbleTarget.localRotation = _wobbleRest;

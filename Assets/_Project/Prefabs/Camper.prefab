@@ -945,6 +945,8 @@ MonoBehaviour:
   _sprintSpeed: 5
   _jumpHeight: 1
   _gravity: -20
+  _animator: {fileID: 9079837355192595333}
+  _kickSwingSfx: {fileID: 11400000, guid: 7aa6b956ba554a34b988b9859c5085ca, type: 2}
   _knockbackAirDrag: 1.5
   _knockbackGroundDrag: 12
 --- !u!114 &1482589445214074440
@@ -1123,6 +1125,92 @@ MonoBehaviour:
   _enabledOnSpawn: 1
   _IsGazeEnabled:
     RawValue: 0
+--- !u!114 &8800000000000000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2407974724338023452}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 180ecf9b41d478f468eb3e9083753217, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Cinemachine::Unity.Cinemachine.CinemachineImpulseSource
+  ImpulseDefinition:
+    ImpulseChannel: 1
+    ImpulseShape: 1
+    CustomImpulseShape:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0.33333334
+        outWeight: 0.33333334
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0.33333334
+        outWeight: 0.33333334
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    ImpulseDuration: 0.2
+    ImpulseType: 0
+    DissipationRate: 0
+    RawSignal: {fileID: 0}
+    AmplitudeGain: 1
+    FrequencyGain: 1
+    RepeatMode: 0
+    Randomize: 1
+    TimeEnvelope:
+      AttackShape:
+        serializedVersion: 2
+        m_Curve: []
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 4
+      DecayShape:
+        serializedVersion: 2
+        m_Curve: []
+        m_PreInfinity: 2
+        m_PostInfinity: 2
+        m_RotationOrder: 4
+      AttackTime: 0
+      SustainTime: 0.2
+      DecayTime: 0.7
+      ScaleWithImpact: 1
+      HoldForever: 0
+    ImpactRadius: 100
+    DirectionMode: 0
+    DissipationMode: 2
+    DissipationDistance: 100
+    PropagationSpeed: 343
+  DefaultVelocity: {x: 0, y: -1, z: 0}
+--- !u!114 &8800000000000000003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2407974724338023452}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3d968fbe236d40b6b668505833f14d98, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Rendering.WatercolorSilhouette
+  _modelRoot: {fileID: 5474667929835438748}
+  _outlineMaterial: {fileID: 2100000, guid: 12dfe1e238a44517851e6c63fd98db28, type: 2}
+  _maskMaterial: {fileID: 2100000, guid: aea93b73bb6b4ad78246f04d18d9b48d, type: 2}
 --- !u!1 &2904088445191195005
 GameObject:
   m_ObjectHideFlags: 0
@@ -3355,7 +3443,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b20a68df03eff0d4f806fc9fc1b4b3e7, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0
+      value: -0.1
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b20a68df03eff0d4f806fc9fc1b4b3e7, type: 3}
       propertyPath: m_LocalPosition.z
@@ -3648,7 +3736,10 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: -8679921383154817045, guid: b20a68df03eff0d4f806fc9fc1b4b3e7, type: 3}
       insertIndex: -1
       addedObject: {fileID: 5956834562452554265}
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: b20a68df03eff0d4f806fc9fc1b4b3e7, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 9079837355192595333}
   m_SourcePrefab: {fileID: 100100000, guid: b20a68df03eff0d4f806fc9fc1b4b3e7, type: 3}
 --- !u!4 &144057835177092407 stripped
 Transform:
@@ -3970,6 +4061,33 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 899914987519988528, guid: b20a68df03eff0d4f806fc9fc1b4b3e7, type: 3}
   m_PrefabInstance: {fileID: 5508839147972715895}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &4661856551460460582 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: b20a68df03eff0d4f806fc9fc1b4b3e7, type: 3}
+  m_PrefabInstance: {fileID: 5508839147972715895}
+  m_PrefabAsset: {fileID: 0}
+--- !u!95 &9079837355192595333
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4661856551460460582}
+  m_Enabled: 1
+  m_Avatar: {fileID: 9000000, guid: be7d8622f1502f54dbb804028d3d7bef, type: 3}
+  m_Controller: {fileID: 9100000, guid: c6e798e8527d3bc40aa4fec67bada6ba, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
 --- !u!4 &4916868067085849124 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8624554432351111341, guid: b20a68df03eff0d4f806fc9fc1b4b3e7, type: 3}
@@ -4260,71 +4378,3 @@ Transform:
   m_CorrespondingSourceObject: {fileID: -5486395870844215321, guid: b20a68df03eff0d4f806fc9fc1b4b3e7, type: 3}
   m_PrefabInstance: {fileID: 5508839147972715895}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &8800000000000000002
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2407974724338023452}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 180ecf9b41d478f468eb3e9083753217, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Unity.Cinemachine::Unity.Cinemachine.CinemachineImpulseSource
-  ImpulseDefinition:
-    ImpulseChannel: 1
-    ImpulseShape: 1
-    CustomImpulseShape:
-      serializedVersion: 2
-      m_Curve:
-      - serializedVersion: 3
-        time: 0
-        value: 0
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0.33333334
-        outWeight: 0.33333334
-      - serializedVersion: 3
-        time: 1
-        value: 1
-        inSlope: 0
-        outSlope: 0
-        tangentMode: 0
-        weightedMode: 0
-        inWeight: 0.33333334
-        outWeight: 0.33333334
-      m_PreInfinity: 2
-      m_PostInfinity: 2
-      m_RotationOrder: 4
-    ImpulseDuration: 0.2
-    ImpulseType: 0
-    DissipationRate: 0
-    RawSignal: {fileID: 0}
-    AmplitudeGain: 1
-    FrequencyGain: 1
-    RepeatMode: 0
-    Randomize: 1
-    ImpactRadius: 100
-    DirectionMode: 0
-    DissipationMode: 2
-    DissipationDistance: 100
-    PropagationSpeed: 343
-  DefaultVelocity: {x: 0, y: -1, z: 0}
---- !u!114 &8800000000000000003
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2407974724338023452}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3d968fbe236d40b6b668505833f14d98, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Rendering.WatercolorSilhouette
-  _modelRoot: {fileID: 5474667929835438748}
-  _outlineMaterial: {fileID: 2100000, guid: 12dfe1e238a44517851e6c63fd98db28, type: 2}
-  _maskMaterial: {fileID: 2100000, guid: aea93b73bb6b4ad78246f04d18d9b48d, type: 2}

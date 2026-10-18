@@ -1,5 +1,6 @@
 #if FUSION_WEAVER
 using System.Linq;
+using BetterTogether.Audio;
 using BetterTogether.Gaze;
 using BetterTogether.Player;
 using UnityEngine;
@@ -77,10 +78,11 @@ namespace BetterTogether.Networking
                 .OrderBy(p => p.Object.StateAuthority.PlayerId)
                 .ToList();
 
-            var height = 120f + players.Count * 28f;
+            var height = 180f + players.Count * 28f;
             GUILayout.BeginArea(new Rect(Screen.width - RolePanelWidth - 10f, 10f, RolePanelWidth, height), GUI.skin.box);
             GUILayout.Label("Debug — F1 para cerrar");
             DrawGazeToggle();
+            DrawVolumeSliders();
             GUILayout.Space(6f);
 
             foreach (var player in players)
@@ -97,6 +99,22 @@ namespace BetterTogether.Networking
                 GUILayout.Label("No hay jugadores todavía.");
 
             GUILayout.EndArea();
+        }
+
+        /// <summary>This player's own music and SFX volume (saved). Voice chat has its own settings.</summary>
+        private static void DrawVolumeSliders()
+        {
+            AudioManager.MusicVolume = VolumeSlider("Música", AudioManager.MusicVolume);
+            AudioManager.SfxVolume = VolumeSlider("Efectos", AudioManager.SfxVolume);
+        }
+
+        private static float VolumeSlider(string label, float value)
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"{label}: {value * 100f:0}%", GUILayout.Width(110f));
+            value = GUILayout.HorizontalSlider(value, 0f, 1f);
+            GUILayout.EndHorizontal();
+            return value;
         }
 
         /// <summary>Turns the petrifying gaze of every camper on or off at once.</summary>

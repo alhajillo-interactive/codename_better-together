@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BetterTogether.Audio;
 using BetterTogether.Player;
 using Fusion;
 using UnityEngine;
@@ -23,8 +24,10 @@ namespace BetterTogether.Gaze
         [SerializeField] private Transform _visual;
         [SerializeField] private Color _stoneColor = new(0.55f, 0.55f, 0.58f);
         [SerializeField] private float _stoneBlendTime = 0.2f;
-        [SerializeField] private AudioClip _petrifySound;
-        [SerializeField] private AudioClip _unpetrifySound;
+
+        [Header("Sound")]
+        [Tooltip("Tension sting when the camper starts looking at you. Only you hear it; set the cue to not Spatial.")]
+        [SerializeField] private SoundCue _watchedSfx;
 
         private static readonly List<Petrifiable> _all = new();
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
@@ -33,10 +36,8 @@ namespace BetterTogether.Gaze
         private Renderer[] _renderers;
         private Color[] _originalColors;
         private MaterialPropertyBlock _block;
-        private AudioSource _audio;
         private float _seenTime;
         private float _stoneAmount;
-        private bool _wasPetrified;
         private bool _isSpawned;
 
         public static Petrifiable Local { get; private set; }
@@ -89,7 +90,11 @@ namespace BetterTogether.Gaze
             if (Local != this)
                 return;
 
-            IsWatched = IsSeenByAnyCamper();
+            var watched = IsSeenByAnyCamper();
+            if (watched && !IsWatched)
+                _watchedSfx.Play(); // Only this gnome hears it (2D), like the HUD warning.
+
+            IsWatched = watched;
             _seenTime = IsWatched ? _seenTime + Time.deltaTime : 0f;
 
             var petrified = IsWatched && _seenTime >= _graceTime;
@@ -102,14 +107,7 @@ namespace BetterTogether.Gaze
 
         public override void Render()
         {
-            var petrified = IsPetrified;
-            if (petrified != _wasPetrified)
-            {
-                _wasPetrified = petrified;
-                PlaySound(petrified ? _petrifySound : _unpetrifySound);
-            }
-
-            var target = petrified ? 1f : 0f;
+            var target = IsPetrified ? 1f : 0f;
             if (Mathf.Approximately(_stoneAmount, target))
                 return;
 
@@ -128,21 +126,6 @@ namespace BetterTogether.Gaze
                 _block.SetColor(BaseColorId, Color.Lerp(_originalColors[i], _stoneColor, _stoneAmount));
                 _renderers[i].SetPropertyBlock(_block);
             }
-        }
-
-        private void PlaySound(AudioClip clip)
-        {
-            if (clip == null)
-                return;
-
-            if (_audio == null)
-            {
-                _audio = gameObject.AddComponent<AudioSource>();
-                _audio.playOnAwake = false;
-                _audio.spatialBlend = 1f;
-            }
-
-            _audio.PlayOneShot(clip);
         }
 
         private bool IsSeenByAnyCamper()
