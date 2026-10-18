@@ -5,6 +5,10 @@
 # (avoids "modified" files that only differ in line endings on Windows).
 # text=auto: git still detects binary files (e.g. TerrainData, NavMesh .asset) and never converts them;
 # converting a binary file corrupts it.
+# merge=unityyamlmerge only takes effect if each machine configures Unity's Smart Merge, e.g.:
+#   git config merge.unityyamlmerge.name "Unity SmartMerge"
+#   git config merge.unityyamlmerge.driver "'<Unity>/Editor/Data/Tools/UnityYAMLMerge.exe' merge -p %O %B %A %A"
+# Without it git falls back to its normal text merge.
 *.unity         text=auto eol=lf merge=unityyamlmerge
 *.prefab        text=auto eol=lf merge=unityyamlmerge
 *.asset         text=auto eol=lf merge=unityyamlmerge
@@ -46,7 +50,6 @@
 Assets/CampSite.asset binary
 *NavMesh*.asset binary
 LightingData.asset binary
-*.terraindata binary
 *.png binary
 *.jpg binary
 *.jpeg binary
@@ -70,3 +73,17 @@ LightingData.asset binary
 *.debug binary
 *.release binary
 *.unitypackage binary
+*.gif binary
+*.bmp binary
+*.tiff binary
+*.ico binary
+*.psb binary
+*.aif binary
+*.aiff binary
+*.flac binary
+*.m4a binary
+*.mp4 binary
+*.mov binary
+*.webm binary
+*.bytes binary
+*.zip binary
