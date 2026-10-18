@@ -95,10 +95,14 @@ namespace BetterTogether.Voice
                 ListenToGroups();
         }
 
+        // Subscriptions belong to the voice connection, not to this character: when a gnome respawns as the camper
+        // (every countdown, or from the F1 panel) the gnome group would stay subscribed and the camper would hear
+        // the gnomes' mics. So replace them instead of adding: an empty remove array drops every group, and a null
+        // add array adds none (an empty one would subscribe to all groups).
         private void ListenToGroups()
         {
-            if (_listenGroups is { Length: > 0 })
-                _voiceClient.Client.OpChangeGroups(null, _listenGroups);
+            var add = _listenGroups is { Length: > 0 } ? _listenGroups : null;
+            _voiceClient.Client.OpChangeGroups(System.Array.Empty<byte>(), add);
         }
     }
 }
