@@ -48,7 +48,7 @@ Material:
     - _QueueOffset: 0
     - _RefractionStrength: 0
     - _WaterDepth: 0.5
-    - _WaveStrength: 0.01
+    - _WaveStrength: 0.15
     m_Colors:
     - _DepthWater: {r: 0.082352936, g: 0.77254903, b: 0.77254885, a: 0.5882353}
     - _FoamColor: {r: 1, g: 1, b: 1, a: 1}
