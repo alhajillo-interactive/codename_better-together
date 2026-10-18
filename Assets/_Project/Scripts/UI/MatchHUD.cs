@@ -109,17 +109,6 @@ namespace BetterTogether.UI
             for (var i = 0; i < ObjectiveCount; i++)
                 _lines[i] = new Line { Text = _objectiveTexts[i], Punch = UIPunch.Of(_objectiveTexts[i]) };
 
-            ApplyOutline(_timeLabel);
-            ApplyOutline(_objectivesTitle);
-            foreach (var text in _objectiveTexts)
-                ApplyOutline(text);
-
-            ApplyOutline(_announcer);
-            ApplyOutline(_waiting);
-            ApplyOutline(_endTitle);
-            ApplyOutline(_endSubtitle);
-            ApplyOutline(_endRematch);
-
             _announcer.alpha = 0f;
             _waiting.gameObject.SetActive(false);
             _endScreen.SetActive(false);
@@ -142,12 +131,6 @@ namespace BetterTogether.UI
             UpdateWaiting(match, phase);
             UpdateEndScreen(match, phase);
             UpdateAnnouncer();
-        }
-
-        private static void ApplyOutline(TMP_Text text)
-        {
-            text.outlineWidth = 0.2f;
-            text.outlineColor = new Color32(0, 0, 0, 255);
         }
 
         private void FindDayCycle()
