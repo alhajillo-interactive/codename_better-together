@@ -27,6 +27,7 @@ namespace BetterTogether.Interaction
         private Collider[] _colliders;
         private Rigidbody _body;
         private bool _collidersEnabled = true;
+        private bool _isSpawned;
 
         [Networked] private PlayerInteractor HolderA { get; set; }
         [Networked] private PlayerInteractor HolderB { get; set; }
@@ -64,9 +65,17 @@ namespace BetterTogether.Interaction
             _body = GetComponent<Rigidbody>();
         }
 
-        public override void Spawned() => All.Add(this);
+        public override void Spawned()
+        {
+            _isSpawned = true;
+            All.Add(this);
+        }
 
-        public override void Despawned(NetworkRunner runner, bool hasState) => All.Remove(this);
+        public override void Despawned(NetworkRunner runner, bool hasState)
+        {
+            _isSpawned = false;
+            All.Remove(this);
+        }
 
         public string GetPrompt(PlayerInteractor interactor)
         {
@@ -81,6 +90,9 @@ namespace BetterTogether.Interaction
         /// <summary>Mirrors the authority's rules using the replicated state.</summary>
         public bool CanInteract(PlayerInteractor interactor)
         {
+            if (!_isSpawned)
+                return false;
+
             if (FindHeldBy(interactor) != null)
                 return false;
 
@@ -176,7 +188,8 @@ namespace BetterTogether.Interaction
         // Runs after NetworkTransform has rendered the replicated pose.
         private void LateUpdate()
         {
-            if (Object != null && Object.IsValid && TryGetFollowPose(out var position, out var rotation))
+            // LateUpdate also runs before Spawned / after Despawned, when networked state can't be read.
+            if (_isSpawned && TryGetFollowPose(out var position, out var rotation))
                 transform.SetPositionAndRotation(position, rotation);
         }
 

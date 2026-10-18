@@ -26,7 +26,7 @@ RenderSettings:
   m_AmbientIntensity: 1
   m_AmbientMode: 0
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
-  m_SkyboxMaterial: {fileID: 2100000, guid: 4317d23b09784b144b53d04b014a772b, type: 2}
+  m_SkyboxMaterial: {fileID: 2100000, guid: 4f49b40750444b11aa304a2b51732766, type: 2}
   m_HaloStrength: 0.5
   m_FlareStrength: 1
   m_FlareFadeSpeed: 3
@@ -37,7 +37,7 @@ RenderSettings:
   m_ReflectionBounces: 1
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
-  m_Sun: {fileID: 0}
+  m_Sun: {fileID: 1396005438}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -131,7 +131,7 @@ GameObject:
   - component: {fileID: 1396005438}
   - component: {fileID: 1396005440}
   m_Layer: 0
-  m_Name: Directional Light
+  m_Name: Sun
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -466,67 +466,6 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
---- !u!1001 &1615852834
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: 1289588069274246196, guid: c447bcf077ac5db41bf89c264e808572, type: 3}
-      propertyPath: startAngle
-      value: 90
-      objectReference: {fileID: 0}
-    - target: {fileID: 2317102243625562677, guid: c447bcf077ac5db41bf89c264e808572, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: 2.1486
-      objectReference: {fileID: 0}
-    - target: {fileID: 2317102243625562677, guid: c447bcf077ac5db41bf89c264e808572, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2317102243625562677, guid: c447bcf077ac5db41bf89c264e808572, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 2.1486
-      objectReference: {fileID: 0}
-    - target: {fileID: 2317102243625562677, guid: c447bcf077ac5db41bf89c264e808572, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 2317102243625562677, guid: c447bcf077ac5db41bf89c264e808572, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2317102243625562677, guid: c447bcf077ac5db41bf89c264e808572, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2317102243625562677, guid: c447bcf077ac5db41bf89c264e808572, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2317102243625562677, guid: c447bcf077ac5db41bf89c264e808572, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2317102243625562677, guid: c447bcf077ac5db41bf89c264e808572, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 2317102243625562677, guid: c447bcf077ac5db41bf89c264e808572, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 7940347454422199805, guid: c447bcf077ac5db41bf89c264e808572, type: 3}
-      propertyPath: m_Name
-      value: CicloDiaNoche Variant
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: c447bcf077ac5db41bf89c264e808572, type: 3}
 --- !u!1 &1711334501
 GameObject:
   m_ObjectHideFlags: 0
@@ -1045,6 +984,94 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: bb6faf08565f4369b71a643722d4fb6f, type: 3}
+--- !u!1 &8120500011
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8120500012}
+  - component: {fileID: 8120500013}
+  - component: {fileID: 8120500014}
+  - component: {fileID: 8120500015}
+  m_Layer: 0
+  m_Name: DayNightCycle
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8120500012
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8120500011}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8120500013
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8120500011}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
+  SortKey: 2718365902
+  SendPriority: 1
+  EnableInterpolation: 1
+  Flags: 131074
+  NestedObjects: []
+  NetworkedBehaviours:
+  - {fileID: 8120500014}
+  ForceRemoteRenderTimeframe: 0
+--- !u!114 &8120500014
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8120500011}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 886c6b682e7c462db96eb06b8d973dd7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Environment.DayNightCycle
+  _dayDuration: 120
+  _nightDuration: 60
+  _startTimeOfDay: 0.02
+--- !u!114 &8120500015
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8120500011}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3a4ead564ceb4fb7b58d7a9f8b6d8c12, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Environment.SkyLighting
+  _sun: {fileID: 1396005438}
+  _previewTimeOfDay: 0.3
+  _sunYaw: 170
+  _sunIntensity: 1.2
+  _dayAmbient: {r: 0.55, g: 0.6, b: 0.7, a: 1}
+  _nightAmbient: {r: 0.06, g: 0.08, b: 0.15, a: 1}
+  _horizonFadeDegrees: 12
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -1061,4 +1088,4 @@ SceneRoots:
   - {fileID: 6955463999416037845}
   - {fileID: 6453784960849210753}
   - {fileID: 7647937820464219110}
-  - {fileID: 1615852834}
+  - {fileID: 8120500012}
