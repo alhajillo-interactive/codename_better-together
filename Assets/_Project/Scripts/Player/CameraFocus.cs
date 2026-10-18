@@ -12,7 +12,7 @@ namespace BetterTogether.Player
     public class CameraFocus : MonoBehaviour
     {
         [Tooltip("Field of view while focusing; the normal one is the camera lens.")]
-        [SerializeField] private float _focusFov = 45f;
+        [SerializeField] private float _focusFov = 35f;
         [Tooltip("Seconds to ease between normal and focused.")]
         [SerializeField] private float _transitionTime = 0.2f;
         [Tooltip("Mouse sensitivity multiplier while focusing.")]
@@ -25,6 +25,9 @@ namespace BetterTogether.Player
         private bool _focused;
 
         public static CameraFocus Instance { get; private set; }
+
+        /// <summary>0..1 eased focus amount (0 normal, 1 fully focused), for HUD effects.</summary>
+        public float Amount { get; private set; }
 
         private void Awake()
         {
@@ -48,6 +51,7 @@ namespace BetterTogether.Player
             _blend = _transitionTime > 0f ? Mathf.MoveTowards(_blend, wanted, Time.deltaTime / _transitionTime) : wanted;
 
             var eased = 1f - (1f - _blend) * (1f - _blend);
+            Amount = eased;
             _punch.BaseFieldOfView = Mathf.Lerp(_normalFov, _focusFov, eased);
             if (FirstPersonCamera.Instance != null)
                 FirstPersonCamera.Instance.SensitivityScale = Mathf.Lerp(1f, _focusSensitivity, eased);

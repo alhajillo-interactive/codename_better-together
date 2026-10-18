@@ -282,7 +282,22 @@ MonoBehaviour:
   _logsLayer:
     serializedVersion: 2
     m_Bits: 4294967295
-  _detectorRadius: 1.2
+  _areaRadius: 1.5
+  _restSpeed: 0.25
+  _settleTime: 0.4
+  _placeTolerance: 0.5
+  _slotRadius: 0.5
+  _slotHeight: 0.34
+  _slotTiltFromVertical: 62
+  _slotAngleOffset: 18
+  _slotRotationOffset: {x: 0, y: 0, z: 0}
+  _logPrefab: {fileID: 4893570877941593127, guid: 31b8d71263de450b92d14d9b96315a24, type: 3}
+  _ghostMaterial: {fileID: 2100000, guid: 84d403aa1dbd54f68e171a3d4ea9d839, type: 2}
+  _ghostColor: {r: 0.3, g: 0.65, b: 1, a: 0.22}
+  _hintAlpha: {x: 0.4, y: 0.65}
+  _snapSfx: {fileID: 11400000, guid: 87da417129e3e0d65ed0b4af36e523f8, type: 2}
+  _unsnapSfx: {fileID: 11400000, guid: f39328ebdd3706d8e1a11f71a0056582, type: 2}
+  _readySfx: {fileID: 11400000, guid: 95ee4e6dedf22ffb866f1f2a5436acf8, type: 2}
 --- !u!114 &37296725320174696
 MonoBehaviour:
   m_ObjectHideFlags: 0

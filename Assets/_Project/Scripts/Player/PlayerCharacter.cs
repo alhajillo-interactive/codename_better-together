@@ -14,6 +14,8 @@ namespace BetterTogether.Player
 
         private static readonly List<PlayerCharacter> _all = new();
 
+        private bool _isSpawned;
+
         public static PlayerCharacter Local { get; private set; }
 
         /// <summary>Every spawned player character, local and remote.</summary>
@@ -21,17 +23,55 @@ namespace BetterTogether.Player
 
         public PlayerRole Role => _role;
 
+        [Networked] private NetworkString<_16> NetName { get; set; }
+
+        /// <summary>Name chosen by this player, or "Jugador N" when none is known. Safe to read at any time.</summary>
+        public string DisplayName
+        {
+            get
+            {
+                if (!_isSpawned)
+                    return "Jugador";
+
+                var playerName = LocalPlayerProfile.Sanitize(NetName.ToString());
+                return string.IsNullOrEmpty(playerName) ? $"Jugador {Object.StateAuthority.PlayerId}" : playerName;
+            }
+        }
+
         public override void Spawned()
         {
-            name = $"{_role} {Object.StateAuthority.PlayerId}{(HasStateAuthority ? " (local)" : "")}";
+            _isSpawned = true;
             _all.Add(this);
 
             if (HasStateAuthority)
+            {
+                NetName = LocalPlayerProfile.DisplayNameOrDefault(Object.StateAuthority.PlayerId);
                 Local = this;
+            }
+
+            RefreshObjectName();
+        }
+
+        /// <summary>Owner only: renames this player and saves the name for next sessions.</summary>
+        public void SetDisplayName(string value)
+        {
+            LocalPlayerProfile.Name = value;
+
+            if (!_isSpawned || !HasStateAuthority)
+                return;
+
+            NetName = LocalPlayerProfile.DisplayNameOrDefault(Object.StateAuthority.PlayerId);
+            RefreshObjectName();
+        }
+
+        private void RefreshObjectName()
+        {
+            name = $"{_role} {Object.StateAuthority.PlayerId} {DisplayName}{(HasStateAuthority ? " (local)" : "")}";
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
+            _isSpawned = false;
             _all.Remove(this);
 
             if (Local == this)

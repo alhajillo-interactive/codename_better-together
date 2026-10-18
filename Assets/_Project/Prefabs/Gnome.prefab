@@ -1964,6 +1964,8 @@ GameObject:
   - component: {fileID: 7805739811996808192}
   - component: {fileID: 4683119257163552768}
   - component: {fileID: 8800000000000000001}
+  - component: {fileID: 8800000000000000002}
+  - component: {fileID: 8800000000000000003}
   m_Layer: 0
   m_Name: Gnome
   m_TagString: Untagged
@@ -2045,6 +2047,7 @@ MonoBehaviour:
   - {fileID: 6780018763413977546}
   - {fileID: 7805739811996808192}
   - {fileID: 4683119257163552768}
+  - {fileID: 8800000000000000003}
   - {fileID: 6775593931138393117}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &2317096137556648295
@@ -2296,10 +2299,7 @@ MonoBehaviour:
   _maxPresses: 26
   _decayPerSecond: 3
   _decayDelay: 0.4
-  _maxFrozenSeconds: 6
   _releaseImmunity: 2.5
-  _autoReleaseImmunity: 1
-  _keepProgressSeconds: 1
   _hopForward: 2
   _hopUp: 2.5
   _hopStun: 0.25
@@ -4564,3 +4564,57 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 5115024873852128852, guid: 5a97f9fa135031d4e8a4a10005212076, type: 3}
   m_PrefabInstance: {fileID: 4048934848693013973}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &8800000000000000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7618880620199038078}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b7c1d2e3f4a5469788a9b0c1d2e3f4a5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Player.NameTag
+  _character: {fileID: 4307647866129598102}
+  _heightOffset: 0.6
+  _towerLineSpacing: 0.18
+  _fontSize: 1.2
+  _fadeStart: 8
+  _fadeEnd: 14
+  _minScale: 1
+  _maxScale: 1.8
+  _scaleNear: 2
+  _scaleFar: 12
+  _petrifiedColor: {r: 0.62, g: 0.83, b: 1, a: 1}
+--- !u!114 &8800000000000000003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7618880620199038078}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3992749ad51bdaf9ecc650de93a7561d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Player.GnomeStack
+  _maxTowerHeight: 3
+  _seatHeight: 0.62
+  _speedPerRider: 0.85
+  _reach: 1.6
+  _aimRadius: 0.3
+  _bodyHeight: 0.6
+  _aimMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  _remountCooldown: 0.4
+  _climbTime: 0.12
+  _dismountForward: 1.5
+  _dismountUp: 3
+  _dismountStun: 0.1
+  _handOffCooldown: 0.35
+  _mountFovPunch: 3
+  _mountFovPunchTime: 0.2
+  _mountSfx: {fileID: 0}
+  _dismountSfx: {fileID: 0}

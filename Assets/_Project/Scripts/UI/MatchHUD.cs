@@ -91,6 +91,8 @@ namespace BetterTogether.UI
         private float _prevRemaining = -1f;
         private bool _hasFireState;
         private bool _prevLit;
+        private bool _prevDoused;
+        private float _nextDouseWarning;
         private bool _hasSausageState;
         private Sausage.CookState _prevCook;
         private bool _endShown;
@@ -119,7 +121,7 @@ namespace BetterTogether.UI
             FindDayCycle();
 
             var match = MatchManager.Instance;
-            var phase = match != null ? match.Phase : MatchPhase.Playing;
+            var phase = match != null ? match.Phase : MatchPhase.Waiting;
             var playing = phase == MatchPhase.Playing;
 
             UpdateClock(match, phase, playing);
@@ -176,7 +178,7 @@ namespace BetterTogether.UI
 
             var seconds = Mathf.Max(0f, ClockSeconds(match, phase));
             var whole = Mathf.CeilToInt(seconds);
-            var urgent = seconds <= _urgentSeconds && (match == null || phase == MatchPhase.Playing);
+            var urgent = seconds <= _urgentSeconds && match != null && phase == MatchPhase.Playing;
             _timeLabel.color = urgent ? _urgentColor : night ? _moonColor : Color.white;
 
             if (whole != _lastClockSecond)
@@ -365,6 +367,16 @@ namespace BetterTogether.UI
                 }
             }
 
+            // Warn the camper when gnomes start putting the fire out (not again right away if they keep on and off).
+            var doused = fire.IsBeingDoused;
+            if (_hasFireState && playing && doused && !_prevDoused && Time.unscaledTime >= _nextDouseWarning
+                && PlayerCharacter.Local is { Role: PlayerRole.Camper })
+            {
+                Announce("¡Los duendes apagan la fogata!", _failColor);
+                _nextDouseWarning = Time.unscaledTime + 5f;
+            }
+
+            _prevDoused = doused;
             _prevLit = lit;
             _hasFireState = true;
         }

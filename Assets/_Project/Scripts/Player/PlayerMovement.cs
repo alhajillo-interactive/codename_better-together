@@ -44,6 +44,7 @@ namespace BetterTogether.Player
         private Petrifiable _petrifiable;
         private float _verticalVelocity;
         private bool _jumpQueued;
+        private bool _isRiding;
 
         private static readonly int MovementParameter = Animator.StringToHash("Movement");
         private static readonly int JumpParameter = Animator.StringToHash("IsJump");
@@ -90,6 +91,29 @@ namespace BetterTogether.Player
         /// <summary>Multiplies walk and sprint speed, e.g. lowered while the camper focuses its gaze.</summary>
         public float SpeedMultiplier { get; set; } = 1f;
 
+        /// <summary>Multiplies walk and sprint speed while carrying other gnomes on the head (see GnomeStack).</summary>
+        public float LoadMultiplier { get; set; } = 1f;
+
+        /// <summary>
+        /// Set by <see cref="GnomeStack"/> on the owner while this gnome sits on another one: no walking, jumping or
+        /// physics, only turning the body. Pending knockback is kept for when the gnome gets off.
+        /// </summary>
+        public bool IsRiding
+        {
+            get => _isRiding;
+            set
+            {
+                if (value && !_isRiding)
+                {
+                    _knockback = Vector3.zero;
+                    _verticalVelocity = 0f;
+                    _jumpQueued = false;
+                }
+
+                _isRiding = value;
+            }
+        }
+
         /// <summary>
         /// Launches the player. Only has effect on the state authority, which is the one simulating movement.
         /// </summary>
@@ -106,6 +130,9 @@ namespace BetterTogether.Player
             AnimationJump = false;
             AnimationDancing = false;
         }
+
+        /// <summary>Raised on the owner at the end of <see cref="Teleport"/>, so systems tied to the old position (e.g. riding another gnome) can let go.</summary>
+        public event System.Action Teleported;
 
         /// <summary>Moves the player instantly (e.g. back to its spawn point). State authority only.</summary>
         public void Teleport(Vector3 position, Quaternion rotation)
@@ -130,13 +157,15 @@ namespace BetterTogether.Player
 
             if (FirstPersonCamera.Instance != null)
                 FirstPersonCamera.Instance.SetYaw(rotation.eulerAngles.y);
+
+            Teleported?.Invoke();
         }
 
         private void Update()
         {
             // FixedUpdateNetwork may not run every rendered frame, so buffer the press.
             // _jump is only assigned on the state authority (see Spawned).
-            if (_jump != null && _jump.WasPressedThisFrame())
+            if (_jump != null && _jump.WasPressedThisFrame() && !IsRiding)
                 _jumpQueued = true;
         }
 
@@ -144,6 +173,12 @@ namespace BetterTogether.Player
         {
             if (!HasStateAuthority)
                 return;
+
+            if (IsRiding)
+            {
+                RideTick();
+                return;
+            }
 
             var grounded = _controller.isGrounded;
             if (grounded && _verticalVelocity < 0f)
@@ -158,7 +193,7 @@ namespace BetterTogether.Player
             var move = stunned || locked ? Vector2.zero : _move.ReadValue<Vector2>();
             var direction = Vector3.ClampMagnitude(Quaternion.Euler(0f, yaw, 0f) * new Vector3(move.x, 0f, move.y), 1f);
             var sprinting = !locked && _sprint.IsPressed();
-            var speed = (sprinting ? _sprintSpeed : _walkSpeed) * SpeedMultiplier;
+            var speed = (sprinting ? _sprintSpeed : _walkSpeed) * SpeedMultiplier * LoadMultiplier;
 
             var jumped = _jumpQueued && grounded && !stunned && !locked;
             if (jumped)
@@ -178,6 +213,20 @@ namespace BetterTogether.Player
             AnimationJump = !stunned && (jumped || !_controller.isGrounded);
             AnimationDancing = _petrifiable != null && _dance != null && _dance.IsPressed() && !stunned && !locked &&
                 _controller.isGrounded && move.sqrMagnitude < 0.01f && _knockback.sqrMagnitude < 0.01f;
+        }
+
+        // The controller is disabled while riding and the mount carries the body; only the turning and the timers go on.
+        private void RideTick()
+        {
+            _stunTimer = Mathf.Max(0f, _stunTimer - Runner.DeltaTime);
+            _jumpQueued = false;
+
+            var yaw = FirstPersonCamera.Instance != null && !IsFrozen ? FirstPersonCamera.Instance.Yaw : transform.eulerAngles.y;
+            transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+
+            AnimationMovement = 0f;
+            AnimationJump = false;
+            AnimationDancing = false;
         }
 
         // Models can carry an Animator without a controller (or an inactive alternative mesh); animate only a usable one.

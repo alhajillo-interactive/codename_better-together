@@ -1,3 +1,4 @@
+using BetterTogether.Match;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -21,6 +22,7 @@ namespace BetterTogether.Player
         private Transform _target;
         private InputAction _look;
         private float _pitch;
+        private bool _wasCursorFree;
 
         public float Yaw { get; private set; }
         public float Pitch => _pitch;
@@ -30,6 +32,9 @@ namespace BetterTogether.Player
 
         /// <summary>While true the cursor stays unlocked and mouse look is paused, e.g. while a debug panel is open.</summary>
         public static bool CursorFree { get; set; }
+
+        /// <summary>True while an IMGUI text field has keyboard focus, so hotkeys must be ignored.</summary>
+        public static bool IsTyping => GUIUtility.keyboardControl != 0;
 
         private void Awake()
         {
@@ -72,11 +77,17 @@ namespace BetterTogether.Player
 
             var cursorLocked = Cursor.lockState == CursorLockMode.Locked;
 
-            if (CursorFree)
+            var cursorFree = CursorFree || MatchManager.InLobby;
+            var menuClosed = _wasCursorFree && !cursorFree;
+            _wasCursorFree = cursorFree;
+
+            if (cursorFree)
             {
                 if (cursorLocked)
                     SetCursorLocked(false);
             }
+            else if (menuClosed)
+                SetCursorLocked(true);
             else if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
                 SetCursorLocked(false);
             else if (!cursorLocked && Mouse.current != null && Mouse.current.leftButton.wasReleasedThisFrame)

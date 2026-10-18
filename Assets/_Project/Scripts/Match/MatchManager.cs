@@ -60,6 +60,9 @@ namespace BetterTogether.Match
         /// <summary>Elapsed fraction of the match timer: 0 before the match starts, 1 once it has ended.</summary>
         public static float MatchProgress { get; private set; }
 
+        /// <summary>True while connected and waiting for the match to start (lobby). False without a match manager.</summary>
+        public static bool InLobby => Instance != null && Instance.Phase == MatchPhase.Waiting;
+
         /// <summary>True when there is no match system (free play) or the match is running.</summary>
         public static bool AllowsInteraction => Instance == null || Instance.Phase == MatchPhase.Playing;
 

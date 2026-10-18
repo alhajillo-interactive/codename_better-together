@@ -18,9 +18,12 @@ namespace BetterTogether.Interaction
         [SerializeField] private float _aimRadius = 0.1f;
         [SerializeField] private LayerMask _interactionMask = ~0;
 
+        private static readonly RaycastHit[] FocusHits = new RaycastHit[16];
+
         private InputAction _interact;
         private PlayerMovement _movement;
         private PlayerCharacter _character;
+        private GnomeStack _stack;
 
         public static PlayerInteractor Local { get; private set; }
 
@@ -46,6 +49,7 @@ namespace BetterTogether.Interaction
         private void Awake()
         {
             _character = GetComponent<PlayerCharacter>();
+            TryGetComponent(out _stack); // Only gnomes can stack.
         }
 
         public override void Spawned()
@@ -76,25 +80,49 @@ namespace BetterTogether.Interaction
                 return;
             }
 
+            // Riding on another gnome's head: nothing to pick up, but what is already in the hands can still be used.
+            if (_stack != null && _stack.IsRiding)
+            {
+                Focused = null;
+                if (_interact != null && _interact.WasPressedThisFrame())
+                    UseCarried(Carried);
+                return;
+            }
+
             UpdateFocus();
 
             // The action has a Hold interaction; WasPressedThisFrame ignores it.
             if (_interact == null || !_interact.WasPressedThisFrame())
                 return;
 
-            var carried = Carried;
             if (Focused != null && Focused.CanInteract(this))
                 Focused.Interact(this);
-            else if (carried != null)
-            {
-                var edible = EdibleCarried;
-                if (edible != null)
-                    edible.RequestEat(this);
-                else
-                    carried.RequestRelease(this);
-            }
+            else
+                UseCarried(Carried);
         }
 
+        // Put the log on the campfire if it is in reach of it, otherwise eat it (sausage) or let it go.
+        private void UseCarried(Carryable carried)
+        {
+            if (carried == null)
+                return;
+
+            var fire = FireplaceManager.Instance;
+            if (fire != null && fire.CanPlace(this))
+            {
+                fire.RequestPlace(this);
+                return;
+            }
+
+            var edible = EdibleCarried;
+            if (edible != null)
+                edible.RequestEat(this);
+            else
+                carried.RequestRelease(this);
+        }
+
+        // Props (e.g. teepee logs) can stand in front of what the player wants: take the nearest hit that accepts the
+        // player, and only if none does, the nearest one with an interactable (to show why it can't be used).
         private void UpdateFocus()
         {
             Focused = null;
@@ -103,9 +131,33 @@ namespace BetterTogether.Interaction
                 return;
 
             var origin = view.transform;
-            if (Physics.SphereCast(origin.position, _aimRadius, origin.forward, out var hit, _reach, _interactionMask, QueryTriggerInteraction.Ignore)
-                && !hit.transform.IsChildOf(transform))
-                Focused = PickInteractable(hit.collider);
+            var count = Physics.SphereCastNonAlloc(origin.position, _aimRadius, origin.forward, FocusHits, _reach, _interactionMask, QueryTriggerInteraction.Ignore);
+            System.Array.Sort(FocusHits, 0, count, HitDistanceComparer.Instance);
+
+            for (var i = 0; i < count; i++)
+            {
+                if (FocusHits[i].transform.IsChildOf(transform))
+                    continue;
+
+                var candidate = PickInteractable(FocusHits[i].collider);
+                if (candidate == null)
+                    continue;
+
+                if (candidate.CanInteract(this))
+                {
+                    Focused = candidate;
+                    return;
+                }
+
+                Focused ??= candidate;
+            }
+        }
+
+        private sealed class HitDistanceComparer : System.Collections.Generic.IComparer<RaycastHit>
+        {
+            public static readonly HitDistanceComparer Instance = new();
+
+            public int Compare(RaycastHit a, RaycastHit b) => a.distance.CompareTo(b.distance);
         }
 
         // Nested interactables (e.g. the grill inside the campfire): prefer the first one that accepts this player right now.

@@ -11,7 +11,8 @@ namespace BetterTogether.Gaze
     /// <summary>
     /// The camper's petrifying gaze. Only one <see cref="Petrifiable"/> at a time is locked: the camper (state authority)
     /// picks the gnome closest to the view axis, keeps it while it stays inside a slightly wider cone, and the lock
-    /// fills up during a short grace. Once full, the gnome's owner freezes it. The screen edges stay outside the cone,
+    /// fills up during a short grace. Once full, the gnome's owner freezes it and the camper drops the lock to look for a free gnome (a statue stays
+    /// stone until its player breaks free). The screen edges stay outside the cone,
     /// so gnomes can still move in the camper's peripheral vision.
     /// The gaze only works while the camper holds the focus button; focusing drains a stamina bar and slows the camper.
     /// </summary>
@@ -317,6 +318,10 @@ namespace BetterTogether.Gaze
             if (!target.IsAvailable || target.IsGazeImmune)
                 return false;
 
+            // Full lock and the gnome already turned to stone: let go so the gaze can move on to a free gnome.
+            if (Progress >= 1f && target.IsStone)
+                return false;
+
             if (target.IsVisibleTo(this, _hysteresisAngle, _hysteresisRange))
             {
                 _lostSightTime = 0f;
@@ -338,7 +343,7 @@ namespace BetterTogether.Gaze
             var bestScore = float.MaxValue;
             foreach (var candidate in Petrifiable.All)
             {
-                if (candidate == null || !candidate.IsAvailable || candidate.IsGazeImmune || IsFrozenByOtherGaze(candidate))
+                if (candidate == null || !candidate.IsAvailable || candidate.IsGazeImmune || candidate.IsStone)
                     continue;
 
                 if (!candidate.IsVisibleTo(this))
@@ -354,17 +359,6 @@ namespace BetterTogether.Gaze
             }
 
             return best;
-        }
-
-        private bool IsFrozenByOtherGaze(Petrifiable candidate)
-        {
-            foreach (var gaze in _all)
-            {
-                if (gaze != this && gaze != null && gaze.LockedTarget == candidate && gaze.LockProgress >= 1f)
-                    return true;
-            }
-
-            return false;
         }
 
         private void OnDrawGizmosSelected()

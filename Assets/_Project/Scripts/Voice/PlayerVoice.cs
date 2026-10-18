@@ -1,3 +1,4 @@
+using BetterTogether.Player;
 using Fusion;
 using Photon.Realtime;
 using Photon.Voice.Fusion;
@@ -74,7 +75,7 @@ namespace BetterTogether.Voice
 
         private void Update()
         {
-            if (Local != this || Keyboard.current == null || !Keyboard.current[_toggleMicKey].wasPressedThisFrame)
+            if (Local != this || FirstPersonCamera.IsTyping || Keyboard.current == null || !Keyboard.current[_toggleMicKey].wasPressedThisFrame)
                 return;
 
             var recorder = _voiceObject.RecorderInUse;

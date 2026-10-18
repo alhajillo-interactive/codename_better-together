@@ -36,6 +36,13 @@ namespace BetterTogether.UI
         [SerializeField] private float _pulseAlpha = 0.35f;
         [SerializeField] private float _pulseDuration = 0.3f;
 
+        [Header("Focus vignette")]
+        [Tooltip("Colour of the dark vignette; its alpha is the peak opacity at full focus.")]
+        [SerializeField] private Color _focusVignetteColor = new(0f, 0f, 0f, 0.55f);
+        [Tooltip("Fraction of the screen centre that stays clear.")]
+        [Range(0f, 1f)]
+        [SerializeField] private float _focusVignetteInner = 0.55f;
+
         [Header("Stamina bar")]
         [SerializeField] private Vector2 _staminaSize = new(260f, 14f);
         [SerializeField] private float _staminaBottomOffset = 70f;
@@ -48,6 +55,7 @@ namespace BetterTogether.UI
 
         private Texture2D _edgeTexture;
         private Texture2D _coneTexture;
+        private Texture2D _focusTexture;
         private float _coneTextureRadius = -1f;
         private float _pulseTime = float.MaxValue;
         private float _shakeTime = float.MaxValue;
@@ -65,6 +73,8 @@ namespace BetterTogether.UI
                 Destroy(_edgeTexture);
             if (_coneTexture != null)
                 Destroy(_coneTexture);
+            if (_focusTexture != null)
+                Destroy(_focusTexture);
         }
 
         private void Update()
@@ -182,6 +192,16 @@ namespace BetterTogether.UI
 
                 _coneTexture = CreateVignette(Mathf.Clamp01(radius / half));
                 _coneTextureRadius = radius;
+            }
+
+            var focus = CameraFocus.Instance;
+            var amount = focus != null ? focus.Amount : 0f;
+            if (amount > 0.001f)
+            {
+                _focusTexture ??= CreateVignette(_focusVignetteInner);
+                var tint = _focusVignetteColor;
+                tint.a *= amount;
+                DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), _focusTexture, tint);
             }
 
             DrawStamina(gaze);
