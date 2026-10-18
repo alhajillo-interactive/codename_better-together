@@ -809,6 +809,7 @@ GameObject:
   - component: {fileID: 6152230495412790016}
   - component: {fileID: 8800000000000000002}
   - component: {fileID: 8800000000000000003}
+  - component: {fileID: 8800000000000000004}
   m_Layer: 0
   m_Name: Camper
   m_TagString: Untagged
@@ -1117,14 +1118,49 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Gaze.CamperGaze
   _eye: {fileID: 7448268824482469954}
-  _halfAngle: 30
-  _range: 20
+  _halfAngle: 22
+  _range: 8
   _occluders:
     serializedVersion: 2
     m_Bits: 4294967295
   _enabledOnSpawn: 1
+  _nightRangeBonus: 2
+  _nightRampSeconds: 30
+  _lockGrace: 0.25
+  _retargetDelay: 0.3
+  _lostSightGrace: 0.3
+  _hysteresisAngle: 4
+  _hysteresisRange: 1
+  _distanceWeight: 0.5
   _IsGazeEnabled:
     RawValue: 0
+--- !u!114 &8800000000000000004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2407974724338023452}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7d4e2b91c3f4a6e8b5d0f1e2c9a7b36, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Gaze.GazeConeVisual
+  _gaze: {fileID: 6152230495412790016}
+  _shader: {fileID: 4800000, guid: c3a1f0e57b2d4e9a8f6d1b0c9e7a5d42, type: 3}
+  _searchColor: {r: 0.55, g: 0.45, b: 1, a: 0.1}
+  _breathingAmplitude: 0.02
+  _lockedColor: {r: 1, g: 0.35, b: 0.25, a: 0.22}
+  _colorTransition: 0.15
+  _nightAlphaScale: 1.3
+  _groundMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  _groundOffset: 0.02
+  _footprintAlphaScale: 1.5
+  _markerColor: {r: 1, g: 0.2, b: 0.15, a: 0.95}
+  _markerSize: 0.15
+  _markerHeight: 0.25
 --- !u!114 &8800000000000000002
 MonoBehaviour:
   m_ObjectHideFlags: 0

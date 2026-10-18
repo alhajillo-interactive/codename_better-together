@@ -1,4 +1,5 @@
 using BetterTogether.Audio;
+using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using BetterTogether.Player;
 using BetterTogether.UI;
@@ -27,6 +28,9 @@ namespace BetterTogether.Combat
         [Tooltip("Where the dropped item lands between this player (0) and the kicker (1).")]
         [Range(0f, 1f)]
         [SerializeField] private float _dropTowardKicker = 0.5f;
+
+        [Tooltip("A kick on a petrified player breaks the stone and grants it a short immunity to the gaze.")]
+        [SerializeField] private bool _kickFreesStone = true;
 
         [Header("Camera shake")]
         [Tooltip("Impulse played on this player's own camera when kicked.")]
@@ -64,6 +68,7 @@ namespace BetterTogether.Combat
 
         private PlayerMovement _movement;
         private PlayerInteractor _interactor;
+        private Petrifiable _petrifiable;
         private Transform _stars;
         private Quaternion _wobbleRest;
         private Vector3 _scaleRest;
@@ -83,6 +88,7 @@ namespace BetterTogether.Combat
         {
             _movement = GetComponent<PlayerMovement>();
             _interactor = GetComponent<PlayerInteractor>();
+            _petrifiable = GetComponent<Petrifiable>();
             if (_wobbleTarget == null)
                 return;
 
@@ -111,6 +117,9 @@ namespace BetterTogether.Combat
             var protectedFor = (_immuneWhileStunned ? _stunDuration : 0f) + _immunityAfterStun;
             ProtectedTimer = TickTimer.CreateFromSeconds(Runner, protectedFor);
             DropCarried(kickerPosition);
+            if (_kickFreesStone && _petrifiable != null && _petrifiable.IsStone)
+                _petrifiable.ForceRelease(_stunDuration + 1f);
+
             _movement.ApplyKnockback(Vector3.ClampMagnitude(velocity, _maxKickSpeed), _stunDuration);
 
             // Runs on the kicked player's own client, so only their camera shakes.

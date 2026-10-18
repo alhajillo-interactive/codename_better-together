@@ -1,12 +1,13 @@
-using System.Collections.Generic;
 using BetterTogether.Gaze;
+using BetterTogether.Player;
 using UnityEngine;
 
 namespace BetterTogether.UI
 {
     /// <summary>
-    /// Feedback for the petrifying gaze. Gnomes see a vignette that grows while watched and a stone screen when petrified;
-    /// campers see a faint vignette outside their gaze cone that pulses whenever a gnome turns to stone.
+    /// Feedback for the petrifying gaze. Gnomes see a vignette that grows while locked, and a stone screen with a
+    /// button-mashing counter when petrified; campers see a faint vignette outside their gaze cone that pulses
+    /// whenever a gnome is locked.
     /// IMGUI placeholder until the game has a real HUD.
     /// </summary>
     public class GazeFeedbackHUD : MonoBehaviour
@@ -15,9 +16,19 @@ namespace BetterTogether.UI
 
         [Header("Gnome")]
         [SerializeField] private Color _warningColor = new(0.45f, 0.55f, 0.7f, 0.8f);
+        [Tooltip("Cooler tint for being inside a camper's cone without being locked yet.")]
+        [SerializeField] private Color _coneWarningColor = new(0.3f, 0.5f, 0.85f, 0.8f);
         [SerializeField] private Color _petrifiedColor = new(0.5f, 0.5f, 0.52f, 0.9f);
         [Range(0f, 1f)]
         [SerializeField] private float _warningInnerRadius = 0.35f;
+
+        [Header("Break free")]
+        [SerializeField] private float _shakePixels = 6f;
+        [SerializeField] private float _shakeDuration = 0.06f;
+        [SerializeField] private Vector2 _barSize = new(360f, 16f);
+        [SerializeField] private Color _barColor = new(1f, 1f, 1f, 0.9f);
+        [SerializeField] private Color _barBackColor = new(0f, 0f, 0f, 0.5f);
+        [SerializeField] private Color _releaseFlashColor = new(1f, 1f, 1f, 0.25f);
 
         [Header("Camper")]
         [SerializeField] private Color _coneColor = new(0.3f, 0.2f, 0.5f, 1f);
@@ -25,12 +36,15 @@ namespace BetterTogether.UI
         [SerializeField] private float _pulseAlpha = 0.35f;
         [SerializeField] private float _pulseDuration = 0.3f;
 
-        private readonly Dictionary<Petrifiable, bool> _previous = new();
-        private readonly List<Petrifiable> _stale = new();
         private Texture2D _edgeTexture;
         private Texture2D _coneTexture;
         private float _coneTextureRadius = -1f;
         private float _pulseTime = float.MaxValue;
+        private float _shakeTime = float.MaxValue;
+        private Petrifiable _trackedGnome;
+        private Petrifiable _lastLocked;
+        private int _lastPresses;
+        private int _lastReleases;
         private GUIStyle _title;
         private GUIStyle _subtitle;
 
@@ -45,23 +59,51 @@ namespace BetterTogether.UI
         private void Update()
         {
             _pulseTime += Time.deltaTime;
-            foreach (var gnome in Petrifiable.All)
+            _shakeTime += Time.deltaTime;
+            TrackCamperLock();
+            TrackGnomeFeedback();
+        }
+
+        private void TrackCamperLock()
+        {
+            var gaze = CamperGaze.Local;
+            var locked = gaze != null ? gaze.LockedTarget : null;
+            if (locked != null && locked != _lastLocked)
+                _pulseTime = 0f;
+
+            _lastLocked = locked;
+        }
+
+        private void TrackGnomeFeedback()
+        {
+            var gnome = Petrifiable.Local;
+            if (gnome != _trackedGnome)
             {
-                var stone = gnome.IsStone;
-                if (stone && _previous.TryGetValue(gnome, out var was) && !was)
-                    _pulseTime = 0f;
-                _previous[gnome] = stone;
+                _trackedGnome = gnome;
+                _lastPresses = gnome != null ? gnome.PressCount : 0;
+                _lastReleases = gnome != null ? gnome.ReleaseCount : 0;
+                return;
             }
 
-            _stale.Clear();
-            foreach (var gnome in _previous.Keys)
+            if (gnome == null)
+                return;
+
+            if (gnome.PressCount != _lastPresses)
             {
-                if (gnome == null)
-                    _stale.Add(gnome);
+                _lastPresses = gnome.PressCount;
+                _shakeTime = 0f;
+                if (CameraPunch.Instance != null)
+                    CameraPunch.Instance.PunchFov(0.6f, 0.08f);
             }
 
-            foreach (var gnome in _stale)
-                _previous.Remove(gnome);
+            if (gnome.ReleaseCount == _lastReleases)
+                return;
+
+            _lastReleases = gnome.ReleaseCount;
+            if (ScreenFlash.Instance != null)
+                ScreenFlash.Instance.Flash(_releaseFlashColor, 0.15f);
+            if (CameraPunch.Instance != null)
+                CameraPunch.Instance.PunchFov(4f, 0.2f);
         }
 
         private void OnGUI()
@@ -85,17 +127,36 @@ namespace BetterTogether.UI
 
             if (!gnome.IsStone)
             {
-                var color = _warningColor;
+                var color = gnome.IsLockTarget ? _warningColor : _coneWarningColor;
                 color.a *= gnome.WarningProgress;
                 DrawTexture(screen, _edgeTexture, color);
                 return;
             }
 
             DrawTexture(screen, _edgeTexture, _petrifiedColor);
+            DrawBreakFree(gnome);
+        }
+
+        private void DrawBreakFree(Petrifiable gnome)
+        {
             _title ??= CreateStyle(40, FontStyle.Bold);
-            _subtitle ??= CreateStyle(20, FontStyle.Normal);
-            GUI.Label(new Rect(0f, Screen.height * 0.4f, Screen.width, 60f), "¡Petrificado!", _title);
-            GUI.Label(new Rect(0f, Screen.height * 0.4f + 60f, Screen.width, 30f), "Puedes hablar y mirar", _subtitle);
+            _subtitle ??= CreateStyle(24, FontStyle.Normal);
+
+            var shake = Vector2.zero;
+            if (_shakeTime < _shakeDuration)
+                shake = new Vector2(Random.Range(-_shakePixels, _shakePixels), Random.Range(-_shakePixels, _shakePixels));
+
+            var top = Screen.height * 0.4f;
+            GUI.Label(new Rect(shake.x, top + shake.y, Screen.width, 60f), "¡Petrificado! Machaca E", _title);
+
+            var presses = Mathf.FloorToInt(gnome.BreakProgress);
+            var required = Mathf.CeilToInt(gnome.RequiredPresses);
+            GUI.Label(new Rect(0f, top + 60f, Screen.width, 30f), $"{presses}/{required}", _subtitle);
+
+            var bar = new Rect((Screen.width - _barSize.x) * 0.5f, top + 100f, _barSize.x, _barSize.y);
+            DrawTexture(bar, Texture2D.whiteTexture, _barBackColor);
+            bar.width *= gnome.BreakFraction;
+            DrawTexture(bar, Texture2D.whiteTexture, _barColor);
         }
 
         private void DrawCamper(CamperGaze gaze)

@@ -731,6 +731,7 @@ MonoBehaviour:
   _stunDuration: 1.5
   _immunityAfterStun: 3
   _immuneWhileStunned: 1
+  _kickFreesStone: 1
   _dropTowardKicker: 0.5
   _kickShake: {fileID: 8800000000000000001}
   _kickShakeForce: 0.6
@@ -756,7 +757,20 @@ MonoBehaviour:
   _checkHeights:
   - 0.1
   - 0.4
-  _graceTime: 0.25
+  _headHeight: 0.7
+  _coneWarning: 0.6
+  _basePresses: 14
+  _pressesPerFreeze: 3
+  _maxPresses: 26
+  _decayPerSecond: 3
+  _decayDelay: 0.4
+  _maxFrozenSeconds: 6
+  _releaseImmunity: 2.5
+  _autoReleaseImmunity: 1
+  _keepProgressSeconds: 1
+  _hopForward: 2
+  _hopUp: 2.5
+  _hopStun: 0.25
   _visual: {fileID: 3508261187052106375}
   _watchedSfx: {fileID: 11400000, guid: e4ceecb347e64e91a56ceaf3b780cb51, type: 2}
 --- !u!114 &8800000000000000001

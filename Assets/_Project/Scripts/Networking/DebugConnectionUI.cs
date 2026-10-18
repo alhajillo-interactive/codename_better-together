@@ -140,12 +140,18 @@ namespace BetterTogether.Networking
             GUILayout.EndHorizontal();
         }
 
-        private static void RoleButton(PlayerCharacter player, PlayerRole role)
+        private void RoleButton(PlayerCharacter player, PlayerRole role)
         {
             var wasEnabled = GUI.enabled;
             GUI.enabled = player.Role != role;
             if (GUILayout.Button(RoleName(role)))
+            {
                 player.RPC_RequestRole(role);
+
+                // Switching your own role respawns you: close the panel so the mouse goes back to the camera.
+                if (player.HasStateAuthority)
+                    SetRolePanelOpen(false);
+            }
             GUI.enabled = wasEnabled;
         }
 
