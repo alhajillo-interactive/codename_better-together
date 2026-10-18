@@ -15,6 +15,8 @@ namespace BetterTogether.Networking
         [SerializeField] private NetworkObject _camperPrefab;
         [Tooltip("Children of this object. The player with PlayerId n starts at index n (wrapping around).")]
         [SerializeField] private Transform[] _spawnPoints;
+        [Tooltip("When there are more players than spawn points, each extra round is moved this far to the side of the point (m).")]
+        [SerializeField, Min(0f)] private float _overflowSpacing = 0.9f;
 
         private bool _localRequested;
 
@@ -45,8 +47,16 @@ namespace BetterTogether.Networking
             if (_spawnPoints is not { Length: > 0 })
                 return (transform.position, transform.rotation);
 
-            var point = _spawnPoints[Mathf.Abs(player.PlayerId) % _spawnPoints.Length];
-            return point != null ? (point.position, point.rotation) : (transform.position, transform.rotation);
+            var index = Mathf.Abs(player.PlayerId);
+            var point = _spawnPoints[index % _spawnPoints.Length];
+            if (point == null)
+                return (transform.position, transform.rotation);
+
+            // Players past the last point reuse the points, shifted sideways so they don't spawn inside each other.
+            var round = index / _spawnPoints.Length;
+            var side = round % 2 == 0 ? 1f : -1f;
+            var offset = point.right * (side * ((round + 1) / 2) * _overflowSpacing);
+            return (point.position + offset, point.rotation);
         }
 
         /// <summary>

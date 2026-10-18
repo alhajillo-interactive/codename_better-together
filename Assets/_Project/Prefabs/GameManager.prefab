@@ -49,7 +49,7 @@ MonoBehaviour:
   _minPlayers: 2
   _autoStart: 0
   _countdown: 3
-  _matchDuration: 150
+  _matchDuration: 300
   _endScreen: 6
 --- !u!114 &2170243773456703935
 MonoBehaviour:

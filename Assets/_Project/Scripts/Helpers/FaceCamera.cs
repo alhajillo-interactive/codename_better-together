@@ -16,6 +16,7 @@ public class FaceCamera : MonoBehaviour
     void LateUpdate()
     {
         if (m_Camera == null) m_Camera = Camera.main;
+        if (m_Camera == null) return;
 
         Vector3 targetDir = m_Camera.transform.forward;
         targetDir.y = 0; // Lock Y axis

@@ -18,15 +18,31 @@ namespace BetterTogether.Networking
     {
         public static ConnectionManager Instance { get; private set; }
 
-        [SerializeField] private int _maxPlayers = 4;
+        [Tooltip("Players per room: one camper, the rest gnomes. Fusion caps it at the Player Count of NetworkProjectConfig.")]
+        [SerializeField, Range(2, 10)] private int _maxPlayers = 8;
         [Tooltip("Gameplay scene to load after connecting. Must be in Build Settings.")]
         [SerializeField] private SceneReference _gameplayScene;
+        [Tooltip("Scene to go back to when leaving the room or losing the connection. Optional; must be in Build Settings.")]
+        [SerializeField] private SceneReference _menuScene;
+        [Tooltip("Seconds to wait for the session to start before giving up.")]
+        [SerializeField, Min(1f)] private float _connectTimeout = 15f;
 
         private NetworkRunner _runner;
+        private bool _wasConnected;
+        private bool _leaving;
 
         public NetworkRunner Runner => _runner;
+
+        /// <summary>Room size, never above what the Fusion project config allows.</summary>
+        public int MaxPlayers => Mathf.Min(_maxPlayers, NetworkProjectConfig.Global.Simulation.PlayerCount);
         public bool IsConnecting { get; private set; }
         public bool IsConnected => _runner != null && _runner.IsRunning;
+
+        /// <summary>Why the last <see cref="JoinOrCreate"/> failed (player-facing, Spanish); null while none failed.</summary>
+        public string LastError { get; private set; }
+
+        /// <summary>Message the main menu shows once when it loads (e.g. after losing the connection), then clears.</summary>
+        public static string PendingMenuMessage { get; set; }
 
         private void Awake()
         {
@@ -40,14 +56,31 @@ namespace BetterTogether.Networking
             DontDestroyOnLoad(gameObject);
         }
 
+        private void Update()
+        {
+            if (IsConnected)
+            {
+                _wasConnected = true;
+            }
+            else if (_wasConnected && !IsConnecting && !_leaving)
+            {
+                // The runner stopped without us asking (kicked, network drop, session closed).
+                _wasConnected = false;
+                _ = ReturnToMenu("Se perdió la conexión con la sala.");
+            }
+        }
+
         public async Task<bool> JoinOrCreate(string roomCode)
         {
-            if (IsConnecting || IsConnected)
+            if (IsConnecting || IsConnected || _leaving)
                 return false;
+
+            LastError = null;
 
             if (!TryGetSceneRef(_gameplayScene, out var gameplaySceneRef, out var sceneError))
             {
                 Debug.LogError($"[ConnectionManager] Gameplay Scene: {sceneError}", this);
+                LastError = $"Escena de juego no válida: {sceneError}";
                 return false;
             }
 
@@ -67,23 +100,41 @@ namespace BetterTogether.Networking
             var sceneInfo = new NetworkSceneInfo();
             sceneInfo.AddSceneRef(gameplaySceneRef, LoadSceneMode.Single);
 
-            var result = await _runner.StartGame(new StartGameArgs
+            var startTask = _runner.StartGame(new StartGameArgs
             {
                 GameMode = GameMode.Shared,
                 SessionName = string.IsNullOrWhiteSpace(roomCode) ? null : roomCode.Trim().ToUpperInvariant(),
-                PlayerCount = _maxPlayers,
+                PlayerCount = MaxPlayers,
                 Scene = sceneInfo,
                 SceneManager = sceneManager,
             });
 
+            var finished = await Task.WhenAny(startTask, Task.Delay(Mathf.RoundToInt(_connectTimeout * 1000f)));
+            if (finished != startTask)
+            {
+                Debug.LogError($"[ConnectionManager] Timed out after {_connectTimeout:0}s starting the session.");
+                LastError = "La conexión tardó demasiado.";
+                // The abandoned start call fails once the runner shuts down; observe it so it isn't reported as unobserved.
+                _ = startTask.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+                IsConnecting = false;
+                await Disconnect();
+                return false;
+            }
+
+            var result = await startTask;
             IsConnecting = false;
 
             if (!result.Ok)
             {
                 Debug.LogError($"[ConnectionManager] Failed to start: {result.ShutdownReason}");
+                LastError = result.ShutdownReason == ShutdownReason.GameIsFull
+                    ? "La sala está llena"
+                    : $"No se pudo conectar ({result.ShutdownReason})";
                 await Disconnect();
                 return false;
             }
+
+            _wasConnected = true;
 
             Debug.Log($"[ConnectionManager] Connected to session '{_runner.SessionInfo.Name}' in region {_runner.SessionInfo.Region}");
             return true;
@@ -137,9 +188,39 @@ namespace BetterTogether.Networking
             if (_runner == null)
                 return;
 
+            _wasConnected = false; // An intentional disconnect must not look like a lost connection.
             var runner = _runner;
             _runner = null;
             await runner.Shutdown(); // Also destroys the runner's GameObject.
+        }
+
+        /// <summary>
+        /// Leaves the room and goes back to the menu scene (if one is assigned), leaving <paramref name="message"/>
+        /// for the menu to show once.
+        /// </summary>
+        public async Task ReturnToMenu(string message = null)
+        {
+            if (_leaving)
+                return;
+
+            _leaving = true;
+            try
+            {
+                PendingMenuMessage = message;
+                await Disconnect();
+
+                if (_menuScene != null && _menuScene.UnsafeReason == SceneReferenceUnsafeReason.None)
+                    SceneManager.LoadScene(_menuScene.Path);
+                else
+                    Debug.LogWarning("[ConnectionManager] No valid Menu Scene assigned; staying in the current scene.", this);
+
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
+            finally
+            {
+                _leaving = false;
+            }
         }
     }
 }

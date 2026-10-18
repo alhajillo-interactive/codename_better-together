@@ -31,7 +31,7 @@ namespace BetterTogether.Match
         [SerializeField] private float _countdown = 3f;
 
         [Tooltip("Seconds the match lasts; the gnomes win when it runs out.")]
-        [Min(10)] [SerializeField] private float _matchDuration = 150f;
+        [Min(10)] [SerializeField] private float _matchDuration = 300f;
 
         [Tooltip("Seconds the result stays on screen before the next match.")]
         [SerializeField] private float _endScreen = 6f;
