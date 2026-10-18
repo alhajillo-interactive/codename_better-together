@@ -45,8 +45,7 @@ namespace BetterTogether.Networking
             if (IsConnecting || IsConnected)
                 return false;
 
-            // By path, not build index: indices differ between machines whose scene lists differ.
-            if (!PathSceneManager.TryGetSceneRef(_gameplayScene, out var gameplaySceneRef, out var sceneError))
+            if (!TryGetSceneRef(_gameplayScene, out var gameplaySceneRef, out var sceneError))
             {
                 Debug.LogError($"[ConnectionManager] Gameplay Scene: {sceneError}", this);
                 return false;
@@ -62,8 +61,7 @@ namespace BetterTogether.Networking
             // Joins the matching voice room automatically; players' VoiceNetworkObject uses it.
             runnerObject.AddComponent<FusionVoiceClient>();
 
-            // CLAUDE TODO: use the scene reference _gameplayScene in this game object to load said scene so we can easily reference it on the unity editor
-            var sceneManager = runnerObject.AddComponent<PathSceneManager>();
+            var sceneManager = runnerObject.AddComponent<NetworkSceneManagerDefault>();
 
             var sceneInfo = new NetworkSceneInfo();
             sceneInfo.AddSceneRef(gameplaySceneRef, LoadSceneMode.Single);
@@ -102,13 +100,34 @@ namespace BetterTogether.Networking
                 return false;
             }
 
-            if (!PathSceneManager.TryGetSceneRef(scene, out var sceneRef, out var error))
+            if (!TryGetSceneRef(scene, out var sceneRef, out var error))
             {
                 Debug.LogError($"[ConnectionManager] {error}", this);
                 return false;
             }
 
             _runner.LoadScene(sceneRef, LoadSceneMode.Single);
+            return true;
+        }
+
+        /// <summary>
+        /// Resolves a scene picked in the inspector to the networked scene to load (its Build Settings index).
+        /// Every player must have the same scene list, which is versioned in ProjectSettings/EditorBuildSettings.
+        /// </summary>
+        private static bool TryGetSceneRef(SceneReference scene, out SceneRef sceneRef, out string error)
+        {
+            sceneRef = SceneRef.None;
+
+            if (scene == null || scene.UnsafeReason != SceneReferenceUnsafeReason.None)
+            {
+                error = scene == null
+                    ? "No scene assigned."
+                    : $"The scene can't be loaded ({scene.UnsafeReason}); add it to the Build Settings scene list.";
+                return false;
+            }
+
+            sceneRef = SceneRef.FromIndex(scene.BuildIndex);
+            error = null;
             return true;
         }
 
