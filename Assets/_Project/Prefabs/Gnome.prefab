@@ -773,6 +773,9 @@ MonoBehaviour:
   _hopStun: 0.25
   _visual: {fileID: 3508261187052106375}
   _watchedSfx: {fileID: 11400000, guid: e4ceecb347e64e91a56ceaf3b780cb51, type: 2}
+  _petrifySfx: {fileID: 11400000, guid: 3a7dcf34839041f38a88f4cb35cc37ec, type: 2}
+  _pressSfx: {fileID: 11400000, guid: 5128ae81c34945ab92c4642805709a29, type: 2}
+  _releaseSfx: {fileID: 11400000, guid: 1fb4392074104bca8694e83799dfd6b3, type: 2}
 --- !u!114 &8800000000000000001
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -1,3 +1,4 @@
+using BetterTogether.Audio;
 using UnityEngine;
 
 namespace BetterTogether.Voice
@@ -37,6 +38,8 @@ namespace BetterTogether.Voice
         private void Apply(AudioSource source, float volume)
         {
             source.volume = volume;
+            // Voice group of the main mixer, so players can set voice volume apart from music and effects.
+            source.outputAudioMixerGroup = AudioManager.VoiceGroup;
             source.spatialBlend = _spatialBlend;
             source.rolloffMode = _rolloff;
             source.minDistance = _minDistance;

@@ -78,7 +78,7 @@ namespace BetterTogether.Networking
                 .OrderBy(p => p.Object.StateAuthority.PlayerId)
                 .ToList();
 
-            var height = 180f + players.Count * 28f;
+            var height = 230f + players.Count * 28f;
             GUILayout.BeginArea(new Rect(Screen.width - RolePanelWidth - 10f, 10f, RolePanelWidth, height), GUI.skin.box);
             GUILayout.Label("Debug — F1 para cerrar");
             DrawGazeToggle();
@@ -101,20 +101,25 @@ namespace BetterTogether.Networking
             GUILayout.EndArea();
         }
 
-        /// <summary>This player's own music and SFX volume (saved). Voice chat has its own settings.</summary>
+        /// <summary>This player's own volume per mixer channel (saved between sessions).</summary>
         private static void DrawVolumeSliders()
         {
-            AudioManager.MusicVolume = VolumeSlider("Música", AudioManager.MusicVolume);
-            AudioManager.SfxVolume = VolumeSlider("Efectos", AudioManager.SfxVolume);
+            VolumeSlider("General", AudioChannel.Master);
+            VolumeSlider("Música", AudioChannel.Music);
+            VolumeSlider("Efectos", AudioChannel.Sfx);
+            VolumeSlider("Voz", AudioChannel.Voice);
         }
 
-        private static float VolumeSlider(string label, float value)
+        private static void VolumeSlider(string label, AudioChannel channel)
         {
+            var value = AudioManager.GetVolume(channel);
             GUILayout.BeginHorizontal();
             GUILayout.Label($"{label}: {value * 100f:0}%", GUILayout.Width(110f));
-            value = GUILayout.HorizontalSlider(value, 0f, 1f);
+            var newValue = GUILayout.HorizontalSlider(value, 0f, 1f);
             GUILayout.EndHorizontal();
-            return value;
+
+            if (!Mathf.Approximately(newValue, value))
+                AudioManager.SetVolume(channel, newValue);
         }
 
         /// <summary>Turns the petrifying gaze of every camper on or off at once.</summary>
