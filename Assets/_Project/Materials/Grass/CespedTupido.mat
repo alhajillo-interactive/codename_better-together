@@ -1,0 +1,56 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: CespedTupido
+  m_Shader: {fileID: 4800000, guid: 29ff7c5cfe2ff7c47ac336ded3778cfb, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 1
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _GroundTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MainTex:
+        m_Texture: {fileID: 2800000, guid: 64b71e049980434fa9fa9dcfa6e834af, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _Cutoff: 0.824
+    - _FarDistance: 25
+    - _GroundBlend: 0
+    - _LightInfluence: 0.55
+    - _NearDistance: 10
+    - _Saturation: 1
+    - _ShadowStrength: 0.75
+    - _WaveColor: 0.049
+    - _WaveScale: 0.32
+    - _WaveSpeed: 0.7
+    - _WaveStrength: 0.06
+    - _WindScale: 0.7
+    - _WindSpeed: 2
+    - _WindStrength: 0.023
+    m_Colors:
+    - _BottomColor: {r: 0.4039216, g: 0.57254905, b: 0.1254902, a: 1}
+    - _FarColor: {r: 0.25882354, g: 0.29803923, b: 0.13725491, a: 1}
+    - _TerrainOriginSize: {r: 0, g: 0, b: 1, a: 1}
+    - _TopColor: {r: 0.78039217, g: 0.66816086, b: 0.27843142, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1
