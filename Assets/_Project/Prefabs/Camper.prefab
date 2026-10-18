@@ -945,6 +945,7 @@ MonoBehaviour:
   _sprintSpeed: 5
   _jumpHeight: 1
   _gravity: -20
+  _animator: {fileID: 9079837355192595333}
   _knockbackAirDrag: 1.5
   _knockbackGroundDrag: 12
 --- !u!114 &1482589445214074440
@@ -3439,7 +3440,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b20a68df03eff0d4f806fc9fc1b4b3e7, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0
+      value: -0.1
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b20a68df03eff0d4f806fc9fc1b4b3e7, type: 3}
       propertyPath: m_LocalPosition.z

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BetterTogether.Player;
 using Fusion;
 using Unity.Cinemachine;
 using UnityEngine;
@@ -10,6 +11,7 @@ namespace BetterTogether.Combat
     /// The camper's kick: pressing Attack launches every <see cref="Kickable"/> inside a cone in front of the camper.
     /// Runs only on the camper's own client; the hit is delivered to each gnome's owner through <see cref="Kickable.Kick"/>.
     /// </summary>
+    [RequireComponent(typeof(PlayerMovement))]
     public class CamperKick : NetworkBehaviour
     {
         [Header("Range")]
@@ -33,6 +35,7 @@ namespace BetterTogether.Combat
         private readonly Collider[] _overlap = new Collider[16];
         private readonly List<Kickable> _targets = new();
         private InputAction _attack;
+        private PlayerMovement _movement;
         private float _readyTime;
 
         public static CamperKick Local { get; private set; }
@@ -40,6 +43,8 @@ namespace BetterTogether.Combat
         /// <summary>Only meaningful on the local camper.</summary>
         public bool HasTargetInRange => _targets.Count > 0;
         public bool IsReady => Time.time >= _readyTime;
+
+        private void Awake() => _movement = GetComponent<PlayerMovement>();
 
         public override void Spawned()
         {
@@ -71,6 +76,7 @@ namespace BetterTogether.Combat
         private void Kick()
         {
             _readyTime = Time.time + _cooldown;
+            _movement.PlayKickAnimation();
 
             var forward = Flat(transform.forward).normalized;
             foreach (var target in _targets)

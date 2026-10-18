@@ -69,6 +69,6 @@ Material:
     - _WatercolorTextureStrength: 0
     - _WatercolorWashScale: 29
     m_Colors:
-    - _WatercolorBaseColor: {r: 0.6603774, g: 0.34890708, b: 0.09033466, a: 1}
+    - _WatercolorBaseColor: {r: 0.7830189, g: 0.36565503, b: 0.5849727, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
