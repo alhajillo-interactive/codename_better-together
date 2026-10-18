@@ -1966,6 +1966,7 @@ GameObject:
   - component: {fileID: 8800000000000000001}
   - component: {fileID: 8800000000000000002}
   - component: {fileID: 8800000000000000003}
+  - component: {fileID: 8800000000000000099}
   m_Layer: 0
   m_Name: Gnome
   m_TagString: Untagged
@@ -4618,3 +4619,19 @@ MonoBehaviour:
   _mountFovPunchTime: 0.2
   _mountSfx: {fileID: 0}
   _dismountSfx: {fileID: 0}
+--- !u!114 &8800000000000000099
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7618880620199038078}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f5cd066f9e7a83395e286fe0b3ffe28, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Audio.Footsteps
+  _stepSfx: {fileID: 11400000, guid: ad0a6f671021a087345b9f811fc2a053, type: 2}
+  _strideLength: 0.45
+  _minSpeed: 0.5
+  _teleportDistance: 2

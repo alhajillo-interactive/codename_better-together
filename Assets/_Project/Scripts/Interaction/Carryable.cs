@@ -33,6 +33,12 @@ namespace BetterTogether.Interaction
         [Tooltip("Heard by everyone when the item passes from one gnome to another.")]
         [SerializeField] private SoundCue _handOffSfx;
 
+        [Header("Impact")]
+        [Tooltip("Heard by everyone, from where it lands, when the item hits something while free (not carried or placed).")]
+        [SerializeField] private SoundCue _impactSfx;
+        [Tooltip("Minimum impact speed (m/s) that makes a sound.")]
+        [SerializeField, Min(0f)] private float _impactMinSpeed = 1.5f;
+
         [Header("Pose blend")]
         [Tooltip("Seconds the item takes to fly from one holder to the next (local presentation only).")]
         [SerializeField, Min(0f)] private float _handOffBlendTime = 0.18f;
@@ -392,6 +398,19 @@ namespace BetterTogether.Interaction
             if (TryGetFollowPose(out var position, out var rotation))
                 transform.SetPositionAndRotation(position, rotation);
         }
+
+        // Only the authority simulates the physics; the impact is announced to everyone.
+        private void OnCollisionEnter(Collision collision)
+        {
+            if (!_isSpawned || !HasStateAuthority || _impactSfx == null || HolderCount > 0 || IsPinned || _body.isKinematic)
+                return;
+
+            if (collision.relativeVelocity.magnitude >= _impactMinSpeed)
+                RPC_PlayImpact(transform.position);
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        private void RPC_PlayImpact(Vector3 position) => _impactSfx.PlayAt(position);
 
         public override void Render()
         {

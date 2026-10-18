@@ -56,6 +56,7 @@ GameObject:
   - component: {fileID: 8800000000000000002}
   - component: {fileID: 8800000000000000003}
   - component: {fileID: 8800000000000000004}
+  - component: {fileID: 8800000000000000099}
   m_Layer: 0
   m_Name: Camper
   m_TagString: Untagged
@@ -803,3 +804,19 @@ Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: be7d8622f1502f54dbb804028d3d7bef, type: 3}
   m_PrefabInstance: {fileID: 6379795299580407041}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &8800000000000000099
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2407974724338023452}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f5cd066f9e7a83395e286fe0b3ffe28, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Audio.Footsteps
+  _stepSfx: {fileID: 11400000, guid: 52712caf022d9e140ae29bcfa8ce9fcf, type: 2}
+  _strideLength: 0.7
+  _minSpeed: 0.5
+  _teleportDistance: 2

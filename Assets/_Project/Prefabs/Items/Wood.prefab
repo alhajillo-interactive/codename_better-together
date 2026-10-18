@@ -117,6 +117,8 @@ MonoBehaviour:
   _maxGnomeSpan: 1.6
   _maxSoloGrabDistance: 1.2
   _handOffSfx: {fileID: 11400000, guid: efdcfbc4017178e1d68f4205c06124be, type: 2}
+  _impactSfx: {fileID: 11400000, guid: 4f3a42e300ff6187c17c0c9386c52e38, type: 2}
+  _impactMinSpeed: 1.5
   _handOffBlendTime: 0.18
   _handOffArc: 0.15
   _snapBlendTime: 0.28

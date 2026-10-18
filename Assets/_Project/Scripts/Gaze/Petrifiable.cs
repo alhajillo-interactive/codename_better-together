@@ -78,6 +78,7 @@ namespace BetterTogether.Gaze
         private int _timesPetrified;
         private bool _wasLocked;
         private bool _isSpawned;
+        private bool _lastPetrified;
 
         public static Petrifiable Local { get; private set; }
 
@@ -162,6 +163,7 @@ namespace BetterTogether.Gaze
         public override void Spawned()
         {
             _isSpawned = true;
+            _lastPetrified = IsPetrified; // Late joiners don't hear a freeze that already happened.
             _all.Add(this);
             if (!HasStateAuthority)
                 return;
@@ -321,7 +323,13 @@ namespace BetterTogether.Gaze
 
         public override void Render()
         {
-            var target = IsPetrified ? 1f : 0f;
+            // The owner plays it when freezing; everyone else hears it when the replicated state flips.
+            var petrified = IsPetrified;
+            if (petrified && !_lastPetrified && !HasStateAuthority)
+                _petrifySfx.PlayAt(transform.position);
+            _lastPetrified = petrified;
+
+            var target = petrified ? 1f : 0f;
             if (Mathf.Approximately(_stoneAmount, target))
                 return;
 

@@ -306,6 +306,7 @@ MonoBehaviour:
   _litGraceTime: 2
   _extinguishSfx: {fileID: 0}
   _douseSfx: {fileID: 0}
+  _lightSfx: {fileID: 11400000, guid: ff80f11fd78570bd5a8de0325cb2e392, type: 2}
   _slotRadius: 0.5
   _slotHeight: 0.34
   _slotTiltFromVertical: 62
@@ -451,6 +452,7 @@ GameObject:
   - component: {fileID: 7100000000000000122}
   - component: {fileID: 7100000000000000123}
   - component: {fileID: 7100000000000000124}
+  - component: {fileID: 7100000000000000125}
   m_Layer: 0
   m_Name: Fire
   m_TagString: Untagged
@@ -1588,3 +1590,22 @@ Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 7e2d9614330bbc94581d232791743a1d, type: 3}
   m_PrefabInstance: {fileID: 8798067986932225105}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &7100000000000000125
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7100000000000000121}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d420b08d12cdb75e3c5fd204675416a6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Audio.LoopEmitter
+  _clip: {fileID: 8300000, guid: b3f968d75127a674d9128d568b9d8067, type: 3}
+  _volume: 0.8
+  _spatialBlend: 1
+  _minDistance: 1.5
+  _maxDistance: 15
+  _fadeIn: 0.6
+  _path: []

@@ -89,7 +89,7 @@ namespace BetterTogether.Audio
 
         public static void PlaySfx(SoundCue cue, Vector3? position)
         {
-            if (cue == null || cue.Sound == null)
+            if (cue == null || !cue.IsPlayable)
                 return;
 
             var now = Time.unscaledTime;
@@ -212,7 +212,7 @@ namespace BetterTogether.Audio
             source.transform.position = spatial ? position.Value : transform.position;
             source.spatialBlend = spatial ? 1f : 0f;
             source.maxDistance = Mathf.Max(1f, cue.MaxDistance);
-            source.resource = cue.Sound;
+            source.resource = cue.PickResource();
             source.volume = cue.Volume;
             source.pitch = Random.Range(cue.PitchRange.x, cue.PitchRange.y);
             source.Play();
