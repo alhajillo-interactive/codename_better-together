@@ -12,6 +12,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4c3ee35520324d4c8c071fe2d69c9c3b, type: 3}
   m_Name: Music_Match
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Audio.MusicTrack
-  Clip: {fileID: 0}
-  Volume: 1
+  Clip: {fileID: 8300000, guid: 679223aea7e30624d973faaf4824cb4f, type: 3}
+  Volume: 0.8
   Loop: 1

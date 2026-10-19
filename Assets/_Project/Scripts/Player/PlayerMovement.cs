@@ -91,6 +91,9 @@ namespace BetterTogether.Player
         /// <summary>Multiplies walk and sprint speed, e.g. lowered while the camper focuses its gaze.</summary>
         public float SpeedMultiplier { get; set; } = 1f;
 
+        /// <summary>True while the player is in the air (replicated, so remote players report it too). False when not spawned.</summary>
+        public bool IsAirborne => Object != null && Object.IsValid && AnimationJump;
+
         /// <summary>Multiplies walk and sprint speed while carrying other gnomes on the head (see GnomeStack).</summary>
         public float LoadMultiplier { get; set; } = 1f;
 

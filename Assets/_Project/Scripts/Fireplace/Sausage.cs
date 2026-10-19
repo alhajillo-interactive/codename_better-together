@@ -1,3 +1,4 @@
+using BetterTogether.Audio;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
 using BetterTogether.Player;
@@ -30,6 +31,8 @@ namespace BetterTogether.Fireplace
         [SerializeField] private float _burntAt = 25f;
         [Tooltip("Seconds a burnt, unattended sausage waits before going back to its spawn point.")]
         [SerializeField] private float _resetDelay = 4f;
+        [Tooltip("Heard by everyone, from the sausage, when the camper eats it.")]
+        [SerializeField] private SoundCue _eatSfx;
         [SerializeField] private Transform _visual;
         [SerializeField] private Color _rawColor = new(0.9f, 0.45f, 0.45f);
         [SerializeField] private Color _cookedColor = new(0.65f, 0.3f, 0.1f);
@@ -44,6 +47,7 @@ namespace BetterTogether.Fireplace
         private Vector3 _spawnPosition;
         private Quaternion _spawnRotation;
         private CookState _shownState = (CookState)(-1);
+        private bool _lastEaten;
 
         [Networked] private float CookTime { get; set; }
         [Networked] private NetworkBool IsEaten { get; set; }
@@ -92,6 +96,7 @@ namespace BetterTogether.Fireplace
             Instance = this;
             _spawnPosition = transform.position;
             _spawnRotation = transform.rotation;
+            _lastEaten = IsEaten; // Late joiners don't hear a bite that already happened.
             ApplyEaten();
             ApplyColor();
         }
@@ -182,6 +187,11 @@ namespace BetterTogether.Fireplace
 
         public override void Render()
         {
+            var eaten = IsEaten;
+            if (eaten && !_lastEaten)
+                _eatSfx.PlayAt(transform.position);
+            _lastEaten = eaten;
+
             ApplyEaten();
             ApplyColor();
         }

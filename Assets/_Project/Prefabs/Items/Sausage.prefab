@@ -139,6 +139,7 @@ MonoBehaviour:
   _cookedAt: 15
   _burntAt: 25
   _resetDelay: 4
+  _eatSfx: {fileID: 11400000, guid: 4260266f5bb59b0be511ef6f7296ae8e, type: 2}
   _visual: {fileID: 4737430231874366731}
   _rawColor: {r: 0.9, g: 0.45, b: 0.45, a: 1}
   _cookedColor: {r: 0.65, g: 0.3, b: 0.1, a: 1}

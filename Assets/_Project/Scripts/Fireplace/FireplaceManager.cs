@@ -103,6 +103,8 @@ namespace BetterTogether.Fireplace
         [SerializeField] private SoundCue _unsnapSfx;
         [Tooltip("Heard by everyone when the last missing log is placed.")]
         [SerializeField] private SoundCue _readySfx;
+        [Tooltip("Heard by everyone, from the fireplace, when the camper lights the fire.")]
+        [SerializeField] private SoundCue _lightSfx;
 
         private readonly Collider[] _results = new Collider[MaxColliders];
         private readonly HashSet<FireplaceWood> _seen = new();
@@ -423,6 +425,10 @@ namespace BetterTogether.Fireplace
         {
             UpdateLabel();
             UpdateFire();
+
+            // OnChangedRender does not fire on spawn, so late joiners don't hear it; going out stays quiet.
+            if (IsLit)
+                _lightSfx.PlayAt(transform.position);
         }
 
         private void OnDouseProgressChanged()

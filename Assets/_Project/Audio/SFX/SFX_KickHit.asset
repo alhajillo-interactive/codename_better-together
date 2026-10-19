@@ -13,6 +13,10 @@ MonoBehaviour:
   m_Name: SFX_KickHit
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Audio.SoundCue
   Sound: {fileID: 0}
+  Variations:
+  - {fileID: 8300000, guid: e7251a3c3413f8f4d842a4a55e67be22, type: 3}
+  - {fileID: 8300000, guid: d58a784dcf68bd746ab254e392b2a978, type: 3}
+  - {fileID: 8300000, guid: 868ecee94a589d94ca492b4b8d2b6055, type: 3}
   Volume: 1
   PitchRange: {x: 0.95, y: 1.05}
   Spatial: 1

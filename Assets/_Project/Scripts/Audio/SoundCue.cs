@@ -13,6 +13,8 @@ namespace BetterTogether.Audio
     {
         [Tooltip("AudioClip or Audio Random Container.")]
         public AudioResource Sound;
+        [Tooltip("Optional. When filled, a random clip from this list is played instead of Sound (never the same one twice in a row).")]
+        public AudioClip[] Variations;
         [Range(0f, 1f)] public float Volume = 1f;
         [Tooltip("A random pitch in this range is used each time, so repeated sounds don't feel robotic.")]
         public Vector2 PitchRange = new(0.95f, 1.05f);
@@ -28,6 +30,62 @@ namespace BetterTogether.Audio
         public float MinInterval = 0.05f;
 
         [System.NonSerialized] internal float LastPlayTime = float.NegativeInfinity;
+        [System.NonSerialized] private int _lastVariation = -1;
+
+        /// <summary>True when there is something to play: a sound or at least one variation clip.</summary>
+        public bool IsPlayable
+        {
+            get
+            {
+                if (Sound != null)
+                    return true;
+
+                if (Variations == null)
+                    return false;
+
+                foreach (var clip in Variations)
+                {
+                    if (clip != null)
+                        return true;
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>The resource to play now: a random variation if there are any, otherwise <see cref="Sound"/>.</summary>
+        internal AudioResource PickResource()
+        {
+            var candidates = 0;
+            if (Variations != null)
+            {
+                foreach (var clip in Variations)
+                {
+                    if (clip != null)
+                        candidates++;
+                }
+            }
+
+            if (candidates == 0)
+                return Sound;
+
+            // Random among the non-null clips, skipping the one used last time when there is a choice.
+            var avoid = candidates > 1 ? _lastVariation : -1;
+            var pick = Random.Range(0, avoid >= 0 ? candidates - 1 : candidates);
+            for (var i = 0; i < Variations.Length; i++)
+            {
+                if (Variations[i] == null || i == avoid)
+                    continue;
+
+                if (pick-- == 0)
+                {
+                    _lastVariation = i;
+                    return Variations[i];
+                }
+            }
+
+            return Sound;
+        }
     }
 
     public static class SoundCueExtensions
