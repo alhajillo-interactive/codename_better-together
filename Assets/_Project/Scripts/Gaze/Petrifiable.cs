@@ -1,353 +1,367 @@
-using System.Collections.Generic;
-using BetterTogether.Audio;
-using BetterTogether.Match;
-using BetterTogether.Player;
-using Fusion;
-using UnityEngine;
-using UnityEngine.InputSystem;
+    using System.Collections.Generic;
+    using BetterTogether.Audio;
+    using BetterTogether.Match;
+    using BetterTogether.Player;
+    using Fusion;
+    using UnityEngine;
+    using UnityEngine.InputSystem;
 
-namespace BetterTogether.Gaze
-{
-    /// <summary>
-    /// A player that freezes while a camper keeps it locked (see <see cref="CamperGaze"/>). The camper decides who is
-    /// locked; the owner of this player freezes it once the lock is full, publishes <see cref="IsPetrified"/> and lets
-    /// the player break free by mashing the interact key. Once petrified the player stays stone, even if the camper
-    /// looks away, until it mashes the interact key or is kicked free (and never between matches).
-    /// Every client tints a petrified player like stone.
-    /// Runs after the interactor so the key press that frees the gnome doesn't also pick something up.
-    /// </summary>
-    [RequireComponent(typeof(PlayerMovement))]
-    [DefaultExecutionOrder(100)]
-    public class Petrifiable : NetworkBehaviour
+    namespace BetterTogether.Gaze
     {
-        [Tooltip("Heights above the feet that are checked; seeing any of them counts (e.g. feet and head).")]
-        [SerializeField] private float[] _checkHeights = { 0.1f, 0.4f };
-        [Tooltip("Height of the head above the feet; markers float above it.")]
-        [SerializeField] private float _headHeight = 0.7f;
-        [Tooltip("Warning level shown when the player is inside a camper's cone but not locked.")]
-        [Range(0f, 1f)]
-        [SerializeField] private float _coneWarning = 0.6f;
-
-        [Header("Break free")]
-        [Tooltip("Presses needed to break free the first time.")]
-        [SerializeField] private float _basePresses = 14f;
-        [Tooltip("Extra presses for every time already frozen in this match.")]
-        [SerializeField] private float _pressesPerFreeze = 3f;
-        [SerializeField] private float _maxPresses = 26f;
-        [Tooltip("Presses lost per second once the player stops pressing.")]
-        [SerializeField] private float _decayPerSecond = 3f;
-        [Tooltip("Seconds without a press before the progress starts to decay.")]
-        [SerializeField] private float _decayDelay = 0.4f;
-        [Tooltip("Seconds the camper can't lock this player after it broke free.")]
-        [SerializeField] private float _releaseImmunity = 2.5f;
-        [Tooltip("Forward speed of the hop when released.")]
-        [SerializeField] private float _hopForward = 2f;
-        [Tooltip("Upward speed of the hop when released.")]
-        [SerializeField] private float _hopUp = 2.5f;
-        [Tooltip("Seconds without control after the hop.")]
-        [SerializeField] private float _hopStun = 0.25f;
-
-        [Header("Stone look")]
-        [Tooltip("Root of the visual; every renderer below it is tinted.")]
-        [SerializeField] private Transform _visual;
-        [SerializeField] private Color _stoneColor = new(0.55f, 0.55f, 0.58f);
-        [SerializeField] private float _stoneBlendTime = 0.2f;
-
-        [Header("Sound")]
-        [Tooltip("Tension sting when the camper locks onto you. Only you hear it; set the cue to not Spatial.")]
-        [SerializeField] private SoundCue _watchedSfx;
-        [Tooltip("Heard by everyone when this player turns to stone.")]
-        [SerializeField] private SoundCue _petrifySfx;
-        [Tooltip("Each press while frozen. Only you hear it; set the cue to not Spatial.")]
-        [SerializeField] private SoundCue _pressSfx;
-        [Tooltip("Heard by everyone when this player breaks free.")]
-        [SerializeField] private SoundCue _releaseSfx;
-
-        private static readonly List<Petrifiable> _all = new();
-        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
-
-        private PlayerMovement _movement;
-        private InputAction _interact;
-        private Renderer[] _renderers;
-        private Color[] _originalColors;
-        private MaterialPropertyBlock _block;
-        private float _focusHeight;
-        private float _stoneAmount;
-        private float _sinceLastPress;
-        private float _requiredForFreeze;
-        private int _timesPetrified;
-        private bool _wasLocked;
-        private bool _isSpawned;
-        private bool _lastPetrified;
-
-        public static Petrifiable Local { get; private set; }
-
-        /// <summary>Every spawned petrifiable player, local and remote.</summary>
-        public static IReadOnlyList<Petrifiable> All => _all;
-
-        [Networked] public NetworkBool IsPetrified { get; private set; }
-        [Networked] private float NetBreakProgress { get; set; }
-        [Networked] private TickTimer GazeImmunity { get; set; }
-
-        /// <summary>Safe to read at any time, unlike <see cref="IsPetrified"/> which needs a spawned object.</summary>
-        public bool IsStone => _isSpawned && IsPetrified;
-
-        public bool IsAvailable => _isSpawned;
-
-        /// <summary>True while the camper cannot lock this player (just broke free or was kicked free).</summary>
-        public bool IsGazeImmune => _isSpawned && !GazeImmunity.ExpiredOrNotRunning(Runner);
-
-        /// <summary>Presses accumulated while frozen (decays when the player stops pressing).</summary>
-        public float BreakProgress => _isSpawned ? NetBreakProgress : 0f;
-
-        /// <summary>Presses needed to break free of the current freeze, or of the next one when not frozen.</summary>
-        public float RequiredPresses => IsStone ? _requiredForFreeze : ComputeRequired();
-
-        /// <summary>0..1 progress toward breaking free.</summary>
-        public float BreakFraction => RequiredPresses > 0f ? Mathf.Clamp01(BreakProgress / RequiredPresses) : 0f;
-
-        /// <summary>The camper gaze that currently locks this player, if any.</summary>
-        public CamperGaze LockedBy
+        /// <summary>
+        /// A player that freezes while a camper keeps it locked (see <see cref="CamperGaze"/>). The camper decides who is
+        /// locked; the owner of this player freezes it once the lock is full, publishes <see cref="IsPetrified"/> and lets
+        /// the player break free by mashing the interact key. Once petrified the player stays stone, even if the camper
+        /// looks away, until it mashes the interact key or is kicked free (and never between matches).
+        /// Every client tints a petrified player like stone.
+        /// Runs after the interactor so the key press that frees the gnome doesn't also pick something up.
+        /// </summary>
+        [RequireComponent(typeof(PlayerMovement))]
+        [DefaultExecutionOrder(100)]
+        public class Petrifiable : NetworkBehaviour
         {
-            get
+            [Tooltip("Heights above the feet that are checked; seeing any of them counts (e.g. feet and head).")]
+            [SerializeField] private float[] _checkHeights = { 0.1f, 0.4f };
+            [Tooltip("Height of the head above the feet; markers float above it.")]
+            [SerializeField] private float _headHeight = 0.7f;
+            [Tooltip("Warning level shown when the player is inside a camper's cone but not locked.")]
+            [Range(0f, 1f)]
+            [SerializeField] private float _coneWarning = 0.6f;
+
+            [Header("Break free")]
+            [Tooltip("Presses needed to break free the first time.")]
+            [SerializeField] private float _basePresses = 14f;
+            [Tooltip("Extra presses for every time already frozen in this match.")]
+            [SerializeField] private float _pressesPerFreeze = 3f;
+            [SerializeField] private float _maxPresses = 26f;
+            [Tooltip("Presses lost per second once the player stops pressing.")]
+            [SerializeField] private float _decayPerSecond = 3f;
+            [Tooltip("Seconds without a press before the progress starts to decay.")]
+            [SerializeField] private float _decayDelay = 0.4f;
+            [Tooltip("Seconds the camper can't lock this player after it broke free.")]
+            [SerializeField] private float _releaseImmunity = 2.5f;
+            [Tooltip("Forward speed of the hop when released.")]
+            [SerializeField] private float _hopForward = 2f;
+            [Tooltip("Upward speed of the hop when released.")]
+            [SerializeField] private float _hopUp = 2.5f;
+            [Tooltip("Seconds without control after the hop.")]
+            [SerializeField] private float _hopStun = 0.25f;
+
+            [Header("Stone look")]
+            [Tooltip("Root of the visual; every renderer below it is tinted.")]
+            [SerializeField] private Transform _visual;
+            [SerializeField] private Color _stoneColor = new(0.55f, 0.55f, 0.58f);
+            [SerializeField] private float _stoneBlendTime = 0.2f;
+
+            [Header("Sound")]
+            [Tooltip("Tension sting when the camper locks onto you. Only you hear it; set the cue to not Spatial.")]
+            [SerializeField] private SoundCue _watchedSfx;
+            [Tooltip("Heard by everyone when this player turns to stone.")]
+            [SerializeField] private SoundCue _petrifySfx;
+            [Tooltip("Each press while frozen. Only you hear it; set the cue to not Spatial.")]
+            [SerializeField] private SoundCue _pressSfx;
+            [Tooltip("Heard by everyone when this player breaks free.")]
+            [SerializeField] private SoundCue _releaseSfx;
+
+            private static readonly List<Petrifiable> _all = new();
+            private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+
+            private PlayerMovement _movement;
+            private InputAction _interact;
+            private Renderer[] _renderers;
+            private Color[] _originalColors;
+            private MaterialPropertyBlock _block;
+            private float _focusHeight;
+            private float _stoneAmount;
+            private float _sinceLastPress;
+            private float _requiredForFreeze;
+            private int _timesPetrified;
+            private bool _wasLocked;
+            private bool _isSpawned;
+            private bool _lastPetrified;
+
+            public static Petrifiable Local { get; private set; }
+
+            /// <summary>Every spawned petrifiable player, local and remote.</summary>
+            public static IReadOnlyList<Petrifiable> All => _all;
+
+            [Networked] public NetworkBool IsPetrified { get; private set; }
+            [Networked] private float NetBreakProgress { get; set; }
+            [Networked] private TickTimer GazeImmunity { get; set; }
+
+            /// <summary>Safe to read at any time, unlike <see cref="IsPetrified"/> which needs a spawned object.</summary>
+            public bool IsStone => _isSpawned && IsPetrified;
+
+            public bool IsAvailable => _isSpawned;
+
+            /// <summary>True while the camper cannot lock this player (just broke free or was kicked free).</summary>
+            public bool IsGazeImmune => _isSpawned && !GazeImmunity.ExpiredOrNotRunning(Runner);
+
+            /// <summary>Presses accumulated while frozen (decays when the player stops pressing).</summary>
+            public float BreakProgress => _isSpawned ? NetBreakProgress : 0f;
+
+            /// <summary>Presses needed to break free of the current freeze, or of the next one when not frozen.</summary>
+            public float RequiredPresses => IsStone ? _requiredForFreeze : ComputeRequired();
+
+            /// <summary>0..1 progress toward breaking free.</summary>
+            public float BreakFraction => RequiredPresses > 0f ? Mathf.Clamp01(BreakProgress / RequiredPresses) : 0f;
+
+            /// <summary>The camper gaze that currently locks this player, if any.</summary>
+            public CamperGaze LockedBy
             {
-                foreach (var gaze in CamperGaze.All)
+                get
                 {
-                    if (gaze != null && gaze.LockedTarget == this)
-                        return gaze;
+                    foreach (var gaze in CamperGaze.All)
+                    {
+                        if (gaze != null && gaze.LockedTarget == this)
+                            return gaze;
+                    }
+
+                    return null;
+                }
+            }
+
+            /// <summary>Where the gaze aims for scoring: between the checked heights.</summary>
+            public Vector3 FocusPoint => transform.position + Vector3.up * _focusHeight;
+
+            /// <summary>Top of the head; markers float above it.</summary>
+            public Vector3 HeadPosition => transform.position + Vector3.up * _headHeight;
+
+            /// <summary>Owner only: a camper has this player locked but it is not frozen yet.</summary>
+            public bool IsWatched { get; private set; }
+
+            /// <summary>Owner only: this player is the camper's locked target.</summary>
+            public bool IsLockTarget { get; private set; }
+
+            /// <summary>Owner only: 0..1 warning for the HUD (lock fill, or a fixed low value inside a cone).</summary>
+            public float WarningProgress { get; private set; }
+
+            /// <summary>Owner only: total key presses counted while frozen, for HUD feedback.</summary>
+            public int PressCount { get; private set; }
+
+            /// <summary>Owner only: how many times this player was set free, for HUD feedback.</summary>
+            public int ReleaseCount { get; private set; }
+
+            private void Awake()
+            {
+                _movement = GetComponent<PlayerMovement>();
+                _block = new MaterialPropertyBlock();
+                _renderers = _visual != null ? _visual.GetComponentsInChildren<Renderer>() : new Renderer[0];
+                _originalColors = new Color[_renderers.Length];
+                for (var i = 0; i < _renderers.Length; i++)
+                {
+                    var material = _renderers[i].sharedMaterial;
+                    _originalColors[i] = material != null && material.HasProperty(BaseColorId) ? material.GetColor(BaseColorId) : Color.white;
                 }
 
-                return null;
+                var sum = 0f;
+                foreach (var height in _checkHeights)
+                    sum += height;
+                _focusHeight = _checkHeights.Length > 0 ? sum / _checkHeights.Length : 0.25f;
             }
-        }
 
-        /// <summary>Where the gaze aims for scoring: between the checked heights.</summary>
-        public Vector3 FocusPoint => transform.position + Vector3.up * _focusHeight;
-
-        /// <summary>Top of the head; markers float above it.</summary>
-        public Vector3 HeadPosition => transform.position + Vector3.up * _headHeight;
-
-        /// <summary>Owner only: a camper has this player locked but it is not frozen yet.</summary>
-        public bool IsWatched { get; private set; }
-
-        /// <summary>Owner only: this player is the camper's locked target.</summary>
-        public bool IsLockTarget { get; private set; }
-
-        /// <summary>Owner only: 0..1 warning for the HUD (lock fill, or a fixed low value inside a cone).</summary>
-        public float WarningProgress { get; private set; }
-
-        /// <summary>Owner only: total key presses counted while frozen, for HUD feedback.</summary>
-        public int PressCount { get; private set; }
-
-        /// <summary>Owner only: how many times this player was set free, for HUD feedback.</summary>
-        public int ReleaseCount { get; private set; }
-
-        private void Awake()
-        {
-            _movement = GetComponent<PlayerMovement>();
-            _block = new MaterialPropertyBlock();
-            _renderers = _visual != null ? _visual.GetComponentsInChildren<Renderer>() : new Renderer[0];
-            _originalColors = new Color[_renderers.Length];
-            for (var i = 0; i < _renderers.Length; i++)
+            public override void Spawned()
             {
-                var material = _renderers[i].sharedMaterial;
-                _originalColors[i] = material != null && material.HasProperty(BaseColorId) ? material.GetColor(BaseColorId) : Color.white;
+                _isSpawned = true;
+                _lastPetrified = IsPetrified; // Late joiners don't hear a freeze that already happened.
+                _all.Add(this);
+                if (!HasStateAuthority)
+                    return;
+
+                Local = this;
+                _interact = InputSystem.actions.FindAction("Player/Interact");
+                MatchManager.OnGameStarted += HandleGameStarted;
             }
 
-            var sum = 0f;
-            foreach (var height in _checkHeights)
-                sum += height;
-            _focusHeight = _checkHeights.Length > 0 ? sum / _checkHeights.Length : 0.25f;
-        }
+            public override void Despawned(NetworkRunner runner, bool hasState)
+            {
+                _isSpawned = false;
+                _all.Remove(this);
+                MatchManager.OnGameStarted -= HandleGameStarted;
+                if (Local == this)
+                    Local = null;
+            }
 
-        public override void Spawned()
-        {
-            _isSpawned = true;
-            _lastPetrified = IsPetrified; // Late joiners don't hear a freeze that already happened.
-            _all.Add(this);
-            if (!HasStateAuthority)
-                return;
+            private void HandleGameStarted() => _timesPetrified = 0;
 
-            Local = this;
-            _interact = InputSystem.actions.FindAction("Player/Interact");
-            MatchManager.OnGameStarted += HandleGameStarted;
-        }
+            /// <summary>True if any checked point of this player is inside the gaze's cone (optionally widened) with a clear line.</summary>
+            public bool IsVisibleTo(CamperGaze gaze, float extraAngle = 0f, float extraRange = 0f)
+            {
+                if (gaze == null || !_isSpawned)
+                    return false;
 
-        public override void Despawned(NetworkRunner runner, bool hasState)
-        {
-            _isSpawned = false;
-            _all.Remove(this);
-            MatchManager.OnGameStarted -= HandleGameStarted;
-            if (Local == this)
-                Local = null;
-        }
+                var feet = transform.position;
+                foreach (var height in _checkHeights)
+                {
+                    if (gaze.CanSee(feet + Vector3.up * height, transform, extraAngle, extraRange))
+                        return true;
+                }
 
-        private void HandleGameStarted() => _timesPetrified = 0;
-
-        /// <summary>True if any checked point of this player is inside the gaze's cone (optionally widened) with a clear line.</summary>
-        public bool IsVisibleTo(CamperGaze gaze, float extraAngle = 0f, float extraRange = 0f)
-        {
-            if (gaze == null || !_isSpawned)
                 return false;
-
-            var feet = transform.position;
-            foreach (var height in _checkHeights)
-            {
-                if (gaze.CanSee(feet + Vector3.up * height, transform, extraAngle, extraRange))
-                    return true;
             }
 
-            return false;
-        }
+            /// <summary>Owner only (called by the kick): frees the statue, grants immunity and forgets the break progress.</summary>
+            public void ForceRelease(float immunitySeconds)
+            {
+                if (!_isSpawned || !HasStateAuthority)
+                    return;
 
-        /// <summary>Owner only (called by the kick): frees the statue, grants immunity and forgets the break progress.</summary>
-        public void ForceRelease(float immunitySeconds)
+                if (IsPetrified)
+                    Release(immunitySeconds, false);
+                else
+                    GazeImmunity = TickTimer.CreateFromSeconds(Runner, immunitySeconds);
+            }
+        /// <summary>
+        /// Permite que el bot campista petrifique a este gnomo a través de la red.
+        /// </summary>
+        public void PetrificarPorBot() => RPC_PetrificarPorBot();
+
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        private void RPC_PetrificarPorBot()
         {
-            if (!_isSpawned || !HasStateAuthority)
-                return;
-
-            if (IsPetrified)
-                Release(immunitySeconds, false);
-            else
-                GazeImmunity = TickTimer.CreateFromSeconds(Runner, immunitySeconds);
+            if (!IsPetrified && !IsGazeImmune)
+            {
+                BeginFreeze();
+            }
         }
+
 
         private void Update()
-        {
-            if (Local != this)
-                return;
-
-            // Nobody is stone between matches, and the gaze can't freeze anyone in the lobby or the countdown.
-            var match = MatchManager.Instance;
-            var betweenMatches = match != null && (match.Phase == MatchPhase.Waiting || match.Phase == MatchPhase.Countdown);
-            if (betweenMatches && IsPetrified)
-                ClearStone();
-
-            var dt = Time.deltaTime;
-            var locker = LockedBy;
-            var locked = locker != null;
-            if (locked && !_wasLocked)
-                _watchedSfx.Play(); // Only this gnome hears it (2D), like the HUD warning.
-
-            _wasLocked = locked;
-            IsLockTarget = locked;
-
-            var immune = IsGazeImmune;
-            var shouldFreeze = !betweenMatches && locked && locker.LockProgress >= 1f && !immune;
-            if (shouldFreeze && !IsPetrified)
-                BeginFreeze();
-
-            if (IsPetrified)
-                UpdateBreaking(dt);
-
-            _movement.IsFrozen = IsPetrified;
-            IsWatched = locked && !IsPetrified;
-            WarningProgress = ComputeWarning(locker, immune);
-        }
-
-        private void BeginFreeze()
-        {
-            _requiredForFreeze = ComputeRequired();
-            _timesPetrified++;
-            NetBreakProgress = 0f;
-            _sinceLastPress = 0f;
-            IsPetrified = true;
-            _petrifySfx.PlayAt(transform.position);
-        }
-
-        private void UpdateBreaking(float dt)
-        {
-            _sinceLastPress += dt;
-
-            if (_interact != null && _interact.WasPressedThisFrame())
             {
-                NetBreakProgress += 1f;
+                if (Local != this)
+                    return;
+
+                // Nobody is stone between matches, and the gaze can't freeze anyone in the lobby or the countdown.
+                var match = MatchManager.Instance;
+                var betweenMatches = match != null && (match.Phase == MatchPhase.Waiting || match.Phase == MatchPhase.Countdown);
+                if (betweenMatches && IsPetrified)
+                    ClearStone();
+
+                var dt = Time.deltaTime;
+                var locker = LockedBy;
+                var locked = locker != null;
+                if (locked && !_wasLocked)
+                    _watchedSfx.Play(); // Only this gnome hears it (2D), like the HUD warning.
+
+                _wasLocked = locked;
+                IsLockTarget = locked;
+
+                var immune = IsGazeImmune;
+                var shouldFreeze = !betweenMatches && locked && locker.LockProgress >= 1f && !immune;
+                if (shouldFreeze && !IsPetrified)
+                    BeginFreeze();
+
+                if (IsPetrified)
+                    UpdateBreaking(dt);
+
+                _movement.IsFrozen = IsPetrified;
+                IsWatched = locked && !IsPetrified;
+                WarningProgress = ComputeWarning(locker, immune);
+            }
+
+            private void BeginFreeze()
+            {
+                _requiredForFreeze = ComputeRequired();
+                _timesPetrified++;
+                NetBreakProgress = 0f;
                 _sinceLastPress = 0f;
-                PressCount++;
-                _pressSfx.Play();
-            }
-            else if (_sinceLastPress > _decayDelay)
-            {
-                NetBreakProgress = Mathf.Max(0f, NetBreakProgress - _decayPerSecond * dt);
-            }
-
-            if (NetBreakProgress >= _requiredForFreeze)
-                Release(_releaseImmunity, true);
-        }
-
-        private void Release(float immunitySeconds, bool hop)
-        {
-            ClearStone();
-            GazeImmunity = TickTimer.CreateFromSeconds(Runner, immunitySeconds);
-            ReleaseCount++;
-            _releaseSfx.PlayAt(transform.position);
-
-            if (hop)
-                Hop();
-        }
-
-        // Silent release: no immunity, hop, sound or release count (also used between matches).
-        private void ClearStone()
-        {
-            IsPetrified = false;
-            NetBreakProgress = 0f;
-            _movement.IsFrozen = false;
-        }
-
-        private void Hop()
-        {
-            var forward = FirstPersonCamera.Instance != null ? FirstPersonCamera.Instance.transform.forward : transform.forward;
-            forward = Vector3.ProjectOnPlane(forward, Vector3.up);
-            forward = forward.sqrMagnitude > 0.0001f ? forward.normalized : transform.forward;
-            _movement.ApplyKnockback(forward * _hopForward + Vector3.up * _hopUp, _hopStun);
-        }
-
-        private float ComputeRequired() => Mathf.Min(_maxPresses, _basePresses + _pressesPerFreeze * _timesPetrified);
-
-        private float ComputeWarning(CamperGaze locker, bool immune)
-        {
-            if (IsPetrified || immune)
-                return 0f;
-
-            if (locker != null)
-                return Mathf.Clamp01(locker.LockProgress);
-
-            foreach (var gaze in CamperGaze.All)
-            {
-                if (IsVisibleTo(gaze))
-                    return _coneWarning;
-            }
-
-            return 0f;
-        }
-
-        public override void Render()
-        {
-            // The owner plays it when freezing; everyone else hears it when the replicated state flips.
-            var petrified = IsPetrified;
-            if (petrified && !_lastPetrified && !HasStateAuthority)
+                IsPetrified = true;
                 _petrifySfx.PlayAt(transform.position);
-            _lastPetrified = petrified;
+            }
 
-            var target = petrified ? 1f : 0f;
-            if (Mathf.Approximately(_stoneAmount, target))
-                return;
-
-            var step = _stoneBlendTime > 0f ? Time.deltaTime / _stoneBlendTime : 1f;
-            _stoneAmount = Mathf.MoveTowards(_stoneAmount, target, step);
-            ApplyStone();
-        }
-
-        private void ApplyStone()
-        {
-            for (var i = 0; i < _renderers.Length; i++)
+            private void UpdateBreaking(float dt)
             {
-                if (_renderers[i] == null)
-                    continue;
+                _sinceLastPress += dt;
 
-                _block.SetColor(BaseColorId, Color.Lerp(_originalColors[i], _stoneColor, _stoneAmount));
-                _renderers[i].SetPropertyBlock(_block);
+                if (_interact != null && _interact.WasPressedThisFrame())
+                {
+                    NetBreakProgress += 1f;
+                    _sinceLastPress = 0f;
+                    PressCount++;
+                    _pressSfx.Play();
+                }
+                else if (_sinceLastPress > _decayDelay)
+                {
+                    NetBreakProgress = Mathf.Max(0f, NetBreakProgress - _decayPerSecond * dt);
+                }
+
+                if (NetBreakProgress >= _requiredForFreeze)
+                    Release(_releaseImmunity, true);
+            }
+
+            private void Release(float immunitySeconds, bool hop)
+            {
+                ClearStone();
+                GazeImmunity = TickTimer.CreateFromSeconds(Runner, immunitySeconds);
+                ReleaseCount++;
+                _releaseSfx.PlayAt(transform.position);
+
+                if (hop)
+                    Hop();
+            }
+
+            // Silent release: no immunity, hop, sound or release count (also used between matches).
+            private void ClearStone()
+            {
+                IsPetrified = false;
+                NetBreakProgress = 0f;
+                _movement.IsFrozen = false;
+            }
+
+            private void Hop()
+            {
+                var forward = FirstPersonCamera.Instance != null ? FirstPersonCamera.Instance.transform.forward : transform.forward;
+                forward = Vector3.ProjectOnPlane(forward, Vector3.up);
+                forward = forward.sqrMagnitude > 0.0001f ? forward.normalized : transform.forward;
+                _movement.ApplyKnockback(forward * _hopForward + Vector3.up * _hopUp, _hopStun);
+            }
+
+            private float ComputeRequired() => Mathf.Min(_maxPresses, _basePresses + _pressesPerFreeze * _timesPetrified);
+
+            private float ComputeWarning(CamperGaze locker, bool immune)
+            {
+                if (IsPetrified || immune)
+                    return 0f;
+
+                if (locker != null)
+                    return Mathf.Clamp01(locker.LockProgress);
+
+                foreach (var gaze in CamperGaze.All)
+                {
+                    if (IsVisibleTo(gaze))
+                        return _coneWarning;
+                }
+
+                return 0f;
+            }
+
+            public override void Render()
+            {
+                // The owner plays it when freezing; everyone else hears it when the replicated state flips.
+                var petrified = IsPetrified;
+                if (petrified && !_lastPetrified && !HasStateAuthority)
+                    _petrifySfx.PlayAt(transform.position);
+                _lastPetrified = petrified;
+
+                var target = petrified ? 1f : 0f;
+                if (Mathf.Approximately(_stoneAmount, target))
+                    return;
+
+                var step = _stoneBlendTime > 0f ? Time.deltaTime / _stoneBlendTime : 1f;
+                _stoneAmount = Mathf.MoveTowards(_stoneAmount, target, step);
+                ApplyStone();
+            }
+
+            private void ApplyStone()
+            {
+                for (var i = 0; i < _renderers.Length; i++)
+                {
+                    if (_renderers[i] == null)
+                        continue;
+
+                    _block.SetColor(BaseColorId, Color.Lerp(_originalColors[i], _stoneColor, _stoneAmount));
+                    _renderers[i].SetPropertyBlock(_block);
+                }
             }
         }
     }
-}

@@ -44,6 +44,18 @@ namespace BetterTogether.Fireplace
             Placed = null;
         }
 
+        /// <summary>Permite al bot colocar la salchicha sobre la parrilla.</summary>
+        public void ColocarSalchicha(Sausage sausage)
+        {
+            if (sausage == null) return;
+            sausage.Carryable.ForceReleaseAll();
+            sausage.Carryable.Pin(this);
+            Placed = sausage;
+        }
+
+        public bool TieneSalchicha => Placed != null && Placed.Carryable.IsPinnedTo(this);
+
+
         public string GetPrompt(PlayerInteractor interactor) => "Poner salchicha";
 
         /// <summary>Mirrors the authority's rules using the replicated state.</summary>

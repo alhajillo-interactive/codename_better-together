@@ -206,6 +206,19 @@ namespace BetterTogether.Fireplace
             _lastPress.Clear();
         }
 
+        /// <summary>Permite al bot encender la fogata cuando trae los fósforos.</summary>
+        public void EncenderPorBot()
+        {
+            if (HasEnoughWood && !IsLit)
+            {
+                IsLit = true;
+                DouseProgress = 0f;
+                if (Runner != null)
+                    LitGrace = TickTimer.CreateFromSeconds(Runner, _litGraceTime);
+            }
+        }
+
+
         public string GetPrompt(PlayerInteractor interactor) =>
             interactor.Role == PlayerRole.Gnome ? "Apagar fogata (¡machaca E!)" : "Prender fogata";
 

@@ -134,10 +134,12 @@ namespace BetterTogether.Networking
                 .OrderBy(p => p.Object.StateAuthority.PlayerId)
                 .ToList();
 
-            var height = 230f + players.Count * 28f;
+            // Modificamos height a 260f para que quepa el nuevo botón del bot
+            var height = 260f + players.Count * 28f;
             GUILayout.BeginArea(new Rect(Screen.width - RolePanelWidth - 10f, 10f, RolePanelWidth, height), GUI.skin.box);
             GUILayout.Label("Debug — F1 para cerrar");
             DrawGazeToggle();
+            DrawBotToggle(); // <-- NUEVO: Dibuja el interruptor del Bot en el panel F1
             DrawVolumeSliders();
             GUILayout.Space(6f);
 
@@ -200,6 +202,34 @@ namespace BetterTogether.Networking
             }
             GUILayout.EndHorizontal();
         }
+
+        /// <summary>
+        /// Permite activar o desactivar el Bot Campista desde el panel F1 para pruebas en solitario o cooperativo.
+        /// </summary>
+        private static void DrawBotToggle()
+        {
+            // Busca al Bot en la escena (incluso si está apagado)
+            var bot = FindFirstObjectByType<CampistaAI>(FindObjectsInactive.Include);
+
+            GUILayout.BeginHorizontal();
+            if (bot == null)
+            {
+                GUILayout.Label("Bot Campista: (no colocado en escena)");
+            }
+            else
+            {
+                bool activo = bot.gameObject.activeSelf;
+                GUILayout.Label($"Bot Campista: {(activo ? "ACTIVO" : "INACTIVO")}", GUILayout.Width(170f));
+
+                // Botón interactivo para encenderlo o apagarlo con un clic
+                if (GUILayout.Button(activo ? "Desactivar Bot" : "Activar Bot"))
+                {
+                    bot.SetBotActivo(!activo);
+                }
+            }
+            GUILayout.EndHorizontal();
+        }
+
 
         private void RoleButton(PlayerCharacter player, PlayerRole role)
         {

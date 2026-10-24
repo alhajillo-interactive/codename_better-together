@@ -133,6 +133,18 @@ namespace BetterTogether.Fireplace
             ApplyEaten();
         }
 
+        /// <summary>Permite al bot comerse la salchicha cocinada para ganar la partida.</summary>
+        public void ComerPorBot()
+        {
+            if (State == CookState.Cooked && !IsEaten)
+            {
+                _carryable.ForceReleaseAll();
+                IsEaten = true;
+                ApplyEaten();
+            }
+        }
+
+
         public void RequestEat(PlayerInteractor interactor) => RPC_RequestEat(interactor.Id);
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
