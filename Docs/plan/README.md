@@ -57,6 +57,7 @@ Multiplayer Play Mode: editor + 3 jugadores virtuales, misma sala. Siempre:
 - **Animaciones**: el personaje remoto camina/corre/salta/se aturde/se petrifica igual que el local; no hay deslizamiento (pies que patinan) ni poses congeladas.
 - **Rendimiento**: `PerfProbe` (tarjeta C0.1) sin caídas de FPS por debajo del objetivo y bytes/s dentro de meta.
 - **Los tres casos**: entrar tarde, que se vaya el master, que se vaya un jugador con algo en la mano.
+- **Auditoría**: `GnoMore/Auditar flotantes en escena` sin hallazgos nuevos y F4 en juego sin hallazgos tras 1 min de partida.
 
 ## Fases (resumen; detalle en Notion)
 
