@@ -16,6 +16,8 @@ namespace BetterTogether.Audio
     {
         [SerializeField] private MusicTrack _lobby;
         [SerializeField] private MusicTrack _playing;
+        [Tooltip("Optional. Plays instead of the playing track while the fire is lit (milestone 2, defending it); empty keeps the playing track.")]
+        [SerializeField] private MusicTrack _playingDefend;
         [Tooltip("Short ending piece; set it to not loop.")]
         [SerializeField] private MusicTrack _ended;
 
@@ -28,6 +30,7 @@ namespace BetterTogether.Audio
         private MatchManager _match;
         private MatchPhase? _shownTrackPhase;
         private MatchPhase? _lastPhase;
+        private bool _shownDefend;
         private bool _resultPending;
 
         private void Awake() => _match = GetComponent<MatchManager>();
@@ -43,14 +46,17 @@ namespace BetterTogether.Audio
             if (phase == MatchPhase.Countdown)
                 phase = MatchPhase.Waiting;
 
-            if (phase == _shownTrackPhase)
+            // The milestone is derived from the lit fire, so late joiners and a new master hear the same track.
+            var defend = phase == MatchPhase.Playing && _playingDefend != null && MatchStage.Current == MatchStage.Stage.DefendFire;
+            if (phase == _shownTrackPhase && defend == _shownDefend)
                 return;
 
             _shownTrackPhase = phase;
+            _shownDefend = defend;
             AudioManager.PlayMusic(phase switch
             {
                 MatchPhase.Waiting => _lobby,
-                MatchPhase.Playing => _playing,
+                MatchPhase.Playing => defend ? _playingDefend : _playing,
                 _ => _ended,
             });
         }

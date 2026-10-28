@@ -1,4 +1,5 @@
 using BetterTogether.Audio;
+using BetterTogether.Fireplace;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using BetterTogether.Player;
@@ -147,6 +148,10 @@ namespace BetterTogether.Combat
             var carried = _interactor != null ? _interactor.Carried : null;
             if (carried == null)
                 return;
+
+            // A kicked bucket spills; the release below then drops it empty.
+            if (carried.TryGetComponent<WaterBucket>(out var bucket))
+                bucket.RequestSpill(_interactor);
 
             var position = transform.position;
             var toKicker = Vector3.ProjectOnPlane(kickerPosition - position, Vector3.up);
