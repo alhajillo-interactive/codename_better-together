@@ -51,6 +51,10 @@ namespace BetterTogether.Interaction
         [Tooltip("Height of the arc the item draws while settling on a pin spot.")]
         [SerializeField, Min(0f)] private float _snapArc = 0.25f;
 
+        [Header("Holding")]
+        [Tooltip("Rotation of the item relative to the holder's view while it is held alone, e.g. a log lying across the view.")]
+        [SerializeField] private Vector3 _holdEuler;
+
         [Header("Lost items")]
         [Tooltip("Below this world Y the item is lost and returns to its start pose.")]
         [SerializeField] private float _killHeight = -5f;
@@ -61,6 +65,12 @@ namespace BetterTogether.Interaction
 
         private const float ReceiveFovPunch = 2f;
         private const float ReceiveFovPunchTime = 0.12f;
+
+        // Walking bob of an item held by the local player: radians of phase per metre walked, and the speed (m/s) at full bob.
+        private const float SwayRadiansPerMeter = 9f;
+        private const float SwayFullSpeed = 4f;
+        private const int DepenetrationSteps = 8;
+        private static readonly Collider[] OverlapBuffer = new Collider[8];
 
         private enum PoseKind : byte { None, Held, Pinned }
 
@@ -92,6 +102,13 @@ namespace BetterTogether.Interaction
         private bool _startPoseValid;
         private bool _startPoseRechecked;
         private bool _startPoseWarned;
+        private float _holdRadius = 0.15f;
+        private bool _smoothValid;
+        private Vector3 _smoothOffset;
+        private Quaternion _smoothRotation;
+        private Vector3 _smoothHolderPosition;
+        private float _swaySpeed;
+        private float _swayPhase;
 
         [Networked] private PlayerInteractor HolderA { get; set; }
         [Networked] private PlayerInteractor HolderB { get; set; }
@@ -99,6 +116,12 @@ namespace BetterTogether.Interaction
         [Networked] private byte PinSlot { get; set; }
 
         public string DisplayName => _displayName;
+
+        /// <summary>Largest horizontal half-extent of the item's colliders, in metres. A held item is posed this much farther from the eye.</summary>
+        public float HoldRadius => _holdRadius;
+
+        /// <summary>Rotation of the item relative to the holder's view while held alone.</summary>
+        public Vector3 HoldEuler => _holdEuler;
 
         /// <summary>
         /// State authority only (not networked): someone has held the item since the last match reset. The campfire only
@@ -163,6 +186,27 @@ namespace BetterTogether.Interaction
             _startPosition = transform.position;
             _startRotation = transform.rotation;
             _startPoseValid = ComputeStartPoseValid();
+            _holdRadius = ComputeHoldRadius();
+        }
+
+        // Colliders are still enabled in Awake, so their combined bounds are the item's real size.
+        private float ComputeHoldRadius()
+        {
+            var found = false;
+            var bounds = default(Bounds);
+            foreach (var c in _colliders)
+            {
+                if (c == null || !c.enabled || c.isTrigger)
+                    continue;
+
+                if (found)
+                    bounds.Encapsulate(c.bounds);
+                else
+                    bounds = c.bounds;
+                found = true;
+            }
+
+            return found ? Mathf.Max(0.05f, bounds.extents.x, bounds.extents.z) : 0.15f;
         }
 
         public override void Spawned()
@@ -389,12 +433,50 @@ namespace BetterTogether.Interaction
             if (hasDropPoint && IsMoving)
                 transform.position = new Vector3(dropPoint.x, transform.position.y, dropPoint.z);
 
+            // Never let go of an item inside a wall or under the floor: bring it back toward the holder's eyes first.
+            if (HolderCount == 1 && IsMoving)
+                DepenetrateFrom(who);
+
             if (HolderA == who)
                 HolderA = null;
             else
                 HolderB = null;
 
             Compact();
+        }
+
+        // Authority only. Moves the item along the line to the holder's eyes until it no longer overlaps geometry.
+        private void DepenetrateFrom(PlayerInteractor holder)
+        {
+            var eye = holder.EyePosition;
+            var start = transform.position;
+            var radius = _holdRadius * 0.5f;
+            if (!OverlapsGeometry(start, radius, holder))
+                return;
+
+            for (var i = 1; i < DepenetrationSteps; i++)
+            {
+                var candidate = Vector3.Lerp(start, eye, i / (float)DepenetrationSteps);
+                if (OverlapsGeometry(candidate, radius, holder))
+                    continue;
+
+                transform.position = candidate;
+                return;
+            }
+
+            transform.position = eye;
+        }
+
+        private bool OverlapsGeometry(Vector3 center, float radius, PlayerInteractor holder)
+        {
+            var count = Physics.OverlapSphereNonAlloc(center, radius, OverlapBuffer, holder.HoldObstacleMask, QueryTriggerInteraction.Ignore);
+            for (var i = 0; i < count; i++)
+            {
+                if (!holder.IgnoresForHold(OverlapBuffer[i], this))
+                    return true;
+            }
+
+            return false;
         }
 
         public override void FixedUpdateNetwork()
@@ -435,7 +517,8 @@ namespace BetterTogether.Interaction
                 _freeSince = -1f;
             }
 
-            if (TryGetFollowPose(out var position, out var rotation))
+            // The simulation pose has no smoothing and no retraction, so a release starts from a coherent place.
+            if (TryGetFollowPose(false, out var position, out var rotation))
                 transform.SetPositionAndRotation(position, rotation);
         }
 
@@ -578,7 +661,7 @@ namespace BetterTogether.Interaction
             if (!_isSpawned)
                 return;
 
-            var hasPose = TryGetFollowPose(out var position, out var rotation);
+            var hasPose = TryGetFollowPose(true, out var position, out var rotation);
             var kind = PoseKind.None;
             var keyId = default(NetworkBehaviourId);
             var keySlot = 0;
@@ -598,6 +681,7 @@ namespace BetterTogether.Interaction
 
             if (!hasPose)
             {
+                _smoothValid = false;
                 _blending = false;
                 _hasRested = true;
                 _restPosition = transform.position;
@@ -605,12 +689,56 @@ namespace BetterTogether.Interaction
                 return;
             }
 
+            // Weight and walking bob only for what the local player holds alone; proxies already interpolate.
+            if (kind == PoseKind.Held && HolderCount == 1 && Holder(0) == PlayerInteractor.Local)
+                ApplyHoldWeight(Holder(0), ref position, ref rotation);
+            else
+                _smoothValid = false;
+
             if (_blending)
                 BlendPose(ref position, ref rotation);
 
             transform.SetPositionAndRotation(position, rotation);
             _drawnPosition = position;
             _drawnRotation = rotation;
+        }
+
+        // Local presentation: the item trails the view a little (smoothed relative to the eyes, so walking adds no lag)
+        // and bobs with the player's steps. The first frame starts exactly on the target pose.
+        private void ApplyHoldWeight(PlayerInteractor holder, ref Vector3 position, ref Quaternion rotation)
+        {
+            var dt = Time.deltaTime;
+            var eye = holder.EyePosition;
+            var offset = position - eye;
+            var holderPosition = holder.transform.position;
+
+            if (!_smoothValid)
+            {
+                _smoothValid = true;
+                _smoothOffset = offset;
+                _smoothRotation = rotation;
+                _smoothHolderPosition = holderPosition;
+                _swaySpeed = 0f;
+            }
+            else if (dt > 0f)
+            {
+                var follow = 1f - Mathf.Exp(-holder.HoldSharpness * dt);
+                _smoothOffset = Vector3.Lerp(_smoothOffset, offset, follow);
+                _smoothRotation = Quaternion.Slerp(_smoothRotation, rotation, follow);
+
+                var moved = holderPosition - _smoothHolderPosition;
+                moved.y = 0f;
+                _smoothHolderPosition = holderPosition;
+                var speed = Mathf.Min(moved.magnitude / dt, SwayFullSpeed * 2f);
+                _swaySpeed = Mathf.Lerp(_swaySpeed, speed, follow);
+                _swayPhase += _swaySpeed * dt * SwayRadiansPerMeter;
+            }
+
+            var amount = Mathf.Clamp01(_swaySpeed / SwayFullSpeed) * holder.SwayAmplitude;
+            var sway = Vector3.up * (Mathf.Sin(_swayPhase) * amount)
+                       + holder.transform.right * (Mathf.Cos(_swayPhase * 0.5f) * amount * 0.5f);
+            position = eye + _smoothOffset + sway;
+            rotation = _smoothRotation;
         }
 
         private PoseKind GetPoseKey(out NetworkBehaviourId id, out int slot)
@@ -652,12 +780,17 @@ namespace BetterTogether.Interaction
             rotation = Quaternion.Slerp(_blendFromRotation, rotation, eased);
         }
 
-        private bool TryGetFollowPose(out Vector3 position, out Quaternion rotation)
+        // presentation: also retract a held item from geometry (every peer's drawn pose); the authority's simulation pose does not.
+        private bool TryGetFollowPose(bool presentation, out Vector3 position, out Quaternion rotation)
         {
             position = default;
             rotation = transform.rotation;
             if (!IsMoving)
                 return TryGetPinPose(out position, out rotation);
+
+            // A lone holder keeps the item in front of the view; two gnomes carry it between their anchors.
+            if (HolderCount == 1 && Holder(0).TryGetHoldPose(this, presentation, out position, out rotation))
+                return true;
 
             var first = Holder(0).CarryAnchor;
             if (HolderCount == 1)
