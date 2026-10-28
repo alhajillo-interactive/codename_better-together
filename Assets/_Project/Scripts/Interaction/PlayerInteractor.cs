@@ -297,6 +297,14 @@ namespace BetterTogether.Interaction
                 return;
             }
 
+            // A grab the authority has not confirmed yet: the item is already drawn in the hands, so the interact key does
+            // nothing until then (and the item behind it must not be focused, or a double press would take two).
+            if (Carried == null && CarriedOrPredicted != null)
+            {
+                Focused = null;
+                return;
+            }
+
             // Riding on another gnome's head: nothing to pick up, but what is already in the hands can still be used.
             if (_stack != null && _stack.IsRiding)
             {

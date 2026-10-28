@@ -833,10 +833,17 @@ namespace BetterTogether.Fireplace
             var hinted = FindHintedSlot();
             if (hinted < 0)
                 RefreshOccupied(); // A hint already refreshed it.
+
+            // A log of the local player that is already flying to a slot (predicted) hides that slot's ghost.
+            var predictedSlot = -1;
+            var localPlayer = PlayerInteractor.Local;
+            var flying = localPlayer != null ? localPlayer.Carried : null;
+            if (flying != null)
+                flying.TryGetPredictedPin(this, out predictedSlot);
             var pulse = Mathf.Sin(Time.time * HintPulseHz * Mathf.PI * 2f) * 0.5f + 0.5f;
             for (var i = 0; i < _ghostRenderers.Length; i++)
             {
-                var show = !_occupied[i];
+                var show = !_occupied[i] && i != predictedSlot;
                 if (_ghostRenderers[i].enabled != show)
                     _ghostRenderers[i].enabled = show;
                 if (!show)

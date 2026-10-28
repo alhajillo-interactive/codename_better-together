@@ -70,6 +70,14 @@ namespace BetterTogether.Interaction
         [Header("Local prediction (presentation only)")]
         [Tooltip("Seconds a locally predicted grab, release or placement is shown before the authority must confirm it.")]
         [SerializeField, Min(0f)] private float _predictionTimeout = 0.5f;
+        [Tooltip("Extra seconds added to twice the round-trip time when waiting for the authority to confirm; the wait is never shorter than the timeout above.")]
+        [SerializeField, Min(0f)] private float _predictionRttMargin = 0.15f;
+        [Tooltip("Seconds after a grab timed out during which a late confirmation still blends the item into the hand instead of snapping.")]
+        [SerializeField, Min(0f)] private float _lateConfirmWindow = 1f;
+        [Tooltip("A confirmed release keeps its predicted pose until the replicated pose is this close (metres), so the item does not jump back and fall again.")]
+        [SerializeField, Min(0f)] private float _releaseMatchDistance = 0.05f;
+        [Tooltip("Longest a confirmed release waits (seconds) for the replicated pose to catch up before blending to it.")]
+        [SerializeField, Min(0f)] private float _releaseHoldCap = 0.15f;
         [Tooltip("Seconds the item takes to fly back to its replicated pose when a prediction is rejected or times out.")]
         [SerializeField, Min(0f)] private float _reconcileBlendTime = 0.15f;
         [Tooltip("Heard only by the player who grabs the item, the instant they press the interact key. May be empty.")]
@@ -165,6 +173,9 @@ namespace BetterTogether.Interaction
         private Vector3 _predictedReleasePosition;
         private Quaternion _predictedReleaseRotation;
         private bool _reconcileBlend;
+        private bool _releaseConfirmed;
+        private float _releaseConfirmedAt;
+        private float _lateConfirmUntil;
 
         [Networked] private PlayerInteractor HolderA { get; set; }
         [Networked] private PlayerInteractor HolderB { get; set; }
@@ -259,7 +270,14 @@ namespace BetterTogether.Interaction
         }
 
         /// <summary>True while the local peer shows a grab, release or placement that the authority has not confirmed yet.</summary>
-        public bool HasPrediction => _prediction != PredictionKind.None;
+        public bool HasPrediction
+        {
+            get
+            {
+                UpdatePrediction();
+                return _prediction != PredictionKind.None;
+            }
+        }
 
         private void Awake()
         {
@@ -354,7 +372,18 @@ namespace BetterTogether.Interaction
             _outsideSince = -1f;
 
             // A prediction belongs to a peer that is not the authority; the replicated state rules from now on.
-            ClearPrediction(false);
+            var wasPresenting = _prediction != PredictionKind.None || _blending;
+            ClearPrediction(!HasStateAuthority);
+            if (HasStateAuthority && wasPresenting && HolderCount == 0 && !IsPinned)
+            {
+                // The new master must not drop the item from where a prediction or blend drew it (e.g. in front of the face):
+                // it goes back to the last replicated pose first.
+                _blending = false;
+                _reconcileBlend = false;
+                if (_hasRested)
+                    transform.SetPositionAndRotation(_restPosition, _restRotation);
+            }
+
             ApplyPhysicsOwnership();
         }
 
@@ -362,6 +391,8 @@ namespace BetterTogether.Interaction
         {
             _isSpawned = false;
             ClearPrediction(false);
+            _blending = false;
+            _reconcileBlend = false;
             All.Remove(this);
         }
 
@@ -394,8 +425,9 @@ namespace BetterTogether.Interaction
 
         public void Interact(PlayerInteractor interactor)
         {
-            // A second press while the first request is still in flight changes nothing.
-            if (_prediction != PredictionKind.None)
+            // A second press while the first grab is still in flight changes nothing.
+            UpdatePrediction();
+            if (_prediction == PredictionKind.Grab)
                 return;
 
             interactor.NoteGrabRequest();
@@ -415,7 +447,7 @@ namespace BetterTogether.Interaction
             if (_pickupFovPunch > 0f && CameraPunch.Instance != null)
                 CameraPunch.Instance.PunchFov(_pickupFovPunch, _pickupFovPunchTime);
 
-            if (HasStateAuthority || Inert || HolderCount != 0 || RequiredHolders(who) != 1)
+            if (HasStateAuthority || Inert || _prediction != PredictionKind.None || HolderCount != 0 || RequiredHolders(who) != 1)
                 return;
 
             // A reconcile blend that fails right away starts from where the item was last seen.
@@ -423,7 +455,7 @@ namespace BetterTogether.Interaction
             _drawnRotation = transform.rotation;
             _prediction = PredictionKind.Grab;
             _predictedHolder = who;
-            _predictedUntil = Time.time + _predictionTimeout;
+            _predictedUntil = Time.time + CurrentPredictionTimeout();
         }
 
         /// <summary>
@@ -432,6 +464,7 @@ namespace BetterTogether.Interaction
         /// </summary>
         public void PredictPin<T>(T spot, int slot = 0) where T : NetworkBehaviour, IPinSpot
         {
+            UpdatePrediction();
             var who = PlayerInteractor.Local;
             if (!_isSpawned || HasStateAuthority || Inert || _prediction != PredictionKind.None || spot == null || !IsHeldBy(who) || HolderCount != 1 || !IsMoving)
                 return;
@@ -443,13 +476,14 @@ namespace BetterTogether.Interaction
             _predictedSpot = spot;
             _predictedPinSpot = spot;
             _predictedSlot = slot;
-            _predictedUntil = Time.time + _predictionTimeout;
+            _predictedUntil = Time.time + CurrentPredictionTimeout();
         }
 
         public void RequestRelease(PlayerInteractor who)
         {
-            // A second press while the first request is still in flight changes nothing.
-            if (_prediction != PredictionKind.None)
+            // A second press while the first release or placement is still in flight changes nothing.
+            UpdatePrediction();
+            if (_prediction == PredictionKind.Release || _prediction == PredictionKind.Place)
                 return;
 
             PredictRelease(who);
@@ -477,7 +511,8 @@ namespace BetterTogether.Interaction
             _predictedHolder = who;
             _predictedReleasePosition = position;
             _predictedReleaseRotation = rotation;
-            _predictedUntil = Time.time + _predictionTimeout;
+            _releaseConfirmed = false;
+            _predictedUntil = Time.time + CurrentPredictionTimeout();
         }
 
         /// <summary>Releases the item for a reason other than the holder's own choice (e.g. the holder is about to respawn).</summary>
@@ -1059,6 +1094,10 @@ namespace BetterTogether.Interaction
                 StartBlend(kind == PoseKind.Pinned, _drawnPosition, _drawnRotation);
             else if (kind == PoseKind.Pinned && _lastKind == PoseKind.None && _hasRested)
                 StartBlend(true, _restPosition, _restRotation);
+            else if (kind == PoseKind.Held && _lastKind == PoseKind.None && Time.time < _lateConfirmUntil)
+                StartBlend(false, _drawnPosition, _drawnRotation);
+            if (kind == PoseKind.Held)
+                _lateConfirmUntil = 0f;
 
             _lastKind = kind;
             _lastKeyId = keyId;
@@ -1185,7 +1224,8 @@ namespace BetterTogether.Interaction
         }
 
         // Presentation only. Compares the prediction with the replicated state and ends it: confirmed (no jump, the poses
-        // match), rejected (someone else holds it) or timed out (the blend flies the item back to the replicated pose).
+        // match), rejected (someone else holds it, immediate) or timed out (the blend flies the item back to the replicated
+        // pose). Also called by the request guards, so a confirmation that just arrived never swallows a key press.
         private void UpdatePrediction()
         {
             if (_prediction == PredictionKind.None)
@@ -1198,6 +1238,28 @@ namespace BetterTogether.Interaction
                 return;
             }
 
+            if (_prediction == PredictionKind.Place && (_predictedSpot == null || _predictedSpot.Object == null || !_predictedSpot.Object.IsValid))
+            {
+                ClearPrediction(true);
+                return;
+            }
+
+            // A confirmed release keeps its predicted pose until the replicated pose has caught up, so the item does not
+            // jump back to the hand and fall again; then it blends to wherever the replicated pose is.
+            if (_prediction == PredictionKind.Release && !IsHeldBy(who))
+            {
+                if (!_releaseConfirmed)
+                {
+                    _releaseConfirmed = true;
+                    _releaseConfirmedAt = Time.time;
+                }
+
+                var gap = (transform.position - _predictedReleasePosition).sqrMagnitude;
+                if (gap <= _releaseMatchDistance * _releaseMatchDistance || Time.time - _releaseConfirmedAt >= _releaseHoldCap)
+                    ClearPrediction(true);
+                return;
+            }
+
             var confirmed = false;
             var rejected = false;
             switch (_prediction)
@@ -1205,9 +1267,6 @@ namespace BetterTogether.Interaction
                 case PredictionKind.Grab:
                     confirmed = IsHeldBy(who);
                     rejected = !confirmed && HolderCount > 0;
-                    break;
-                case PredictionKind.Release:
-                    confirmed = !IsHeldBy(who);
                     break;
                 case PredictionKind.Place:
                     // Any slot confirms it: if the authority picked another one, the pose key changes and the item blends there.
@@ -1217,9 +1276,31 @@ namespace BetterTogether.Interaction
             }
 
             if (confirmed)
+            {
                 ClearPrediction(false);
+            }
             else if (rejected || Time.time >= _predictedUntil)
+            {
+                // A grab that merely timed out may still be confirmed later (very high ping): that arrival blends in.
+                if (!rejected && _prediction == PredictionKind.Grab)
+                    _lateConfirmUntil = Time.time + _lateConfirmWindow;
                 ClearPrediction(true);
+            }
+        }
+
+        // Timeout of a prediction: never shorter than the serialized one, and long enough for a round trip through the
+        // relay and the master plus the tick that carries the answer.
+        private float CurrentPredictionTimeout()
+        {
+            var rtt = Runner != null ? (float)Runner.GetPlayerRtt(Runner.LocalPlayer) : 0f;
+            return Mathf.Max(_predictionTimeout, 2f * rtt + _predictionRttMargin);
+        }
+
+        /// <summary>Whether this item is flying to <paramref name="spot"/> in the local presentation, and which slot (HUD ghosts).</summary>
+        public bool TryGetPredictedPin(NetworkBehaviour spot, out int slot)
+        {
+            slot = _predictedSlot;
+            return _prediction == PredictionKind.Place && _predictedSpot == spot;
         }
 
         // Ends the local prediction. With reconcile, the item flies from where it is drawn back to its replicated pose.
@@ -1229,6 +1310,7 @@ namespace BetterTogether.Interaction
                 return;
 
             _prediction = PredictionKind.None;
+            _releaseConfirmed = false;
             _predictedHolder = null;
             _predictedSpot = null;
             _predictedPinSpot = null;
