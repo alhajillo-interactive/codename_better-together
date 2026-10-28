@@ -94,32 +94,41 @@ namespace BetterTogether.Fireplace
         }
 
         /// <summary>
-        /// Empties the bucket onto the ground (kicked, or the pour was cancelled). Any peer may call it: the request
-        /// is only honoured by the authority and only changes a full bucket, so the worst a bad actor can do is waste water.
+        /// Empties the bucket onto the ground (kicked, or the pour was cancelled). On the authority it applies at once;
+        /// elsewhere pass the interactor that holds the bucket, since the authority only honours a spill asked by a current holder.
         /// </summary>
-        public void RequestSpill()
+        public void RequestSpill(PlayerInteractor holder = null)
         {
             if (!_isSpawned)
                 return;
 
             if (HasStateAuthority)
                 Full = false;
-            else
-                RPC_Spill();
+            else if (holder != null)
+                RPC_Spill(holder.Id);
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        private void RPC_Spill()
+        private void RPC_Spill(NetworkBehaviourId holderId, RpcInfo info = default)
         {
-            if (Full)
-                Full = false;
+            if (!Full || !Runner.TryFindBehaviour(holderId, out PlayerInteractor holder) || Carryable.FindHeldBy(holder) != _carryable)
+                return;
+
+            // Only the holder's own client may spill its bucket. A call made on this very peer carries no remote source.
+            var owner = holder.Object.StateAuthority;
+            if (info.Source != owner && !(info.Source == PlayerRef.None && Runner.LocalPlayer == owner))
+                return;
+
+            Full = false;
         }
 
         // Fires on every peer except at spawn, so the sounds are heard once and late joiners hear nothing.
+        // Outside the Playing phase (the match reset empties the bucket) it stays quiet.
         private void OnFullChanged()
         {
             ApplyWater();
-            (Full ? _fillSfx : _emptySfx).PlayAt(transform.position);
+            if (MatchManager.AllowsInteraction)
+                (Full ? _fillSfx : _emptySfx).PlayAt(transform.position);
         }
 
         private void ApplyWater()

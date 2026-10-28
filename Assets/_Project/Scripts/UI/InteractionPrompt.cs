@@ -75,6 +75,8 @@ namespace BetterTogether.UI
                 lines.Add("[E] Llenar cubeta");
             else if (fire != null && fire.CanPour(local))
                 lines.Add("[E] ¡Apagar fogata!");
+            else if (fire != null && fire.PourBlockedMessage(local) is { } pourBlocked)
+                lines.Add(pourBlocked);
             else
                 lines.Add(local.EdibleCarried != null ? "[E] Comer salchicha" : "[E] Soltar");
 

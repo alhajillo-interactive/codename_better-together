@@ -151,7 +151,7 @@ namespace BetterTogether.Combat
 
             // A kicked bucket spills; the release below then drops it empty.
             if (carried.TryGetComponent<WaterBucket>(out var bucket))
-                bucket.RequestSpill();
+                bucket.RequestSpill(_interactor);
 
             var position = transform.position;
             var toKicker = Vector3.ProjectOnPlane(kickerPosition - position, Vector3.up);

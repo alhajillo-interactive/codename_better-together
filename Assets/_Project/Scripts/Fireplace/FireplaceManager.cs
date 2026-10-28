@@ -21,7 +21,7 @@ namespace BetterTogether.Fireplace
     /// lights it again with the matches. The milestone (see <see cref="MatchStage"/>) is derived from <see cref="IsLit"/>.
     /// Master-client object: the state authority snaps logs and validates requests.
     /// </summary>
-    public class FireplaceManager : NetworkBehaviour, IInteractable, IPinSpot, IMatchResettable
+    public class FireplaceManager : NetworkBehaviour, IInteractable, IPinSpot, IMatchResettable, IStateAuthorityChanged
     {
         private const int MaxColliders = 64;
         private const float AreaHeight = 1.5f;
@@ -34,6 +34,9 @@ namespace BetterTogether.Fireplace
         private const float EjectWaitSeconds = 1f;
         private const float DouseFireScale = 0.35f;
         private const float FireScaleSmoothing = 12f;
+        private const string PouringText = "Vertiendo...";
+        private const string OtherPouringText = "Otro gnomo está vertiendo";
+        private const string GraceText = "Espera: acaba de encenderse";
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
         [FormerlySerializedAs("amountLabel")]
@@ -57,12 +60,16 @@ namespace BetterTogether.Fireplace
         [Header("Put out")]
         [Tooltip("A gnome with a full bucket must be closer than this to the fireplace (horizontally) to pour it.")]
         [SerializeField, Min(0f)] private float _pourRange = 2f;
+        [Tooltip("Extra metres of leeway when the authority checks a pour, since the gnome it sees lags behind the player who asked.")]
+        [SerializeField, Min(0f)] private float _pourTolerance = 0.5f;
         [Tooltip("Seconds a pour takes; the flames shrink meanwhile and anything that interrupts it spills the bucket.")]
         [SerializeField, Min(0.1f)] private float _pourTime = 0.8f;
         [Tooltip("Extra metres the pouring gnome may walk away before the pour is cancelled.")]
         [SerializeField, Min(0f)] private float _pourCancelSlack = 0.5f;
         [Tooltip("Seconds after the fire is lit during which it can't be put out, so the change of milestone can be read.")]
         [SerializeField, Min(0f)] private float _litGraceTime = 4f;
+        [Tooltip("Seconds after a master change during which the new authority does not snap loose logs into slots, so a log that was just ejected is not put back in by the new master (the ejection is local to the old authority).")]
+        [SerializeField, Min(0f)] private float _snapGraceAfterMigration = 3f;
         [Tooltip("Speed (m/s) at which a log jumps out of the fireplace when the fire is put out.")]
         [SerializeField, Min(0f)] private float _logEjectSpeed = 3f;
         [Tooltip("Angle above the ground (degrees) of the jump of that log.")]
@@ -122,6 +129,8 @@ namespace BetterTogether.Fireplace
         private Vector3 _ejectVelocity;
         private float _ejectUntil;
         private bool _ejectPending;
+        // Authority only: no snapping of loose logs until this time (set when the authority changes).
+        private float _snapBlockedUntil;
         private int _labelPercent = -1;
         private float _fireFactor = 1f;
         private Vector3 _fireScale = Vector3.one;
@@ -199,6 +208,17 @@ namespace BetterTogether.Fireplace
             UpdateFire();
         }
 
+        /// <summary>Called on every peer when the master changes; the new master holds off snapping loose logs for a moment.</summary>
+        public void StateAuthorityChanged()
+        {
+            if (!_isSpawned || !HasStateAuthority)
+                return;
+
+            _snapBlockedUntil = Time.time + _snapGraceAfterMigration;
+            _ejectedLog = null;
+            _ejectPending = false;
+        }
+
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             _isSpawned = false;
@@ -242,6 +262,29 @@ namespace BetterTogether.Fireplace
 
             var carried = who.Carried;
             return carried != null && carried.TryGetComponent<Matches>(out _);
+        }
+
+        /// <summary>
+        /// Why a gnome that stands in reach of the lit fire with a full bucket can't pour right now, in Spanish for the prompt,
+        /// or null when it is not blocked (or not in that situation at all). While it is not null the bucket must not be dropped.
+        /// Mirrors <see cref="CanPour(PlayerInteractor)"/> using the replicated state.
+        /// </summary>
+        public string PourBlockedMessage(PlayerInteractor who)
+        {
+            if (!_isSpawned || !MatchManager.AllowsInteraction || !IsLit || who.Role != PlayerRole.Gnome)
+                return null;
+
+            var carried = who.Carried;
+            if (carried == null || carried.HolderCount != 1 || !carried.TryGetComponent<WaterBucket>(out var bucket) || !bucket.IsFull)
+                return null;
+
+            if (IsDisabled(who) || HorizontalDistance(who.transform.position) > _pourRange)
+                return null;
+
+            if (PourTimer.IsRunning)
+                return Pourer == who ? PouringText : OtherPouringText;
+
+            return LitGrace.ExpiredOrNotRunning(Runner) ? null : GraceText;
         }
 
         /// <summary>Whether this gnome can start pouring its full bucket on the fire right now. Mirrors the authority's rules.</summary>
@@ -321,7 +364,7 @@ namespace BetterTogether.Fireplace
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         private void RPC_RequestPour(NetworkBehaviourId interactorId)
         {
-            if (!Runner.TryFindBehaviour(interactorId, out PlayerInteractor who) || !CanPour(who, _placeTolerance))
+            if (!Runner.TryFindBehaviour(interactorId, out PlayerInteractor who) || !CanPour(who, _pourTolerance))
                 return;
 
             PourBucket = who.Carried.GetComponent<WaterBucket>();
@@ -346,7 +389,7 @@ namespace BetterTogether.Fireplace
             if (!HasStateAuthority)
                 return;
 
-            if (MatchManager.AllowsInteraction)
+            if (MatchManager.AllowsInteraction && Time.time >= _snapBlockedUntil)
                 SnapRestingLogs();
             Carryable.GetPinnedTo(this, _pinned);
             LogsInside = _pinned.Count;
@@ -409,10 +452,8 @@ namespace BetterTogether.Fireplace
         {
             if (PourTimer.IsRunning)
                 PourTimer = default;
-            if (Pourer != null)
-                Pourer = null;
-            if (PourBucket != null)
-                PourBucket = null;
+            Pourer = null;
+            PourBucket = null;
         }
 
         // Authority only: unpins the log of the highest occupied slot. It is kinematic until the Carryable's own rule turns
@@ -574,7 +615,10 @@ namespace BetterTogether.Fireplace
             UpdateLabel();
             UpdateFire();
 
-            // OnChangedRender does not fire on spawn, so late joiners don't hear it.
+            // OnChangedRender does not fire on spawn, so late joiners don't hear it. A match reset (not Playing) stays quiet.
+            if (!MatchManager.AllowsInteraction)
+                return;
+
             if (IsLit)
                 _lightSfx.PlayAt(transform.position);
             else if (_smokePuff != null)

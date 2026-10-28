@@ -284,6 +284,11 @@ namespace BetterTogether.UI
                 return;
 
             _titleVariant = variant;
+
+            // A new variant is a new set of lines, not a state change of the old ones: no juice, no fail flash.
+            foreach (var line in _lines)
+                line.Known = false;
+
             _objectivesTitle.SetText(variant switch
             {
                 0 => "Hito 1 · Arma la fogata",
@@ -431,9 +436,11 @@ namespace BetterTogether.UI
                 return;
             }
 
-            var camper = PlayerCharacter.Local == null || PlayerCharacter.Local.Role == PlayerRole.Camper;
+            // No local player (yet) means no role: nothing is announced, and the state is still tracked.
+            var hasRole = PlayerCharacter.Local != null;
+            var camper = hasRole && PlayerCharacter.Local.Role == PlayerRole.Camper;
             var lit = fire.IsLit;
-            if (_hasFireState && playing && lit != _prevLit)
+            if (_hasFireState && playing && hasRole && lit != _prevLit)
             {
                 if (lit)
                 {
@@ -445,14 +452,14 @@ namespace BetterTogether.UI
                 }
                 else
                 {
-                    Announce(camper ? "¡Apagada! Que no la vuelva a prender" : "¡Apagada! Vuelve a encenderla", _failColor, true, 1.6f);
+                    Announce(camper ? "¡Apagada! Vuelve a encenderla" : "¡Apagada! Que no la vuelva a prender", _failColor, true, 1.6f);
                     Flash(new Color(0.3f, 0.5f, 1f, 0.25f), 0.4f);
                 }
             }
 
             // Warn the camper when the water starts to pour (not again right away if a pour is interrupted and restarted).
             var doused = fire.IsBeingDoused;
-            if (_hasFireState && playing && doused && !_prevDoused && Time.unscaledTime >= _nextDouseWarning && camper)
+            if (_hasFireState && playing && doused && !_prevDoused && hasRole && Time.unscaledTime >= _nextDouseWarning && camper)
             {
                 Announce("¡Te apagan la fogata!", _failColor);
                 _nextDouseWarning = Time.unscaledTime + 5f;

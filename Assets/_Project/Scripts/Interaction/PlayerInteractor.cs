@@ -124,6 +124,10 @@ namespace BetterTogether.Interaction
                 return;
             }
 
+            // A full bucket in reach of the fire but blocked (grace, a pour in progress) is kept: E must not drop it.
+            if (fire != null && fire.PourBlockedMessage(this) != null)
+                return;
+
             var edible = EdibleCarried;
             if (edible != null)
                 edible.RequestEat(this);
