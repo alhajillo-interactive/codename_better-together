@@ -345,6 +345,8 @@ namespace BetterTogether.Interaction
         {
             HolderA = null;
             HolderB = null;
+            // The caller places the item itself (pin, eat, reset): the lost-holder settle must not move it again.
+            _releaseHandled = true;
         }
 
         /// <summary>Authority only: rests the item on the spot (in <paramref name="slot"/> when it has several), kinematic, until someone grabs it.</summary>
