@@ -14,6 +14,9 @@ namespace BetterTogether.Player
         [Tooltip("Root of the visual model; every renderer under it is hidden for the local player (shadows stay).")]
         [SerializeField] private Transform _body;
 
+        /// <summary>Root of the visual model (may be null when the prefab has no model root).</summary>
+        public Transform Body => _body;
+
         public override void Spawned()
         {
             if (!HasStateAuthority)
