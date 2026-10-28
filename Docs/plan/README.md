@@ -82,7 +82,7 @@ Fase · Prioridad · Worker: modelo · Auditor: Opus · Iteraciones máx · Puli
 
 ## Estado (28 oct 2026)
 
-Rama de integración: `feature/fase-0`. V0 tras integrar el lote B (f5fc54d): compila sin errores ni warnings C# (`Tools/compile-check.ps1`). **Ninguna tarjeta tiene V2 hecha**: nadie ha jugado todavía esta rama en el editor. Ése es el siguiente paso.
+Rama de integración: `feature/fase-0`. V0 tras integrar el lote B y C0.4/C0.7 (6d9f4e8): compila sin errores ni warnings C# (`Tools/compile-check.ps1`). **Ninguna tarjeta tiene V2 hecha**: nadie ha jugado todavía esta rama en el editor. Ése es el siguiente paso.
 
 | Tarjeta | Estado | Dónde | Falta |
 | --- | --- | --- | --- |
@@ -93,6 +93,9 @@ Rama de integración: `feature/fase-0`. V0 tras integrar el lote B (f5fc54d): co
 | C1.9 Auditoría de flotantes | aprobada (falta V2), Opus vuelta 2 | a52e661 | V2 (pasos en la tarjeta) |
 | C1.0 Sostener en la vista | aprobada (falta V2), Opus vuelta 3 | 62d4b2f | V2 (pasos y deuda en la tarjeta) |
 | C1.H Hitos y agua | aprobada (falta V2), Opus vuelta 2 | 4e32333 | montaje en editor (cubeta, `WaterSource`, `Lit Grace Time` = 4) y 2 vueltas de playtest; decidir si soltar la cubeta la derrama |
-| C0.4, C0.6, C0.7, C0.8 | pendiente (lote C) | — | — |
+| C0.4 Telemetría | aprobada (falta V2), Opus vuelta 2 | 094e711 | V2 (12 pasos en la tarjeta); añadir eventos nuevos a Notion |
+| C0.7 HUD sin IMGUI | aprobada (falta V2), Opus vuelta 2 | 6d9f4e8 | ejecutar `GnoMore/Construir HUD de juego`, quitar componentes viejos de las escenas, decidir CampIsma; 2 vueltas de playtest |
+| C0.8 Predicción de presentación | en worker | — | auditoría, integrar, V2 con Network Conditions |
+| C0.6 Capas y máscaras | pendiente (persona en editor) | — | — |
 
-Orden propuesto para la sesión de V2: montar en el editor (`LevelBounds`, cubeta, `WaterSource`, `Fireplace`) → auditoría de flotantes en escena (C1.9) → partida de 3 min con PerfProbe (C0.1) → pasos de C0.2, C0.3, C0.5, C1.0 y C1.H.
+Orden propuesto para la sesión de V2: montar en el editor (`GnoMore/Construir HUD de juego`, quitar HUD viejo, `LevelBounds`, cubeta, `WaterSource`, `Fireplace`) → auditoría de flotantes en escena (C1.9) → partida de 3 min con PerfProbe (C0.1) y PlaytestLogger (C0.4) + `Tools/playtest-report.py` → pasos de C0.2, C0.3, C0.5, C1.0 y C1.H.
