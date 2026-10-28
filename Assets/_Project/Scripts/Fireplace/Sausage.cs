@@ -1,4 +1,5 @@
 using BetterTogether.Audio;
+using BetterTogether.Diagnostics;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
 using BetterTogether.Player;
@@ -48,6 +49,7 @@ namespace BetterTogether.Fireplace
         private Quaternion _spawnRotation;
         private CookState _shownState = (CookState)(-1);
         private bool _lastEaten;
+        private CookState _loggedState = (CookState)(-1); // Telemetry: last state seen, so only changes are logged.
 
         [Networked] private float CookTime { get; set; }
         [Networked] private NetworkBool IsEaten { get; set; }
@@ -97,6 +99,7 @@ namespace BetterTogether.Fireplace
             _spawnPosition = transform.position;
             _spawnRotation = transform.rotation;
             _lastEaten = IsEaten; // Late joiners don't hear a bite that already happened.
+            _loggedState = State;
             ApplyEaten();
             ApplyColor();
         }
@@ -144,6 +147,7 @@ namespace BetterTogether.Fireplace
             _carryable.ForceReleaseAll();
             IsEaten = true;
             ApplyEaten();
+            if (Telemetry.Enabled) Telemetry.Begin("sausage_eaten", who).Float("cook_s", CookTime).Send();
         }
 
         public override void FixedUpdateNetwork()
@@ -152,6 +156,7 @@ namespace BetterTogether.Fireplace
                 return;
 
             ApplyEaten();
+            if (Telemetry.Enabled) TrackCooking();
 
             var stranded = !IsEaten
                 && State == CookState.Burnt
@@ -185,8 +190,27 @@ namespace BetterTogether.Fireplace
                 _networkTransform.Teleport(_spawnPosition, _spawnRotation);
         }
 
+        // Telemetry only (authority): logs each change of cooking state. cook_s is the seconds cooked on a lit grill, which is
+        // the time since it was put on the grill without counting the time the fire was out (and survives a master change).
+        private void TrackCooking()
+        {
+            var state = State;
+            if (state == _loggedState)
+                return;
+
+            _loggedState = state;
+            Telemetry.Begin("sausage_state").Str("state", state == CookState.Burnt ? "burnt" : state == CookState.Cooked ? "cooked" : "raw")
+                .Bool("on_grill", _carryable.IsPinned).Float("cook_s", CookTime).Send();
+            if (state == CookState.Burnt)
+                Telemetry.Begin("sausage_burnt").Float("cook_s", CookTime).Send();
+        }
+
         public override void Render()
         {
+            // Non-authority peers follow the state silently, so a new master does not log a change that already happened.
+            if (!HasStateAuthority)
+                _loggedState = State;
+
             var eaten = IsEaten;
             if (eaten && !_lastEaten)
                 _eatSfx.PlayAt(transform.position);

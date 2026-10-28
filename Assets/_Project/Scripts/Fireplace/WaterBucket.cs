@@ -1,5 +1,6 @@
 using BetterTogether.Audio;
 using BetterTogether.Combat;
+using BetterTogether.Diagnostics;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
@@ -91,6 +92,7 @@ namespace BetterTogether.Fireplace
                 return;
 
             Full = true;
+            if (Telemetry.Enabled) Telemetry.Begin("bucket_fill", who).Send();
         }
 
         /// <summary>

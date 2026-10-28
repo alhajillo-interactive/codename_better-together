@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BetterTogether.Diagnostics;
 using BetterTogether.Player;
 using Fusion;
 using Unity.Cinemachine;
@@ -87,6 +88,7 @@ namespace BetterTogether.Combat
             var hit = _targets.Count > 0;
             _readyTime = Time.time + (hit ? _hitCooldown : _missCooldown);
             _movement.PlayKickAnimation();
+            if (Telemetry.Enabled) LogKick(hit);
 
             var forward = Flat(transform.forward).normalized;
             foreach (var target in _targets)
@@ -102,6 +104,26 @@ namespace BetterTogether.Combat
 
             if (hit && CameraPunch.Instance != null)
                 CameraPunch.Instance.PunchFov(_hitFovPunch, _hitFovPunchTime);
+        }
+
+        // Telemetry only: whether the kick landed, how many gnomes it reached and the distance to the nearest one.
+        private void LogKick(bool hit)
+        {
+            Kickable nearest = null;
+            var nearestDistance = float.MaxValue;
+            foreach (var target in _targets)
+            {
+                var distance = Flat(target.transform.position - transform.position).magnitude;
+                if (distance < nearestDistance)
+                {
+                    nearestDistance = distance;
+                    nearest = target;
+                }
+            }
+
+            var targetId = nearest != null && nearest.Object != null && nearest.Object.IsValid ? nearest.Object.StateAuthority.PlayerId : -1;
+            Telemetry.Begin("kick").Bool("hit", hit).Int("targets", _targets.Count).Int("target", targetId)
+                .Float("distance", nearest != null ? nearestDistance : -1f).Send();
         }
 
         private void FindTargets()

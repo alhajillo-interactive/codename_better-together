@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using BetterTogether.Audio;
 using BetterTogether.Combat;
+using BetterTogether.Diagnostics;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
@@ -359,6 +360,7 @@ namespace BetterTogether.Fireplace
             IsLit = true;
             LitGrace = TickTimer.CreateFromSeconds(Runner, _litGraceTime);
             ClearPour();
+            if (Telemetry.Enabled) Telemetry.Begin("fire_lit", who).Int("logs", LogsInside).Send();
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -370,6 +372,7 @@ namespace BetterTogether.Fireplace
             PourBucket = who.Carried.GetComponent<WaterBucket>();
             Pourer = who;
             PourTimer = TickTimer.CreateFromSeconds(Runner, _pourTime);
+            if (Telemetry.Enabled) Telemetry.Begin("pour_start", who).Send();
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -382,6 +385,7 @@ namespace BetterTogether.Fireplace
             var slot = NearestFreeSlot(log.transform.position, true);
             log.ForceReleaseAll();
             log.Pin(this, slot);
+            if (Telemetry.Enabled) LogWood("log_in_zone", log, "place", who);
         }
 
         public override void FixedUpdateNetwork()
@@ -414,6 +418,7 @@ namespace BetterTogether.Fireplace
             var bucket = PourBucket;
             if (!IsLit || !IsPourValid(bucket))
             {
+                if (Telemetry.Enabled) LogPourCancelled(bucket);
                 if (bucket != null)
                     bucket.RequestSpill();
                 ClearPour();
@@ -440,6 +445,7 @@ namespace BetterTogether.Fireplace
         // The water is out: the fire dies, the bucket is empty and one log jumps out, so lighting it again takes a log and matches.
         private void FinishPour(WaterBucket bucket)
         {
+            if (Telemetry.Enabled) LogDoused();
             bucket.RequestSpill();
             ClearPour();
             IsLit = false;
@@ -481,6 +487,54 @@ namespace BetterTogether.Fireplace
             _ejectPending = true;
             _ejectUntil = Time.time + EjectWaitSeconds;
             top.Unpin();
+            if (Telemetry.Enabled) LogWood("log_out_zone", top, "eject", null);
+        }
+
+        // Telemetry only (authority). The log count is read from the pinned logs, so it is already the resulting count.
+        private void LogWood(string evt, Carryable log, string how, PlayerInteractor actor)
+        {
+            Carryable.GetPinnedTo(this, _pinned);
+            var e = actor != null ? Telemetry.Begin(evt, actor) : Telemetry.Begin(evt);
+            e.Int("log", (int)log.Object.Id.Raw).Int("count", _pinned.Count).Str("how", how).Send();
+        }
+
+        // Telemetry only (authority): the pour reached its end, so the fire goes out. Called before the pour state is cleared.
+        private void LogDoused()
+        {
+            var pourer = Pourer;
+            var valid = pourer != null && pourer.Object != null && pourer.Object.IsValid;
+            var e = valid ? Telemetry.Begin("pour_end", pourer) : Telemetry.Begin("pour_end");
+            e.Str("result", "doused").Str("reason", "none").Send();
+            var f = valid ? Telemetry.Begin("fire_out", pourer) : Telemetry.Begin("fire_out");
+            f.Int("logs", LogsInside).Int("extinguish", ExtinguishCount + 1).Send();
+        }
+
+        // Telemetry only (authority): the pour was interrupted. The reason mirrors the checks of IsPourValid.
+        private void LogPourCancelled(WaterBucket bucket)
+        {
+            var pourer = Pourer;
+            var pourerValid = pourer != null && pourer.Object != null && pourer.Object.IsValid;
+            var bucketValid = bucket != null && bucket.Object != null && bucket.Object.IsValid;
+            string reason;
+            if (!IsLit)
+                reason = "fire_out";
+            else if (!pourerValid)
+                reason = "pourer_left";
+            else if (!bucketValid)
+                reason = "bucket_gone";
+            else if (!MatchManager.AllowsInteraction)
+                reason = "match_over";
+            else if (!bucket.IsFull)
+                reason = "bucket_empty";
+            else if (Carryable.FindHeldBy(pourer) != bucket.Carryable)
+                reason = "bucket_dropped";
+            else if (IsDisabled(pourer))
+                reason = "stunned_or_stone";
+            else
+                reason = "too_far";
+
+            var e = pourerValid ? Telemetry.Begin("pour_end", pourer) : Telemetry.Begin("pour_end");
+            e.Str("result", "cancelled").Str("reason", reason).Send();
         }
 
         // Gives the jump to the ejected log once it is under physics; gives up if that takes too long.
@@ -534,6 +588,7 @@ namespace BetterTogether.Fireplace
 
                 log.Pin(this, slot);
                 _occupied[slot] = true;
+                if (Telemetry.Enabled) LogWood("log_in_zone", log, "snap", null);
             }
         }
 

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using BetterTogether.Audio;
 using BetterTogether.Combat;
+using BetterTogether.Diagnostics;
 using BetterTogether.Fireplace;
 using BetterTogether.Gaze;
 using BetterTogether.Player;
@@ -10,6 +11,15 @@ using UnityEngine;
 
 namespace BetterTogether.Interaction
 {
+    /// <summary>Why an item left a holder's hands. Sent with the release request and recorded by the playtest telemetry.</summary>
+    public enum DropReason : byte
+    {
+        Voluntary,
+        Kick,
+        Distance,
+        Respawn,
+    }
+
     /// <summary>
     /// An object players can pick up and put down. The camper carries anything alone; big items need several gnomes.
     /// Master-client object: the state authority is the single arbiter of grabs and releases (via RPCs),
@@ -335,10 +345,14 @@ namespace BetterTogether.Interaction
             RPC_RequestGrab(interactor.Id);
         }
 
-        public void RequestRelease(PlayerInteractor who) => RPC_RequestRelease(who.Id, false, default);
+        public void RequestRelease(PlayerInteractor who) => RPC_RequestRelease(who.Id, false, default, DropReason.Voluntary);
+
+        /// <summary>Releases the item for a reason other than the holder's own choice (e.g. the holder is about to respawn).</summary>
+        public void RequestRelease(PlayerInteractor who, DropReason reason) => RPC_RequestRelease(who.Id, false, default, reason);
 
         /// <summary>Releases the item and moves it to <paramref name="dropPoint"/> first (e.g. knocked out of a kicked gnome's hands).</summary>
-        public void RequestRelease(PlayerInteractor who, Vector3 dropPoint) => RPC_RequestRelease(who.Id, true, dropPoint);
+        public void RequestRelease(PlayerInteractor who, Vector3 dropPoint, DropReason reason = DropReason.Kick) =>
+            RPC_RequestRelease(who.Id, true, dropPoint, reason);
 
         /// <summary>Authority only: makes every holder let go.</summary>
         public void ForceReleaseAll()
@@ -375,6 +389,7 @@ namespace BetterTogether.Interaction
             if (!HasStateAuthority)
                 return;
 
+            if (Telemetry.Enabled && announce) LogDropAll(DropReason.Respawn);
             WasHandled = false;
             LastHeldByCamper = false;
             ForceReleaseAll();
@@ -478,6 +493,7 @@ namespace BetterTogether.Interaction
             if (info.Source != giver && !(info.Source == PlayerRef.None && Runner.LocalPlayer == giver))
                 return;
 
+            if (Telemetry.Enabled) { Telemetry.Begin("drop", from).Str("object", _displayName).Int("holders", 0).Str("reason", ReasonName(DropReason.Voluntary)).Send(); Telemetry.Begin("pickup", to).Str("object", _displayName).Int("holders", 1).Send(); }
             HolderA = to;
             HolderB = null;
         }
@@ -494,10 +510,12 @@ namespace BetterTogether.Interaction
                 HolderA = who;
             else
                 HolderB = who;
+
+            if (Telemetry.Enabled) Telemetry.Begin("pickup", who).Str("object", _displayName).Int("holders", HolderCount).Send();
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        private void RPC_RequestRelease(NetworkBehaviourId interactorId, NetworkBool hasDropPoint, Vector3 dropPoint)
+        private void RPC_RequestRelease(NetworkBehaviourId interactorId, NetworkBool hasDropPoint, Vector3 dropPoint, DropReason reason)
         {
             if (!Runner.TryFindBehaviour(interactorId, out PlayerInteractor who) || !IsHeldBy(who))
                 return;
@@ -516,7 +534,24 @@ namespace BetterTogether.Interaction
                 HolderB = null;
 
             Compact();
+            if (Telemetry.Enabled) Telemetry.Begin("drop", who).Str("object", _displayName).Int("holders", HolderCount).Str("reason", ReasonName(reason)).Send();
         }
+
+        // Telemetry only. Authority: one drop row per current holder, before they let go.
+        private void LogDropAll(DropReason reason)
+        {
+            var count = HolderCount;
+            for (var i = 0; i < count; i++)
+                Telemetry.Begin("drop", Holder(i)).Str("object", _displayName).Int("holders", 0).Str("reason", ReasonName(reason)).Send();
+        }
+
+        private static string ReasonName(DropReason reason) => reason switch
+        {
+            DropReason.Kick => "kick",
+            DropReason.Distance => "distance",
+            DropReason.Respawn => "respawn",
+            _ => "voluntary",
+        };
 
         // Authority only. The release pose is computed explicitly (the hold pose with its retraction, no local smoothing),
         // moved to the drop point if given, then settled by a sweep outside the holder's capsule and out of any geometry.
@@ -686,11 +721,13 @@ namespace BetterTogether.Interaction
 
             if (HolderCount == 2 && HorizontalDistance(Holder(0).transform.position, Holder(1).transform.position) > _maxGnomeSpan)
             {
+                if (Telemetry.Enabled) LogDropAll(DropReason.Distance);
                 HolderA = null;
                 HolderB = null;
             }
             else if (HolderCount == 1 && !IsMoving && DistanceToHolder(Holder(0)) > _maxSoloGrabDistance)
             {
+                if (Telemetry.Enabled) LogDropAll(DropReason.Distance);
                 HolderA = null;
             }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BetterTogether.Diagnostics;
 using BetterTogether.Fireplace;
 using BetterTogether.Networking;
 using BetterTogether.Player;
@@ -101,6 +102,27 @@ namespace BetterTogether.Match
         }
 
         public float MatchDuration => _matchDuration;
+
+        /// <summary>
+        /// Network tick at which the current match started (end of the countdown), derived from the replicated timers so
+        /// every peer computes the same value (to within a tick); 0 outside the countdown and the match. Telemetry only.
+        /// </summary>
+        public int StartTick
+        {
+            get
+            {
+                if (!_isSpawned)
+                    return 0;
+
+                if (CurrentPhase == MatchPhase.Countdown && PhaseTimer.TargetTick.HasValue)
+                    return PhaseTimer.TargetTick.Value;
+
+                if (CurrentPhase == MatchPhase.Playing && MatchTimer.TargetTick.HasValue)
+                    return MatchTimer.TargetTick.Value - Mathf.RoundToInt(_matchDuration * Runner.TickRate);
+
+                return 0;
+            }
+        }
 
         public bool AutoStart => _autoStart;
 
@@ -230,6 +252,7 @@ namespace BetterTogether.Match
             PhaseTimer = default;
             CurrentPhase = MatchPhase.Playing;
             MatchTimer = TickTimer.CreateFromSeconds(Runner, _matchDuration);
+            if (Telemetry.Enabled) Telemetry.Begin("match_start").Int("players", PlayerCount).Int("camper", CurrentCamper.PlayerId).Send();
         }
 
         private void UpdatePlaying()
@@ -242,6 +265,7 @@ namespace BetterTogether.Match
 
         private void End(MatchResult result)
         {
+            if (Telemetry.Enabled) Telemetry.Begin("match_end").Str("result", result == MatchResult.CamperWins ? "camper_wins" : "gnomes_win").Str("cause", result == MatchResult.CamperWins ? "sausage_eaten" : "timeout").Float("duration", Telemetry.T).Send();
             CurrentResult = result;
             MatchTimer = default;
             CurrentPhase = MatchPhase.Ended;

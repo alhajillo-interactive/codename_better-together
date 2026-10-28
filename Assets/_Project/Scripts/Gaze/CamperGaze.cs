@@ -3,6 +3,7 @@ using BetterTogether.Interaction;
 using BetterTogether.Match;
 using BetterTogether.Networking;
 using BetterTogether.Player;
+using BetterTogether.Diagnostics;
 using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -358,6 +359,7 @@ namespace BetterTogether.Gaze
 
             if (current != null)
             {
+                if (Telemetry.Enabled) LogEscape(current);
                 Target = null;
                 LockFull = false;
                 _retargetTimer = _retargetDelay;
@@ -386,6 +388,7 @@ namespace BetterTogether.Gaze
         // Same as losing sight: the gnome is released at once.
         private void ReleaseLock()
         {
+            if (Telemetry.Enabled && Target != null) LogEscape(Target);
             Target = null;
             LockFull = false;
             _retargetTimer = 0f;
@@ -394,10 +397,20 @@ namespace BetterTogether.Gaze
 
         private void ClearLock()
         {
+            if (Telemetry.Enabled && Target != null) LogEscape(Target);
             Target = null;
             LockFull = false;
             _retargetTimer = 0f;
             _lostSightTime = 0f;
+        }
+
+        // Telemetry only (camper's client): the lock on a gnome was lost before it filled, so the gnome got away.
+        private void LogEscape(Petrifiable gnome)
+        {
+            if (gnome.IsStone || DerivedLockFill >= 1f || gnome.Object == null || !gnome.Object.IsValid)
+                return;
+
+            Telemetry.Begin("freeze_escape").Int("gnome", gnome.Object.StateAuthority.PlayerId).Float("lock", DerivedLockFill).Send();
         }
 
         // The current target is kept inside the widened cone; a frozen one also survives a short moment out of sight.
