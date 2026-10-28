@@ -96,7 +96,14 @@ namespace BetterTogether.Interaction
         public float Reach => _reach;
         public PlayerRole Role => _character.Role;
 
+        /// <summary>What the replicated state says this player holds. Game logic reads this one; it never includes a prediction.</summary>
         public Carryable Carried => Carryable.FindHeldBy(this);
+
+        /// <summary>
+        /// HUD only: what the local presentation shows in the hands, counting a grab that is predicted but not confirmed yet
+        /// and ignoring an item that was just released or placed. Never use it for game rules.
+        /// </summary>
+        public Carryable CarriedOrPredicted => Carryable.FindHeldOrPredictedBy(this);
         public IInteractable Focused { get; private set; }
 
         /// <summary>The cooked sausage this player is holding and can eat, if any.</summary>
@@ -285,6 +292,14 @@ namespace BetterTogether.Interaction
 
             // Stunned or frozen (watched by the camper) players can't pick anything up or drop it.
             if (_movement != null && (_movement.IsStunned || _movement.IsFrozen))
+            {
+                Focused = null;
+                return;
+            }
+
+            // A grab the authority has not confirmed yet: the item is already drawn in the hands, so the interact key does
+            // nothing until then (and the item behind it must not be focused, or a double press would take two).
+            if (Carried == null && CarriedOrPredicted != null)
             {
                 Focused = null;
                 return;

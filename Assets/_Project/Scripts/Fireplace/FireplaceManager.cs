@@ -346,7 +346,19 @@ namespace BetterTogether.Fireplace
         /// <summary>Asks the authority to put the carried log into the nearest free slot.</summary>
         public void RequestPlace(PlayerInteractor who)
         {
+            // The log starts flying to the slot the ghost shows as soon as the key is pressed; the authority still decides.
+            var carried = who.Carried;
+            if (carried != null && carried.HasPrediction)
+                return;
+
             RPC_RequestPlace(who.Id);
+            if (carried != null && !HasStateAuthority)
+            {
+                var slot = NearestFreeSlot(carried.transform.position, true);
+                if (slot >= 0)
+                    carried.PredictPin(this, slot);
+            }
+
             if (CameraPunch.Instance != null)
                 CameraPunch.Instance.PunchFov(PlaceFovPunch, PlaceFovPunchTime);
         }
@@ -821,10 +833,17 @@ namespace BetterTogether.Fireplace
             var hinted = FindHintedSlot();
             if (hinted < 0)
                 RefreshOccupied(); // A hint already refreshed it.
+
+            // A log of the local player that is already flying to a slot (predicted) hides that slot's ghost.
+            var predictedSlot = -1;
+            var localPlayer = PlayerInteractor.Local;
+            var flying = localPlayer != null ? localPlayer.Carried : null;
+            if (flying != null)
+                flying.TryGetPredictedPin(this, out predictedSlot);
             var pulse = Mathf.Sin(Time.time * HintPulseHz * Mathf.PI * 2f) * 0.5f + 0.5f;
             for (var i = 0; i < _ghostRenderers.Length; i++)
             {
-                var show = !_occupied[i];
+                var show = !_occupied[i] && i != predictedSlot;
                 if (_ghostRenderers[i].enabled != show)
                     _ghostRenderers[i].enabled = show;
                 if (!show)
@@ -848,7 +867,9 @@ namespace BetterTogether.Fireplace
             if (local == null || !CanPlace(local))
                 return -1;
 
-            return NearestFreeSlot(local.Carried.transform.position, true);
+            // The log is already flying to its slot (predicted): stop pulsing the hint.
+            var carried = local.Carried;
+            return carried.HasPrediction ? -1 : NearestFreeSlot(carried.transform.position, true);
         }
 
         private void OnDrawGizmos()

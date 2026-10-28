@@ -46,6 +46,7 @@ namespace BetterTogether.UI
         private bool _lastStunned;
         private bool _lastRiding;
         private bool _lastKickReady;
+        private bool _lastConfirmed;
 
         private bool _valid;
         private float _nextRefresh;
@@ -102,19 +103,21 @@ namespace BetterTogether.UI
         private bool DecidingStateChanged(PlayerInteractor local)
         {
             var focused = local.Focused;
-            var carried = local.Carried;
+            var carried = local.CarriedOrPredicted;
             var stunned = local.TryGetComponent<Kickable>(out var kickable) && kickable.IsStunned;
             var stack = GnomeStack.Local;
             var riding = stack != null && stack.IsRiding;
             var aimed = stack != null ? stack.Aimed : null;
             var kickReady = CamperKick.Local is { HasTargetInRange: true, IsReady: true };
+            var confirmed = local.Carried != null;
 
             var changed = !ReferenceEquals(focused, _lastFocused)
                           || carried != _lastCarried
                           || stunned != _lastStunned
                           || riding != _lastRiding
                           || aimed != _lastAimed
-                          || kickReady != _lastKickReady;
+                          || kickReady != _lastKickReady
+                          || confirmed != _lastConfirmed;
 
             _lastFocused = focused;
             _lastCarried = carried;
@@ -122,6 +125,7 @@ namespace BetterTogether.UI
             _lastRiding = riding;
             _lastAimed = aimed;
             _lastKickReady = kickReady;
+            _lastConfirmed = confirmed;
             return changed;
         }
 
@@ -154,7 +158,7 @@ namespace BetterTogether.UI
         private static string ResolveText(PlayerInteractor local)
         {
             string text = null;
-            var carried = local.Carried;
+            var carried = local.CarriedOrPredicted;
             if (local.TryGetComponent<Kickable>(out var kickable) && kickable.IsStunned)
             {
                 text = "¡Aturdido!";
@@ -180,7 +184,8 @@ namespace BetterTogether.UI
             }
             else if (carried != null)
             {
-                text = BuildCarriedText(local, carried);
+                // Grab not confirmed yet: E does nothing, so no key is shown until the authority answers.
+                text = local.Carried == null ? $"Tomando {carried.DisplayName}..." : BuildCarriedText(local, carried);
             }
 
             return text;

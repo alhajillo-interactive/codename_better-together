@@ -58,7 +58,18 @@ namespace BetterTogether.Fireplace
                 && !sausage.Eaten;
         }
 
-        public void Interact(PlayerInteractor interactor) => RPC_RequestPlace(interactor.Id);
+        public void Interact(PlayerInteractor interactor)
+        {
+            var carried = interactor.Carried;
+            if (carried != null && carried.HasPrediction)
+                return;
+
+            RPC_RequestPlace(interactor.Id);
+
+            // The sausage starts flying to the grill right away; the authority still decides.
+            if (carried != null && !HasStateAuthority)
+                carried.PredictPin(this);
+        }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         private void RPC_RequestPlace(NetworkBehaviourId interactorId)
