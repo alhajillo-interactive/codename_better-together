@@ -372,7 +372,7 @@ namespace BetterTogether.Interaction
             _outsideSince = -1f;
 
             // A prediction belongs to a peer that is not the authority; the replicated state rules from now on.
-            var wasPresenting = _prediction != PredictionKind.None || _blending;
+            var wasPresenting = _prediction != PredictionKind.None || _reconcileBlend;
             ClearPrediction(!HasStateAuthority);
             if (HasStateAuthority && wasPresenting && HolderCount == 0 && !IsPinned)
             {
@@ -1299,8 +1299,9 @@ namespace BetterTogether.Interaction
         /// <summary>Whether this item is flying to <paramref name="spot"/> in the local presentation, and which slot (HUD ghosts).</summary>
         public bool TryGetPredictedPin(NetworkBehaviour spot, out int slot)
         {
-            slot = _predictedSlot;
-            return _prediction == PredictionKind.Place && _predictedSpot == spot;
+            var predicted = _prediction == PredictionKind.Place && _predictedSpot == spot;
+            slot = predicted ? _predictedSlot : -1;
+            return predicted;
         }
 
         // Ends the local prediction. With reconcile, the item flies from where it is drawn back to its replicated pose.
