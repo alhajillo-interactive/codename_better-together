@@ -1,6 +1,8 @@
-// Editor-only scene audit (C1.9). Run it from the menu GnoMore/Auditar flotantes en escena: it lists the renderers of the
-// open scene that float above the ground, sink into it, or are tall props with no collider at all. It only reports,
-// one console line per finding with the object as context, and never moves or edits anything.
+// Editor-only scene audit (C1.9). Run it from the menu GnoMore/Auditar flotantes en escena: it groups the renderers of the
+// open scene by prop and lists the props that float above the ground, sink below it (centre under the ground), or are
+// tall with no collider at all. It only reports, one console line per finding with the object as context, and never
+// moves or edits anything.
+using System.Collections.Generic;
 using BetterTogether.Helpers;
 using BetterTogether.Interaction;
 using BetterTogether.Player;
@@ -14,13 +16,13 @@ namespace BetterTogether.EditorTools
     {
         private const string LogPrefix = "[FloatingAudit]";
 
-        // Gap (m) above which an object counts as floating or sinking.
+        // Gap (m) above which a prop counts as floating or sinking.
         private const float FloatTolerance = 0.05f;
 
         // Probes start this far above the bottom (or the top) of the bounds, so they do not begin inside a collider.
         private const float ProbeLift = 0.05f;
 
-        // Ground farther than this below the object is not considered.
+        // Ground farther than this below the prop is not considered.
         private const float ProbeDistance = 200f;
 
         // Props taller than this (m) with no collider at all are listed apart, because players walk through them.
@@ -37,38 +39,43 @@ namespace BetterTogether.EditorTools
             Physics.SyncTransforms();
 
             var renderers = Object.FindObjectsByType<Renderer>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
-            var reported = new System.Collections.Generic.HashSet<int>();
-            var floating = 0;
-            var sinking = 0;
-            var colliderless = 0;
 
+            // Pass 1: the distinct props that own at least one auditable renderer.
+            var rootIds = new HashSet<int>();
+            var roots = new List<Transform>();
             for (var i = 0; i < renderers.Length; i++)
             {
                 var renderer = renderers[i];
                 if (!IsAuditable(renderer))
                     continue;
 
-                // One line per GameObject, even when it has several renderers.
-                var owner = renderer.gameObject;
-                if (!reported.Add(owner.GetInstanceID()))
+                var root = PropRoot(renderer.gameObject);
+                if (rootIds.Add(root.GetInstanceID()))
+                    roots.Add(root);
+            }
+
+            // Pass 2: one test per prop, on the bounds of all its visible renderers (LOD0 only where there is a LODGroup).
+            var floating = 0;
+            var sinking = 0;
+            var colliderless = 0;
+            for (var i = 0; i < roots.Count; i++)
+            {
+                var root = roots[i];
+                if (!TryGetPropBounds(root, out var bounds))
                     continue;
 
-                if (!HasCollider(renderer))
+                var owner = root.gameObject;
+                var center = bounds.center;
+
+                if (!HasOwnCollider(root) && bounds.size.y > ColliderlessMinHeight && owner.layer == 0)
                 {
-                    if (renderer.bounds.size.y > ColliderlessMinHeight && owner.layer == 0)
-                    {
-                        colliderless++;
-                        Debug.LogWarning($"{LogPrefix} SIN COLISIÓN: {owner.name} ({renderer.bounds.size.y:0.0} m de alto)", owner);
-                    }
+                    colliderless++;
+                    Debug.LogWarning($"{LogPrefix} SIN COLISIÓN: {owner.name} ({bounds.size.y:0.0} m de alto)", owner);
                 }
 
-                var bounds = renderer.bounds;
-                var center = bounds.center;
-                var self = OwnerRoot(renderer.transform);
-
-                // Floating: the ground under the bottom of the bounds, probed from just above it.
+                // Floating: the ground under the centre of the bottom, probed from just above it.
                 var bottomOrigin = new Vector3(center.x, bounds.min.y + ProbeLift, center.z);
-                if (TryGround(self, bottomOrigin, out var groundY))
+                if (TryGround(root, bottomOrigin, out var groundY))
                 {
                     var gap = bounds.min.y - groundY;
                     if (gap > FloatTolerance)
@@ -80,28 +87,41 @@ namespace BetterTogether.EditorTools
                     }
                 }
 
-                // Sinking: the surface under the top of the bounds lies above the bottom, so the base is below ground.
-                var topOrigin = new Vector3(center.x, bounds.max.y + ProbeLift, center.z);
-                if (TryGround(self, topOrigin, out var surfaceY) && surfaceY - bounds.min.y > FloatTolerance)
+                // Sinking: the centre lies below the ground under it (terrain first, otherwise the nearest surface below the top).
+                if (GroundHeight(root, center, bounds.max.y, out var groundAtCenter) && center.y < groundAtCenter - FloatTolerance)
                 {
                     sinking++;
-                    Debug.LogWarning($"{LogPrefix} HUNDIDO {(surfaceY - bounds.min.y) * 100f:0} cm: {owner.name}", owner);
-                    Debug.DrawLine(new Vector3(center.x, bounds.min.y, center.z), new Vector3(center.x, surfaceY, center.z), Color.magenta, LineDuration);
+                    Debug.LogWarning($"{LogPrefix} HUNDIDO {(groundAtCenter - center.y) * 100f:0} cm (centro bajo el suelo): {owner.name}", owner);
+                    Debug.DrawLine(new Vector3(center.x, center.y, center.z), new Vector3(center.x, groundAtCenter, center.z), Color.magenta, LineDuration);
                 }
             }
 
             var total = floating + sinking + colliderless;
             var summary = total == 0 ? "Sin hallazgos." : "Revisa los avisos anteriores; clic en cada uno selecciona el objeto.";
-            Debug.Log($"{LogPrefix} {floating} flotantes, {sinking} hundidos (base bajo el suelo), {colliderless} sin colisión en '{SceneManager.GetActiveScene().name}'. {summary}");
+            Debug.Log($"{LogPrefix} {floating} flotantes, {sinking} hundidos (centro bajo el suelo), {colliderless} sin colisión en '{SceneManager.GetActiveScene().name}'. {summary}");
         }
 
-        /// <summary>Skips objects that are not part of the level audit: inactive, UI, dynamic items and characters, and markers.</summary>
+        /// <summary>
+        /// The prop a renderer belongs to: the outermost prefab instance root when the object is a prefab instance, otherwise
+        /// the object itself. Climbing to an ancestor is not done for plain objects: a level group with a renderer would
+        /// merge unrelated props into one.
+        /// </summary>
+        private static Transform PropRoot(GameObject go)
+        {
+            var outermost = PrefabUtility.GetOutermostPrefabInstanceRoot(go);
+            return (outermost != null ? outermost : go).transform;
+        }
+
+        /// <summary>Skips objects that are not part of the level audit: inactive, UI, dynamic items, characters, markers and hidden helpers.</summary>
         private static bool IsAuditable(Renderer renderer)
         {
             if (!renderer.enabled || !renderer.gameObject.activeInHierarchy)
                 return false;
 
             if (renderer is ParticleSystemRenderer || renderer is TrailRenderer || renderer is LineRenderer)
+                return false;
+
+            if ((renderer.gameObject.hideFlags & (HideFlags.HideInHierarchy | HideFlags.DontSave)) != 0)
                 return false;
 
             var uiLayer = LayerMask.NameToLayer("UI");
@@ -114,23 +134,68 @@ namespace BetterTogether.EditorTools
             return renderer.GetComponentInParent<IntentionallyFloating>(true) == null;
         }
 
-        private static bool HasCollider(Renderer renderer) =>
-            renderer.GetComponentInParent<Collider>(true) != null || renderer.GetComponentInChildren<Collider>(true) != null;
-
-        /// <summary>The nearest ancestor (or the object itself) that has a collider or a rigidbody. Its colliders are not probed against.</summary>
-        private static Transform OwnerRoot(Transform start)
+        /// <summary>
+        /// Union of the bounds of the prop's visible renderers. Where a LODGroup exists only its LOD0 renderers count.
+        /// Returns false when there is nothing to measure.
+        /// </summary>
+        private static bool TryGetPropBounds(Transform root, out Bounds bounds)
         {
-            for (var t = start; t != null; t = t.parent)
+            bounds = default;
+
+            var hiddenByLod = new HashSet<Renderer>();
+            var lodGroups = root.GetComponentsInChildren<LODGroup>(true);
+            for (var g = 0; g < lodGroups.Length; g++)
             {
-                if (t.TryGetComponent(out Collider _) || t.TryGetComponent(out Rigidbody _))
-                    return t;
+                var lods = lodGroups[g].GetLODs();
+                for (var level = 1; level < lods.Length; level++)
+                {
+                    var levelRenderers = lods[level].renderers;
+                    for (var r = 0; r < levelRenderers.Length; r++)
+                    {
+                        if (levelRenderers[r] != null)
+                            hiddenByLod.Add(levelRenderers[r]);
+                    }
+                }
             }
 
-            return start;
+            var renderers = root.GetComponentsInChildren<Renderer>(false);
+            var found = false;
+            for (var i = 0; i < renderers.Length; i++)
+            {
+                var renderer = renderers[i];
+                if (!IsAuditable(renderer) || hiddenByLod.Contains(renderer))
+                    continue;
+
+                if (!found)
+                {
+                    bounds = renderer.bounds;
+                    found = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(renderer.bounds);
+                }
+            }
+
+            return found;
         }
 
-        /// <summary>Height of the nearest collider below <paramref name="origin"/> that is not part of <paramref name="self"/>.</summary>
-        private static bool TryGround(Transform self, Vector3 origin, out float surfaceY)
+        /// <summary>True when the prop has a solid collider of its own (not a trigger, not terrain).</summary>
+        private static bool HasOwnCollider(Transform root)
+        {
+            var colliders = root.GetComponentsInChildren<Collider>(true);
+            for (var i = 0; i < colliders.Length; i++)
+            {
+                var collider = colliders[i];
+                if (!collider.isTrigger && !(collider is TerrainCollider))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>Nearest surface below <paramref name="origin"/>, ignoring the prop's own colliders.</summary>
+        private static bool TryGround(Transform root, Vector3 origin, out float surfaceY)
         {
             surfaceY = 0f;
             var count = Physics.RaycastNonAlloc(origin, Vector3.down, Hits, ProbeDistance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
@@ -138,7 +203,7 @@ namespace BetterTogether.EditorTools
             for (var i = 0; i < count; i++)
             {
                 var hit = Hits[i];
-                if (hit.collider == null || hit.collider.transform.IsChildOf(self))
+                if (hit.collider == null || hit.collider.transform.IsChildOf(root))
                     continue;
 
                 if (hit.distance < nearest)
@@ -149,6 +214,56 @@ namespace BetterTogether.EditorTools
             }
 
             return nearest < float.MaxValue;
+        }
+
+        /// <summary>
+        /// Ground height at <paramref name="point"/>: the terrain when one covers it, otherwise the nearest surface below
+        /// <paramref name="topY"/> (surfaces above the top of the prop are ignored).
+        /// </summary>
+        private static bool GroundHeight(Transform root, Vector3 point, float topY, out float groundY)
+        {
+            if (TryTerrainHeight(point, out groundY))
+                return true;
+
+            var origin = new Vector3(point.x, topY + ProbeLift, point.z);
+            var count = Physics.RaycastNonAlloc(origin, Vector3.down, Hits, ProbeDistance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            var nearest = float.MaxValue;
+            for (var i = 0; i < count; i++)
+            {
+                var hit = Hits[i];
+                if (hit.collider == null || hit.collider.transform.IsChildOf(root) || hit.point.y > topY)
+                    continue;
+
+                if (hit.distance < nearest)
+                {
+                    nearest = hit.distance;
+                    groundY = hit.point.y;
+                }
+            }
+
+            return nearest < float.MaxValue;
+        }
+
+        private static bool TryTerrainHeight(Vector3 point, out float height)
+        {
+            height = 0f;
+            var terrains = Terrain.activeTerrains;
+            for (var i = 0; i < terrains.Length; i++)
+            {
+                var terrain = terrains[i];
+                if (terrain == null || terrain.terrainData == null)
+                    continue;
+
+                var origin = terrain.GetPosition();
+                var size = terrain.terrainData.size;
+                if (point.x < origin.x || point.x > origin.x + size.x || point.z < origin.z || point.z > origin.z + size.z)
+                    continue;
+
+                height = terrain.SampleHeight(point) + origin.y;
+                return true;
+            }
+
+            return false;
         }
     }
 }

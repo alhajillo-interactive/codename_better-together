@@ -1,5 +1,5 @@
 // In-game grounding audit (C1.9). Press F4 to list loose items that float or sink, pinned items off their spot,
-// visuals that do not match their colliders and characters whose feet float or sink. It only reports: it never moves,
+// visuals that do not match their colliders and characters whose feet or root float. It only reports: it never moves,
 // networks or changes anything. Compiles to nothing in release builds.
 #if (UNITY_EDITOR || DEVELOPMENT_BUILD) && FUSION_WEAVER
 using System.Collections.Generic;
@@ -17,8 +17,8 @@ namespace BetterTogether.Diagnostics
     /// <summary>
     /// Read-only scan for grounding problems, run every half second while F4 is on. Created automatically in the Editor
     /// and development builds, like <see cref="PerfProbe"/>. Findings are listed on screen (bottom left) and each one is
-    /// logged once when it first appears, with the object as context. Loose-item floating is only checked on the state
-    /// authority, because <see cref="Carryable.FreeTime"/> is only known there.
+    /// logged once per F4 session, the first time it appears, with the object as context. Loose items are only checked for
+    /// floating on the state authority (<see cref="Carryable.FreeTime"/> is only known there) and only while they are still.
     /// </summary>
     public class GroundingAudit : MonoBehaviour
     {
@@ -27,37 +27,54 @@ namespace BetterTogether.Diagnostics
         // A loose item must have been free this long before it counts as resting.
         private const float RestingSeconds = 1f;
 
+        // Speed below which a loose item counts as still (m/s, squared).
+        private const float StillSpeedSquared = 0.0025f;
+
         // Probes start this far above the bottom (or the top) of the bounds, so they do not begin inside a collider.
         private const float ProbeLift = 0.05f;
 
-        // Ground farther than this below the item is not considered.
+        // Ground farther than this below the object is not considered.
         private const float ProbeDistance = 100f;
+
+        // Footprint fraction used for the floating rays: centre plus four points at this share of the half extents.
+        private const float FootprintShare = 0.7f;
 
         private const int MaxLines = 12;
         private const int HitCapacity = 16;
         private const int NetworkObjectCapacity = 256;
         private const int ComponentCapacity = 32;
+        private const int BakeCapacity = 512;
+
+        private const string WatercolorMaskName = "Watercolor Mask";
+        private const string WatercolorOutlineName = "Watercolor Outline";
 
         // Carryable keeps its pin owner private. Read it once here, so no public API has to change for this tool.
+        // TODO: replace this reflection with a public Carryable.TryGetPinPoint(out Transform) when the orchestrator
+        // integrates that change; then delete PinOwnerProperty and the warning below.
         private static readonly PropertyInfo PinOwnerProperty =
             typeof(Carryable).GetProperty("PinOwnerId", BindingFlags.Instance | BindingFlags.NonPublic);
 
-        [Tooltip("Loose items floating or sinking by more than this (m) are reported.")]
+        // Static because a shape does not change between runs: computed once per item instance.
+        private static readonly Dictionary<int, float> VisualOffsets = new Dictionary<int, float>();
+
+        private static bool _pinWarned;
+
+        [Tooltip("Loose items with their base or centre below ground by more than this (m) are reported.")]
         [SerializeField] private float _floatTolerance = 0.02f;
 
-        [Tooltip("Lowest point of the visuals vs the lowest point of the colliders: more than this apart (m) is reported.")]
+        [Tooltip("Lowest point of the visuals vs the lowest point of the colliders, in the item's own space: more than this apart (m) is reported.")]
         [SerializeField] private float _visualTolerance = 0.02f;
 
-        [Tooltip("Pinned items farther than this (m) from their pin point are reported.")]
+        [Tooltip("Pinned items farther than this (m) from their pin point in two runs in a row are reported.")]
         [SerializeField] private float _pinTolerance = 0.01f;
 
-        [Tooltip("Characters on the ground whose lowest visual is more than this (m) away from their root are reported.")]
+        [Tooltip("Characters on the ground whose lowest skinned mesh is more than this (m) away from their root are reported.")]
         [SerializeField] private float _feetTolerance = 0.03f;
 
-        [Tooltip("Layers that count as ground for the item probes. Triggers are always ignored.")]
+        [Tooltip("Layers that count as ground for the probes. Triggers are always ignored.")]
         [SerializeField] private LayerMask _groundMask = Physics.DefaultRaycastLayers;
 
-        private enum Finding : byte { Floats, Sinks, Visual, Pin, Feet }
+        private enum Finding : byte { Floats, Sinks, Visual, Pin, Feet, Root }
 
         /// <summary>The single audit alive in this session.</summary>
         public static GroundingAudit Instance { get; private set; }
@@ -66,15 +83,25 @@ namespace BetterTogether.Diagnostics
         private readonly List<NetworkObject> _networkObjects = new List<NetworkObject>(NetworkObjectCapacity);
         private readonly List<Collider> _colliders = new List<Collider>(ComponentCapacity);
         private readonly List<Renderer> _renderers = new List<Renderer>(ComponentCapacity);
+        private readonly List<SkinnedMeshRenderer> _skinned = new List<SkinnedMeshRenderer>(ComponentCapacity);
+        private readonly List<Vector3> _bakeVertices = new List<Vector3>(BakeCapacity);
         private readonly RaycastHit[] _hits = new RaycastHit[HitCapacity];
         private readonly List<string> _lines = new List<string>(MaxLines);
         private readonly StringBuilder _overlay = new StringBuilder(512);
         private readonly GUIContent _overlayText = new GUIContent();
 
-        // Keys of the findings of the last run and of this run. Only keys that were not in the last run are logged.
-        private HashSet<long> _previous = new HashSet<long>();
-        private HashSet<long> _current = new HashSet<long>();
+        // Rigidbodies of the items, looked up once per item.
+        private readonly Dictionary<int, Rigidbody> _bodies = new Dictionary<int, Rigidbody>();
 
+        // Keys already logged in this F4 session. Cleared when F4 turns on.
+        private readonly HashSet<long> _logged = new HashSet<long>();
+
+        // Pin findings must repeat in two runs in a row (the pin blend takes about 0.28 s). Candidates of the last run
+        // and of this run are kept in two sets that swap at the end of each run.
+        private HashSet<long> _pinCandidates = new HashSet<long>();
+        private HashSet<long> _nextPinCandidates = new HashSet<long>();
+
+        private Mesh _bakeMesh;
         private GUIStyle _overlayStyle;
         private bool _active;
         private float _timer;
@@ -105,6 +132,9 @@ namespace BetterTogether.Diagnostics
 
         private void OnDestroy()
         {
+            if (_bakeMesh != null)
+                Destroy(_bakeMesh);
+
             if (Instance == this)
                 Instance = null;
         }
@@ -115,6 +145,11 @@ namespace BetterTogether.Diagnostics
             if (Keyboard.current != null && !FirstPersonCamera.IsTyping && Keyboard.current.f4Key.wasPressedThisFrame)
             {
                 _active = !_active;
+
+                // Each F4 session logs its findings again, and starts with no pin candidates.
+                _logged.Clear();
+                _pinCandidates.Clear();
+                _nextPinCandidates.Clear();
 
                 // Audit right away when turned on, instead of after the first interval.
                 _timer = AuditInterval;
@@ -154,9 +189,9 @@ namespace BetterTogether.Diagnostics
         /// <summary>One full pass over the loose items, the pinned items and the characters.</summary>
         private void Audit()
         {
-            _current.Clear();
             _lines.Clear();
             _findingCount = 0;
+            _nextPinCandidates.Clear();
 
             // Items come from the network runner. The list only holds spawned objects, and the checks ask the Carryable
             // for its state, so nothing networked is read before it is spawned.
@@ -186,8 +221,8 @@ namespace BetterTogether.Diagnostics
                     AuditCharacter(character);
             }
 
-            // Keys seen now become the reference for the next run; the old set is cleared at the start of that run.
-            (_previous, _current) = (_current, _previous);
+            // Pin candidates seen now must repeat in the next run to be reported.
+            (_pinCandidates, _nextPinCandidates) = (_nextPinCandidates, _pinCandidates);
             UpdateOverlay();
         }
 
@@ -210,55 +245,190 @@ namespace BetterTogether.Diagnostics
             for (var i = 1; i < _colliders.Count; i++)
                 bounds.Encapsulate(_colliders[i].bounds);
 
-            GatherRenderers(item.transform);
-            if (_renderers.Count > 0)
-            {
-                var visualDiff = LowestRendererY() - bounds.min.y;
-                if (Mathf.Abs(visualDiff) > _visualTolerance)
-                {
-                    var side = visualDiff > 0f ? "por encima" : "por debajo";
-                    Report(item, Finding.Visual, $"VISUAL DESPLAZADO {Centimeters(visualDiff)} cm {side} del colisionador",
-                        bounds.min, bounds.min + Vector3.up * visualDiff, true);
-                }
-            }
+            CheckVisual(item);
 
             // Only the state authority knows how long the item has been loose (FreeTime is 0 on proxies).
             if (!item.HasStateAuthority || item.FreeTime < RestingSeconds)
                 return;
 
+            // Floating and sinking are only judged while the item is still.
+            var body = CachedBody(item);
+            if (body == null || !(body.IsSleeping() || body.linearVelocity.sqrMagnitude < StillSpeedSquared))
+                return;
+
             var center = bounds.center;
 
-            // Probe from above the top: the first surface found is the ground under the item (its own colliders excluded).
-            // If that surface is above the bottom, the item is sunk into it.
-            var topOrigin = new Vector3(center.x, bounds.max.y + ProbeLift, center.z);
-            if (!TryGround(item.transform, topOrigin, out var surfaceY))
-                return;
-
-            var sinkDepth = surfaceY - bounds.min.y;
-            if (sinkDepth > _floatTolerance)
+            // Sinking: the centre is below the ground under it. The ground is searched from above the top of the bounds.
+            if (GroundHeight(item.transform, center, bounds.max.y, out var groundAtCenter)
+                && center.y < groundAtCenter - _floatTolerance)
             {
-                Report(item, Finding.Sinks, $"HUNDIDO {Centimeters(sinkDepth)} cm",
-                    new Vector3(center.x, bounds.min.y, center.z), new Vector3(center.x, surfaceY, center.z), true);
+                Report(item, Finding.Sinks, $"HUNDIDO {Centimeters(groundAtCenter - center.y)} cm (centro bajo el suelo)",
+                    new Vector3(center.x, center.y, center.z), new Vector3(center.x, groundAtCenter, center.z), true);
                 return;
             }
 
-            // Probe from just above the bottom: the gap to the first surface below is how far the item floats.
-            var bottomOrigin = new Vector3(center.x, bounds.min.y + ProbeLift, center.z);
-            if (!TryGround(item.transform, bottomOrigin, out var groundY))
-                return;
-
-            var gap = bounds.min.y - groundY;
-            if (gap > _floatTolerance)
+            // Floating: five rays (centre and four points inside the footprint). The smallest gap must exceed the tolerance,
+            // so an item resting on one corner is not reported.
+            var extentX = bounds.extents.x * FootprintShare;
+            var extentZ = bounds.extents.z * FootprintShare;
+            var smallestGap = float.MaxValue;
+            var gapFrom = Vector3.zero;
+            var gapTo = Vector3.zero;
+            var anyHit = false;
+            for (var r = 0; r < 5; r++)
             {
-                Report(item, Finding.Floats, $"FLOTA {Centimeters(gap)} cm",
-                    new Vector3(center.x, bounds.min.y, center.z), new Vector3(center.x, groundY, center.z), true);
+                var offsetX = r == 0 ? 0f : (r == 1 || r == 2 ? extentX : -extentX);
+                var offsetZ = r == 0 ? 0f : (r == 1 || r == 3 ? extentZ : -extentZ);
+                var origin = new Vector3(center.x + offsetX, bounds.min.y + ProbeLift, center.z + offsetZ);
+                if (!TryGround(item.transform, origin, out var groundY))
+                    continue;
+
+                var gap = bounds.min.y - groundY;
+                anyHit = true;
+                if (gap < smallestGap)
+                {
+                    smallestGap = gap;
+                    gapFrom = new Vector3(origin.x, bounds.min.y, origin.z);
+                    gapTo = new Vector3(origin.x, groundY, origin.z);
+                }
             }
+
+            if (anyHit && smallestGap > _floatTolerance)
+                Report(item, Finding.Floats, $"FLOTA {Centimeters(smallestGap)} cm", gapFrom, gapTo, true);
+        }
+
+        /// <summary>
+        /// Compares the lowest visual with the lowest collider in the item's own space. The offset does not depend on the
+        /// item's position or rotation, so it is computed once per instance and cached.
+        /// </summary>
+        private void CheckVisual(Carryable item)
+        {
+            var id = item.GetInstanceID();
+            if (!VisualOffsets.TryGetValue(id, out var offset))
+            {
+                offset = ComputeVisualOffset(item.transform);
+                VisualOffsets[id] = offset;
+            }
+
+            // Offsets are in the item's local units; the lossy scale turns them into metres.
+            var diffMeters = offset * item.transform.lossyScale.y;
+            if (Mathf.Abs(diffMeters) > _visualTolerance)
+            {
+                var side = diffMeters > 0f ? "por encima" : "por debajo";
+                var from = item.transform.position;
+                Report(item, Finding.Visual, $"VISUAL DESPLAZADO {Centimeters(diffMeters)} cm {side} del colisionador",
+                    from, from + Vector3.up * diffMeters, false);
+            }
+        }
+
+        private float ComputeVisualOffset(Transform root)
+        {
+            GatherRenderers(root);
+            GatherColliders(root);
+            if (_renderers.Count == 0 || _colliders.Count == 0)
+                return 0f;
+
+            var visualMin = float.MaxValue;
+            for (var i = 0; i < _renderers.Count; i++)
+            {
+                var renderer = _renderers[i];
+                var local = renderer.localBounds;
+                for (var corner = 0; corner < 8; corner++)
+                {
+                    var point = new Vector3(
+                        (corner & 1) == 0 ? local.min.x : local.max.x,
+                        (corner & 2) == 0 ? local.min.y : local.max.y,
+                        (corner & 4) == 0 ? local.min.z : local.max.z);
+                    var inRoot = root.InverseTransformPoint(renderer.transform.TransformPoint(point));
+                    if (inRoot.y < visualMin)
+                        visualMin = inRoot.y;
+                }
+            }
+
+            var colliderMin = float.MaxValue;
+            for (var i = 0; i < _colliders.Count; i++)
+            {
+                var lowest = LocalShapeMinY(_colliders[i], root);
+                if (lowest < colliderMin)
+                    colliderMin = lowest;
+            }
+
+            return visualMin - colliderMin;
+        }
+
+        /// <summary>Lowest Y, in <paramref name="root"/> space, of the collider's own shape (box, sphere or capsule corners).</summary>
+        private static float LocalShapeMinY(Collider collider, Transform root)
+        {
+            Vector3 center;
+            Vector3 extents;
+            switch (collider)
+            {
+                case BoxCollider box:
+                    center = box.center;
+                    extents = box.size * 0.5f;
+                    break;
+                case SphereCollider sphere:
+                    center = sphere.center;
+                    extents = Vector3.one * sphere.radius;
+                    break;
+                case CapsuleCollider capsule:
+                    center = capsule.center;
+                    extents = new Vector3(capsule.radius, capsule.radius, capsule.radius);
+                    var half = Mathf.Max(capsule.height * 0.5f, capsule.radius);
+                    if (capsule.direction == 0) extents.x = half;
+                    else if (capsule.direction == 1) extents.y = half;
+                    else extents.z = half;
+                    break;
+                default:
+                    // Meshes and other shapes: the world bounds are the best cheap approximation.
+                    return LowestWorldBoundsInRoot(collider, root);
+            }
+
+            var lowest = float.MaxValue;
+            for (var corner = 0; corner < 8; corner++)
+            {
+                var local = center + new Vector3(
+                    (corner & 1) == 0 ? -extents.x : extents.x,
+                    (corner & 2) == 0 ? -extents.y : extents.y,
+                    (corner & 4) == 0 ? -extents.z : extents.z);
+                var inRoot = root.InverseTransformPoint(collider.transform.TransformPoint(local));
+                if (inRoot.y < lowest)
+                    lowest = inRoot.y;
+            }
+
+            return lowest;
+        }
+
+        private static float LowestWorldBoundsInRoot(Collider collider, Transform root)
+        {
+            var b = collider.bounds;
+            var lowest = float.MaxValue;
+            for (var corner = 0; corner < 8; corner++)
+            {
+                var world = new Vector3(
+                    (corner & 1) == 0 ? b.min.x : b.max.x,
+                    (corner & 2) == 0 ? b.min.y : b.max.y,
+                    (corner & 4) == 0 ? b.min.z : b.max.z);
+                var inRoot = root.InverseTransformPoint(world);
+                if (inRoot.y < lowest)
+                    lowest = inRoot.y;
+            }
+
+            return lowest;
         }
 
         private void AuditPin(Carryable item)
         {
             if (PinOwnerProperty == null)
+            {
+                if (!_pinWarned)
+                {
+                    _pinWarned = true;
+                    Debug.LogWarning("[GroundingAudit] No se encuentra Carryable.PinOwnerId: la auditoría de pines está desactivada.", item);
+                }
+
                 return;
+            }
 
             var ownerId = (NetworkBehaviourId)PinOwnerProperty.GetValue(item);
             if (!item.Runner.TryFindBehaviour(ownerId, out NetworkBehaviour owner))
@@ -273,64 +443,162 @@ namespace BetterTogether.Diagnostics
                 return;
 
             var offset = Vector3.Distance(item.transform.position, point.position);
-            if (offset > _pinTolerance)
+            if (offset <= _pinTolerance)
+                return;
+
+            // Reported only when the same pin is off in two runs in a row.
+            var key = KeyOf(item, Finding.Pin);
+            if (_pinCandidates.Contains(key))
             {
                 Report(item, Finding.Pin, $"PIN DESALINEADO {Centimeters(offset)} cm",
                     item.transform.position, point.position, true);
+            }
+            else
+            {
+                _nextPinCandidates.Add(key);
             }
         }
 
         private void AuditCharacter(PlayerCharacter character)
         {
-            // Airborne and riding characters are not on the ground, so their feet are not expected to touch it.
+            // Airborne, riding and stunned characters are not expected to stand on the ground.
             var movement = character.GetComponent<PlayerMovement>();
-            if (movement != null && movement.IsAirborne)
+            if (movement != null && (movement.IsAirborne || movement.IsStunned))
                 return;
 
             var stack = character.GetComponent<GnomeStack>();
             if (stack != null && stack.IsRiding)
                 return;
 
-            GatherRenderers(character.transform);
-            if (_renderers.Count == 0)
+            var position = character.transform.position;
+            var view = character.GetComponentInChildren<LocalPlayerView>(true);
+            var body = view != null && view.Body != null ? view.Body : character.transform;
+
+            // Feet: lowest skinned vertex of the visible model, compared with the root.
+            if (TryLowestSkinnedY(body, out var lowest))
+            {
+                var diff = lowest - position.y;
+                if (diff > _feetTolerance)
+                {
+                    Report(character, Finding.Feet, $"PIES FLOTAN {Centimeters(diff)} cm",
+                        position, position + Vector3.up * diff, false);
+                }
+                else if (diff < -_feetTolerance)
+                {
+                    Report(character, Finding.Feet, $"PIES SE HUNDEN {Centimeters(-diff)} cm",
+                        position, position + Vector3.up * diff, false);
+                }
+            }
+
+            // Root: the ray from the root to the ground should not be longer than the controller's skin plus tolerance.
+            var controller = character.GetComponent<CharacterController>();
+            if (controller == null)
                 return;
 
-            // The root sits at the feet, so the lowest visual should be level with it.
-            var position = character.transform.position;
-            var diff = LowestRendererY() - position.y;
-            if (diff > _feetTolerance)
+            var rootOrigin = position + Vector3.up * ProbeLift;
+            if (!TryGround(character.transform, rootOrigin, out var groundY))
+                return;
+
+            var rootGap = position.y - groundY;
+            if (rootGap > controller.skinWidth + _feetTolerance)
             {
-                Report(character, Finding.Feet, $"PIES FLOTAN {Centimeters(diff)} cm",
-                    position, position + Vector3.up * diff, false);
+                Report(character, Finding.Root, $"RAÍZ FLOTA {Centimeters(rootGap)} cm",
+                    position, new Vector3(position.x, groundY, position.z), false);
             }
-            else if (diff < -_feetTolerance)
-            {
-                Report(character, Finding.Feet, $"PIES SE HUNDEN {Centimeters(-diff)} cm",
-                    position, position + Vector3.up * diff, false);
-            }
-        }
-
-        /// <summary>Records a finding for the overlay and logs it the first time it shows up.</summary>
-        private void Report(UnityEngine.Object owner, Finding kind, string text, Vector3 from, Vector3 to, bool drawLine)
-        {
-            var key = (long)owner.GetInstanceID() * 16 + (int)kind;
-            _current.Add(key);
-            _findingCount++;
-
-            if (_lines.Count < MaxLines)
-                _lines.Add($"{text}  {owner.name}");
-
-            if (!_previous.Contains(key))
-                Debug.LogWarning($"[GroundingAudit] {text}", owner);
-
-            if (drawLine)
-                Debug.DrawLine(from, to, Color.red, AuditInterval);
         }
 
         /// <summary>
-        /// Surface height of the nearest collider below <paramref name="origin"/>, ignoring colliders of <paramref name="self"/>.
-        /// Triggers are ignored. Returns false when nothing is found within <see cref="ProbeDistance"/>.
+        /// Lowest world Y of the visible skinned meshes under <paramref name="body"/>, from the baked (posed) mesh.
+        /// Watercolor copies are skipped. Only called while F4 is on, every half second.
         /// </summary>
+        private bool TryLowestSkinnedY(Transform body, out float lowest)
+        {
+            lowest = float.MaxValue;
+            _skinned.Clear();
+            body.GetComponentsInChildren(false, _skinned);
+
+            if (_bakeMesh == null)
+                _bakeMesh = new Mesh { name = "GroundingAudit bake" };
+
+            var any = false;
+            for (var i = 0; i < _skinned.Count; i++)
+            {
+                var smr = _skinned[i];
+                if (!smr.enabled || smr.sharedMesh == null)
+                    continue;
+
+                if (smr.name == WatercolorMaskName || smr.name == WatercolorOutlineName)
+                    continue;
+
+                smr.BakeMesh(_bakeMesh, true);
+                _bakeVertices.Clear();
+                _bakeMesh.GetVertices(_bakeVertices);
+
+                var transform = smr.transform;
+                for (var v = 0; v < _bakeVertices.Count; v++)
+                {
+                    var y = transform.TransformPoint(_bakeVertices[v]).y;
+                    if (y < lowest)
+                        lowest = y;
+                }
+
+                any = true;
+            }
+
+            return any;
+        }
+
+        /// <summary>
+        /// Ground height at <paramref name="point"/>: the terrain when one covers it, otherwise the nearest surface below
+        /// <paramref name="topY"/> (surfaces above the top of the object are ignored). Own colliders are excluded.
+        /// </summary>
+        private bool GroundHeight(Transform self, Vector3 point, float topY, out float groundY)
+        {
+            if (TryTerrainHeight(point, out groundY))
+                return true;
+
+            var origin = new Vector3(point.x, topY + ProbeLift, point.z);
+            var count = Physics.RaycastNonAlloc(origin, Vector3.down, _hits, ProbeDistance, _groundMask, QueryTriggerInteraction.Ignore);
+            var nearest = float.MaxValue;
+            for (var i = 0; i < count; i++)
+            {
+                var hit = _hits[i];
+                if (hit.collider == null || hit.collider.transform.IsChildOf(self) || hit.point.y > topY)
+                    continue;
+
+                if (hit.distance < nearest)
+                {
+                    nearest = hit.distance;
+                    groundY = hit.point.y;
+                }
+            }
+
+            return nearest < float.MaxValue;
+        }
+
+        private static bool TryTerrainHeight(Vector3 point, out float height)
+        {
+            height = 0f;
+            var terrains = Terrain.activeTerrains;
+            for (var i = 0; i < terrains.Length; i++)
+            {
+                var terrain = terrains[i];
+                if (terrain == null || terrain.terrainData == null)
+                    continue;
+
+                var origin = terrain.GetPosition();
+                var size = terrain.terrainData.size;
+                if (point.x < origin.x || point.x > origin.x + size.x || point.z < origin.z || point.z > origin.z + size.z)
+                    continue;
+
+                height = terrain.SampleHeight(point) + origin.y;
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>Surface height of the nearest collider below <paramref name="origin"/>, ignoring colliders of <paramref name="self"/>.</summary>
         private bool TryGround(Transform self, Vector3 origin, out float surfaceY)
         {
             surfaceY = 0f;
@@ -350,6 +618,19 @@ namespace BetterTogether.Diagnostics
             }
 
             return nearest < float.MaxValue;
+        }
+
+        private Rigidbody CachedBody(Carryable item)
+        {
+            var id = item.GetInstanceID();
+            if (_bodies.TryGetValue(id, out var body) && body != null)
+                return body;
+
+            body = item.GetComponent<Rigidbody>();
+            if (body != null)
+                _bodies[id] = body;
+
+            return body;
         }
 
         private void GatherColliders(Transform root)
@@ -375,19 +656,22 @@ namespace BetterTogether.Diagnostics
             }
         }
 
-        /// <summary>Lowest world Y of the gathered renderers. Only call with at least one renderer.</summary>
-        private float LowestRendererY()
+        /// <summary>Records a finding for the overlay and logs it the first time it shows up in this F4 session.</summary>
+        private void Report(UnityEngine.Object owner, Finding kind, string text, Vector3 from, Vector3 to, bool drawLine)
         {
-            var lowest = float.MaxValue;
-            for (var i = 0; i < _renderers.Count; i++)
-            {
-                var minY = _renderers[i].bounds.min.y;
-                if (minY < lowest)
-                    lowest = minY;
-            }
+            _findingCount++;
 
-            return lowest;
+            if (_lines.Count < MaxLines)
+                _lines.Add($"{text}  {owner.name}");
+
+            if (_logged.Add(KeyOf(owner, kind)))
+                Debug.LogWarning($"[GroundingAudit] {text}", owner);
+
+            if (drawLine)
+                Debug.DrawLine(from, to, Color.red, AuditInterval);
         }
+
+        private static long KeyOf(UnityEngine.Object owner, Finding kind) => (long)owner.GetInstanceID() * 16 + (int)kind;
 
         private void UpdateOverlay()
         {
