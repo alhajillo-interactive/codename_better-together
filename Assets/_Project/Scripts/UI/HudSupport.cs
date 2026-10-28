@@ -8,15 +8,25 @@ namespace BetterTogether.UI
     /// </summary>
     public static class HudSupport
     {
-        // Geometry of Art/UI/vignette_radial.png, which GameHudBuilder generates. The sprite is 9-sliced: an opaque
-        // border ring around a centre cell that holds the radial gradient (alpha 0 up to ClearRadiusPixels, then a
-        // smooth ramp to 1 at RampEndPixels). Stretching the Image stretches the centre cell only, so the clear
-        // radius can be set in canvas units while the border keeps covering whatever lies outside the Image.
+        // Geometry of the vignette sprites in Art/UI, which GameHudBuilder generates. Each sprite is 9-sliced: an
+        // opaque border ring around a centre cell that holds the radial gradient (alpha 0 up to ClearRadiusPixels,
+        // then a smooth ramp to 1 at ClearRadiusPixels * ramp ratio). Stretching the Image stretches the centre cell
+        // only, so the clear radius can be set in canvas units while the border keeps covering whatever lies outside.
+        // The ramp ratio (ramp end / clear radius) is baked per sprite so each vignette keeps its own falloff, as the
+        // old IMGUI textures did: the ramp ran from `inner` to the screen edge, i.e. ratio 1 / inner.
         public const int SpritePixels = 512;
         public const int BorderPixels = 128;
         public const int CellPixels = SpritePixels - 2 * BorderPixels;
-        public const float ClearRadiusPixels = 56f;
-        public const float RampEndPixels = 112f;
+        public const float ClearRadiusPixels = 40f;
+
+        /// <summary>Gnome edge vignette (inner 0.35 of the half screen, ramp up to the edge): 1 / 0.35.</summary>
+        public const float RampRatioGnome = 1f / 0.35f;
+
+        /// <summary>Camper focus vignette (inner 0.55, ramp up to the edge): 1 / 0.55.</summary>
+        public const float RampRatioFocus = 1f / 0.55f;
+
+        /// <summary>Camper cone vignette: typical half diagonal over cone radius (about 1100 / 460).</summary>
+        public const float RampRatioCone = 2.4f;
 
         /// <summary>
         /// Image.pixelsPerUnitMultiplier for the vignettes: it scales the opaque border up so it reaches far past the

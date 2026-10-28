@@ -17,7 +17,9 @@ namespace BetterTogether.EditorTools
     {
         private const string LogPrefix = "[GameHudBuilder]";
         private const string PrefabPath = "Assets/_Project/Prefabs/UI/MatchHUD.prefab";
-        private const string SpritePath = "Assets/_Project/Art/UI/vignette_radial.png";
+        private const string ConePath = "Assets/_Project/Art/UI/vignette_radial.png";
+        private const string GnomePath = "Assets/_Project/Art/UI/vignette_radial_gnome.png";
+        private const string FocusPath = "Assets/_Project/Art/UI/vignette_radial_focus.png";
         private const int UiLayer = 5;
 
         private static readonly Vector2 Center = new(0.5f, 0.5f);
@@ -34,14 +36,16 @@ namespace BetterTogether.EditorTools
                 return;
             }
 
-            var sprite = EnsureVignetteSprite();
-            if (sprite == null)
+            var cone = EnsureVignetteSprite(ConePath, HudSupport.RampRatioCone);
+            var gnome = EnsureVignetteSprite(GnomePath, HudSupport.RampRatioGnome);
+            var focus = EnsureVignetteSprite(FocusPath, HudSupport.RampRatioFocus);
+            if (cone == null || gnome == null || focus == null)
                 return;
 
             var root = PrefabUtility.LoadPrefabContents(PrefabPath);
             try
             {
-                BuildContents(root, sprite);
+                BuildContents(root, cone, gnome, focus);
                 PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
             }
             finally
@@ -56,27 +60,62 @@ namespace BetterTogether.EditorTools
 
         #region Sprite
 
-        private static Sprite EnsureVignetteSprite()
+        // Writes the PNG when it is missing or no longer matches HudSupport (size or ramp), and makes sure it imports as a sprite.
+        private static Sprite EnsureVignetteSprite(string assetPath, float rampRatio)
         {
-            var fullPath = Path.GetFullPath(Path.Combine(Application.dataPath, "..", SpritePath));
-            if (!File.Exists(fullPath))
+            var fullPath = Path.GetFullPath(Path.Combine(Application.dataPath, "..", assetPath));
+            if (!File.Exists(fullPath) || !PngMatches(fullPath, rampRatio))
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-                File.WriteAllBytes(fullPath, GenerateVignettePng());
-                AssetDatabase.ImportAsset(SpritePath, ImportAssetOptions.ForceSynchronousImport);
-                Debug.Log($"{LogPrefix} Generated {SpritePath}");
+                File.WriteAllBytes(fullPath, GenerateVignettePng(rampRatio));
+                AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+                Debug.Log($"{LogPrefix} Generated {assetPath}");
             }
 
-            ConfigureImporter();
-            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(SpritePath);
+            ConfigureImporter(assetPath);
+            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
             if (sprite == null)
-                Debug.LogError($"{LogPrefix} {SpritePath} did not import as a Sprite.");
+                Debug.LogError($"{LogPrefix} {assetPath} did not import as a Sprite.");
 
             return sprite;
         }
 
-        // 512x512, white, alpha 0 up to ClearRadiusPixels from the centre, smooth ramp to 1 at RampEndPixels, 1 beyond.
-        private static byte[] GenerateVignettePng()
+        // Alpha of the gradient at `distance` pixels from the centre: 0 inside the clear radius, smooth ramp, 1 at the ramp end.
+        private static float VignetteAlpha(float distance, float rampRatio)
+        {
+            var clear = HudSupport.ClearRadiusPixels;
+            return Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(clear, clear * rampRatio, distance));
+        }
+
+        // True when the file has the expected size and the alpha halfway up the ramp is the expected one.
+        private static bool PngMatches(string fullPath, float rampRatio)
+        {
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            try
+            {
+                if (!texture.LoadImage(File.ReadAllBytes(fullPath)))
+                    return false;
+
+                const int size = HudSupport.SpritePixels;
+                if (texture.width != size || texture.height != size)
+                    return false;
+
+                var clear = HudSupport.ClearRadiusPixels;
+                var probe = clear * (1f + rampRatio) * 0.5f;
+                var center = (size - 1) * 0.5f;
+                var x = Mathf.RoundToInt(center + probe);
+                var y = size / 2;
+                var expected = VignetteAlpha(new Vector2(x - center, y - center).magnitude, rampRatio);
+                return Mathf.Abs(texture.GetPixel(x, y).a - expected) < 0.02f;
+            }
+            finally
+            {
+                Object.DestroyImmediate(texture);
+            }
+        }
+
+        // 512x512, white, alpha 0 up to ClearRadiusPixels from the centre, smooth ramp to 1 at clear * rampRatio, 1 beyond.
+        private static byte[] GenerateVignettePng(float rampRatio)
         {
             const int size = HudSupport.SpritePixels;
             var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
@@ -87,8 +126,7 @@ namespace BetterTogether.EditorTools
                 for (var x = 0; x < size; x++)
                 {
                     var distance = new Vector2(x - center, y - center).magnitude;
-                    var t = Mathf.InverseLerp(HudSupport.ClearRadiusPixels, HudSupport.RampEndPixels, distance);
-                    var alpha = Mathf.SmoothStep(0f, 1f, t);
+                    var alpha = VignetteAlpha(distance, rampRatio);
                     pixels[y * size + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(alpha * 255f));
                 }
             }
@@ -99,9 +137,9 @@ namespace BetterTogether.EditorTools
             return png;
         }
 
-        private static void ConfigureImporter()
+        private static void ConfigureImporter(string assetPath)
         {
-            var importer = AssetImporter.GetAtPath(SpritePath) as TextureImporter;
+            var importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
             if (importer == null)
                 return;
 
@@ -142,16 +180,16 @@ namespace BetterTogether.EditorTools
 
         #region Prefab contents
 
-        private static void BuildContents(GameObject root, Sprite vignette)
+        private static void BuildContents(GameObject root, Sprite coneSprite, Sprite gnomeSprite, Sprite focusSprite)
         {
             var rootRect = (RectTransform)root.transform;
             ConfigureScaler(root);
             var font = FindFont(root);
 
             // Back layer (behind the match HUD): vignettes.
-            var gnomeVignette = BuildVignette(rootRect, "GnomeVignette", vignette, new Color(1f, 1f, 1f, 0f), 0);
-            var focusVignette = BuildVignette(rootRect, "FocusVignette", vignette, new Color(0f, 0f, 0f, 0f), 1);
-            var coneVignette = BuildVignette(rootRect, "CamperConeVignette", vignette, new Color(0.3f, 0.2f, 0.5f, 0f), 2);
+            var gnomeVignette = BuildVignette(rootRect, "GnomeVignette", gnomeSprite, new Color(1f, 1f, 1f, 0f), 0);
+            var focusVignette = BuildVignette(rootRect, "FocusVignette", focusSprite, new Color(0f, 0f, 0f, 0f), 1);
+            var coneVignette = BuildVignette(rootRect, "CamperConeVignette", coneSprite, new Color(0.3f, 0.2f, 0.5f, 0f), 2);
 
             // Front layer: crosshair, prompt, warnings, overlays, badges.
             var crosshair = BuildCrosshair(rootRect);
@@ -191,7 +229,11 @@ namespace BetterTogether.EditorTools
 
             Wire(GetOrAdd<ScreenFlash>(root), ("_image", flash));
 
-            // The flash covers everything else.
+            // Draw order at the top: the end screen covers the crosshair and the prompt, and the flash covers everything.
+            var endScreen = rootRect.Find("EndScreen");
+            if (endScreen != null)
+                endScreen.SetAsLastSibling();
+
             flash.transform.SetAsLastSibling();
         }
 
@@ -202,6 +244,8 @@ namespace BetterTogether.EditorTools
             scaler.referenceResolution = new Vector2(1920f, 1080f);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             scaler.matchWidthOrHeight = 0.5f;
+            // HudSupport.BorderUnits assumes 100 reference pixels per unit.
+            scaler.referencePixelsPerUnit = 100f;
         }
 
         private static TMP_FontAsset FindFont(GameObject root)
@@ -215,13 +259,15 @@ namespace BetterTogether.EditorTools
             var rect = Child(parent, name, out var created);
             var image = GetOrAdd<Image>(rect.gameObject);
             image.sprite = sprite;
+
+            // Not cosmetic: the runtime sizing in HudSupport assumes a sliced Image with this border multiplier.
+            image.type = Image.Type.Sliced;
+            image.fillCenter = true;
+            image.pixelsPerUnitMultiplier = HudSupport.BorderMultiplier;
             if (!created)
                 return image;
 
             Place(rect, Center, Center, Center, Vector2.zero, Vector2.one * HudSupport.VignetteSizeFor(300f));
-            image.type = Image.Type.Sliced;
-            image.fillCenter = true;
-            image.pixelsPerUnitMultiplier = HudSupport.BorderMultiplier;
             image.color = color;
             image.raycastTarget = false;
             image.enabled = false;

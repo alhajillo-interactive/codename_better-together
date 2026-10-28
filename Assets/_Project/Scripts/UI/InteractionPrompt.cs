@@ -38,6 +38,15 @@ namespace BetterTogether.UI
         [Tooltip("Seconds between prompt re-evaluations. The text is built from strings, so it is not rebuilt every frame.")]
         [SerializeField] private float _refreshInterval = 0.1f;
 
+        private static readonly List<string> LineBuffer = new(4);
+
+        private object _lastFocused;
+        private Carryable _lastCarried;
+        private GnomeStack _lastAimed;
+        private bool _lastStunned;
+        private bool _lastRiding;
+        private bool _lastKickReady;
+
         private bool _valid;
         private float _nextRefresh;
         private string _shownText;
@@ -77,12 +86,43 @@ namespace BetterTogether.UI
             var watched = Petrifiable.Local != null && Petrifiable.Local.IsWatched;
             HudSupport.SetActive(_watchedWarning.gameObject, watched);
 
+            // A change in anything that decides the prompt forces an immediate refresh.
+            if (DecidingStateChanged(local))
+                _nextRefresh = 0f;
+
             var now = Time.unscaledTime;
             if (now < _nextRefresh)
                 return;
 
             _nextRefresh = now + _refreshInterval;
             ShowText(ResolveText(local));
+        }
+
+        // Compares the references and flags that pick the branch in ResolveText; allocation-free.
+        private bool DecidingStateChanged(PlayerInteractor local)
+        {
+            var focused = local.Focused;
+            var carried = local.Carried;
+            var stunned = local.TryGetComponent<Kickable>(out var kickable) && kickable.IsStunned;
+            var stack = GnomeStack.Local;
+            var riding = stack != null && stack.IsRiding;
+            var aimed = stack != null ? stack.Aimed : null;
+            var kickReady = CamperKick.Local is { HasTargetInRange: true, IsReady: true };
+
+            var changed = !ReferenceEquals(focused, _lastFocused)
+                          || carried != _lastCarried
+                          || stunned != _lastStunned
+                          || riding != _lastRiding
+                          || aimed != _lastAimed
+                          || kickReady != _lastKickReady;
+
+            _lastFocused = focused;
+            _lastCarried = carried;
+            _lastStunned = stunned;
+            _lastRiding = riding;
+            _lastAimed = aimed;
+            _lastKickReady = kickReady;
+            return changed;
         }
 
         private void HideAll()
@@ -149,7 +189,8 @@ namespace BetterTogether.UI
         // What to tell a player with something in the hands: status, passing it on (gnomes in a tower), what E does, getting off.
         private static string BuildCarriedText(PlayerInteractor local, Carryable carried)
         {
-            var lines = new List<string>(4);
+            var lines = LineBuffer;
+            lines.Clear();
             var status = carried.StatusFor(local);
             if (status == null && carried.TryGetComponent<Sausage>(out var sausage))
                 status = $"Salchicha: {sausage.StateLabel}";

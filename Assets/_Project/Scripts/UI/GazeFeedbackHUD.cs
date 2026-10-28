@@ -139,12 +139,13 @@ namespace BetterTogether.UI
 
         private void Update()
         {
+            // An invalid copy (old scene component) must not duplicate the punch and the flash of the valid one.
+            if (!_valid)
+                return;
+
             _pulseTime += Time.deltaTime;
             TrackCamperLock();
             TrackGnomeFeedback();
-
-            if (!_valid)
-                return;
 
             RefreshLayout();
             UpdateGnome(Petrifiable.Local);
