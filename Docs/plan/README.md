@@ -82,17 +82,17 @@ Fase · Prioridad · Worker: modelo · Auditor: Opus · Iteraciones máx · Puli
 
 ## Estado (28 oct 2026)
 
-Rama de integración: `feature/fase-0`. V0 de `feature/fase-0` (1f21fed): compila sin errores ni warnings C# (`Tools/compile-check.ps1`, 28 oct). Ninguna tarjeta tiene V2 hecha; nadie ha jugado todavía esta rama en el editor.
+Rama de integración: `feature/fase-0`. V0 tras integrar el lote B (f5fc54d): compila sin errores ni warnings C# (`Tools/compile-check.ps1`). **Ninguna tarjeta tiene V2 hecha**: nadie ha jugado todavía esta rama en el editor. Ése es el siguiente paso.
 
 | Tarjeta | Estado | Dónde | Falta |
 | --- | --- | --- | --- |
-| C0.1 PerfProbe | aprobada (falta V2) | `feature/fase-0` (531bff1) | V2 y rellenar `fase-0/C0.1-resultados.md` |
-| C0.2 Carryable proxies + respawn | aprobada (falta V2) | `feature/fase-0` (531bff1) | V2; poner `LevelBounds` en `CampBryan` |
-| C0.3 Estado de red ligero | aprobada (falta V2) | `feature/fase-0` (531bff1) | V2 |
-| C0.5 Voz | aprobada (falta V2) | `feature/fase-0` (1f21fed) | V2 (umbral final 0,02, no 0,04) |
-| C1.0 Sostener en la vista | corrigiendo → falta 2.ª auditoría | rama `worktree-agent-a9e279c0734809bfb` | veredicto de Opus, integrar, V2 |
-| C1.9 Auditoría de flotantes | corrigiendo → falta 2.ª auditoría | rama `worktree-agent-a775cf6f135587aa9` | veredicto de Opus, integrar, V2 |
-| C1.H Hitos y agua | en auditoría (1.ª vuelta sin hacer) | rama `worktree-agent-a89ddd20f12bdfd54` | auditoría, integrar, prefab `Items/Bucket` y `WaterSource` en escena (persona), 2 vueltas de playtest |
+| C0.1 PerfProbe | aprobada (falta V2) | 531bff1 | V2 y rellenar `fase-0/C0.1-resultados.md` |
+| C0.2 Carryable proxies + respawn | aprobada (falta V2) | 531bff1 | V2; poner `LevelBounds` en `CampBryan` |
+| C0.3 Estado de red ligero | aprobada (falta V2) | 531bff1 | V2 |
+| C0.5 Voz | aprobada (falta V2) | 1f21fed | V2 (umbral final 0,02, no 0,04) |
+| C1.9 Auditoría de flotantes | aprobada (falta V2), Opus vuelta 2 | a52e661 | V2 (pasos en la tarjeta) |
+| C1.0 Sostener en la vista | aprobada (falta V2), Opus vuelta 3 | 62d4b2f | V2 (pasos y deuda en la tarjeta) |
+| C1.H Hitos y agua | aprobada (falta V2), Opus vuelta 2 | 4e32333 | montaje en editor (cubeta, `WaterSource`, `Lit Grace Time` = 4) y 2 vueltas de playtest; decidir si soltar la cubeta la derrama |
 | C0.4, C0.6, C0.7, C0.8 | pendiente (lote C) | — | — |
 
-Las tres ramas del lote B fusionan sin conflictos con `feature/fase-0` y entre sí (`git merge-tree`, 28 oct). Orden de integración propuesto: C1.9 → C1.0 → C1.H, para que la V2 de las dos últimas ya pueda usar la auditoría de flotantes.
+Orden propuesto para la sesión de V2: montar en el editor (`LevelBounds`, cubeta, `WaterSource`, `Fireplace`) → auditoría de flotantes en escena (C1.9) → partida de 3 min con PerfProbe (C0.1) → pasos de C0.2, C0.3, C0.5, C1.0 y C1.H.
