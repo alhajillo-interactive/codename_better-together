@@ -1,4 +1,5 @@
 using BetterTogether.Audio;
+using BetterTogether.Diagnostics;
 using BetterTogether.Fireplace;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
@@ -117,6 +118,7 @@ namespace BetterTogether.Combat
             StunTimer = TickTimer.CreateFromSeconds(Runner, _stunDuration);
             var protectedFor = (_immuneWhileStunned ? _stunDuration : 0f) + _immunityAfterStun;
             ProtectedTimer = TickTimer.CreateFromSeconds(Runner, protectedFor);
+            if (Telemetry.Enabled) LogStunStart();
             DropCarried(kickerPosition);
             if (_kickFreesStone && _petrifiable != null && _petrifiable.IsStone)
                 _petrifiable.ForceRelease(_stunDuration + 1f);
@@ -128,6 +130,14 @@ namespace BetterTogether.Combat
                 _kickShake.GenerateImpulseWithVelocity(velocity.normalized * _kickShakeForce);
 
             PlayHitFeedback(kickerPosition);
+        }
+
+        // Telemetry only. Runs on the kicked player's own client (the state authority of this player), before the item is dropped.
+        private void LogStunStart()
+        {
+            var carried = _interactor != null ? _interactor.Carried : null;
+            Telemetry.Begin("stun_start").Float("duration", _stunDuration).Bool("dropped", carried != null)
+                .Str("object", carried != null ? carried.DisplayName : "none").Send();
         }
 
         private void PlayHitFeedback(Vector3 kickerPosition)
@@ -163,6 +173,8 @@ namespace BetterTogether.Combat
             var stunned = IsStunned;
             if (stunned && !_wasStunned)
                 _stunStartTime = Time.time;
+            if (Telemetry.Enabled && !stunned && _wasStunned && HasStateAuthority)
+                Telemetry.Begin("stun_end").Float("duration", Time.time - _stunStartTime).Send();
             _wasStunned = stunned;
 
             if (stunned)

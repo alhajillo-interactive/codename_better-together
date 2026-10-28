@@ -353,7 +353,7 @@ namespace BetterTogether.Player
         {
             var carried = _interactor != null ? _interactor.Carried : null;
             if (carried != null)
-                carried.RequestRelease(_interactor, transform.position);
+                carried.RequestRelease(_interactor, transform.position, DropReason.Fall);
         }
 
         private void HandleTeleported()

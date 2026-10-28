@@ -109,7 +109,7 @@ namespace BetterTogether.Networking
             if (current != null)
             {
                 if (current.TryGetComponent<PlayerInteractor>(out var interactor) && interactor.Carried != null)
-                    interactor.Carried.RequestRelease(interactor);
+                    interactor.Carried.RequestRelease(interactor, DropReason.Respawn);
 
                 Runner.Despawn(current.Object);
             }
