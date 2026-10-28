@@ -2,6 +2,7 @@ using BetterTogether.Player;
 using Fusion;
 using Photon.Realtime;
 using Photon.Voice.Fusion;
+using Photon.Voice.Unity;
 using Photon.Voice.Unity.UtilityScripts;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -11,6 +12,7 @@ namespace BetterTogether.Voice
     /// <summary>
     /// Per-player voice setup. Subscribes the local player to the voice interest groups it should hear
     /// (the Recorder's own group is set on the prefab), lets them mute their mic and publishes whether they are talking.
+    /// Also applies the shared voice detection values and the optional push-to-talk key.
     /// </summary>
     [RequireComponent(typeof(VoiceNetworkObject))]
     public class PlayerVoice : NetworkBehaviour
@@ -29,10 +31,15 @@ namespace BetterTogether.Voice
         private VoiceNetworkObject _voiceObject;
         private FusionVoiceClient _voiceClient;
 
+        // Set with the mute key (M). Independent of push-to-talk, so both can apply at once.
+        // Static on purpose: only the local player drives it, and it must survive a role respawn (gnome to camper or back),
+        // which creates a new PlayerVoice instance; otherwise a muted player would be unmuted by the respawn.
+        private static bool _muted;
+
         public static PlayerVoice Local { get; private set; }
 
         public VoiceChatSettings Settings => _settings;
-        public bool IsMicOn => _voiceObject.RecorderInUse != null && _voiceObject.RecorderInUse.TransmitEnabled;
+        public bool IsMicOn => _voiceObject.RecorderInUse != null && !_muted;
 
         [Networked] public NetworkBool IsTalking { get; private set; }
 
@@ -42,6 +49,14 @@ namespace BetterTogether.Voice
             // Must be set before the Recorder creates its voice, hence Awake rather than Spawned.
             if (TryGetComponent(out MicAmplifier micAmplifier))
                 micAmplifier.AmplificationFactor = _settings.MicGain;
+
+            // Voice detection values can also be changed at runtime: the Recorder pushes them to its detector on change.
+            var recorder = GetComponentInChildren<Recorder>();
+            if (recorder != null)
+            {
+                recorder.VoiceDetectionThreshold = _settings.VoiceDetectionThreshold;
+                recorder.VoiceDetectionDelayMs = _settings.VoiceDetectionDelayMs;
+            }
         }
 
         public override void Spawned()
@@ -75,12 +90,22 @@ namespace BetterTogether.Voice
 
         private void Update()
         {
-            if (Local != this || FirstPersonCamera.IsTyping || Keyboard.current == null || !Keyboard.current[_toggleMicKey].wasPressedThisFrame)
+            if (Local != this || Keyboard.current == null)
                 return;
 
+            bool typing = FirstPersonCamera.IsTyping;
+            if (!typing && Keyboard.current[_toggleMicKey].wasPressedThisFrame)
+                _muted = !_muted;
+
             var recorder = _voiceObject.RecorderInUse;
-            if (recorder != null)
-                recorder.TransmitEnabled = !recorder.TransmitEnabled;
+            if (recorder == null)
+                return;
+
+            // The Recorder only applies a change when the value differs, so this per-frame set is cheap.
+            bool transmit = !_muted;
+            if (transmit && _settings.PushToTalk)
+                transmit = !typing && Keyboard.current[_settings.PushToTalkKey].isPressed;
+            recorder.TransmitEnabled = transmit;
         }
 
         public override void FixedUpdateNetwork()

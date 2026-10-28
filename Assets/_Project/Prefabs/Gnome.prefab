@@ -2164,8 +2164,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: PhotonVoice::Photon.Voice.Unity.Recorder
   voiceDetection: 1
-  voiceDetectionThreshold: 0.01
-  voiceDetectionDelayMs: 500
+  voiceDetectionThreshold: 0.02
+  voiceDetectionDelayMs: 300
   interestGroup: 1
   useTargetPlayers: 0
   targetPlayers: 
@@ -2173,9 +2173,9 @@ MonoBehaviour:
   reliableMode: 0
   encrypt: 0
   transmitEnabled: 1
-  samplingRate: 24000
+  samplingRate: 16000
   frameDuration: 40000
-  bitrate: 30000
+  bitrate: 20000
   sourceType: 0
   microphoneType: 0
   audioClip: {fileID: 0}
