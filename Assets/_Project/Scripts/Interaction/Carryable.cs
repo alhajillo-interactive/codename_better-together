@@ -51,6 +51,10 @@ namespace BetterTogether.Interaction
         [Tooltip("Height of the arc the item draws while settling on a pin spot.")]
         [SerializeField, Min(0f)] private float _snapArc = 0.25f;
 
+        [Header("Holding")]
+        [Tooltip("Rotation of the item relative to the holder's view while it is held alone, e.g. a log lying across the view.")]
+        [SerializeField] private Vector3 _holdEuler;
+
         [Header("Lost items")]
         [Tooltip("Below this world Y the item is lost and returns to its start pose.")]
         [SerializeField] private float _killHeight = -5f;
@@ -61,6 +65,26 @@ namespace BetterTogether.Interaction
 
         private const float ReceiveFovPunch = 2f;
         private const float ReceiveFovPunchTime = 0.12f;
+
+        // Walking bob of an item held by the local player: radians of phase per metre walked, and the speed (m/s) at full bob.
+        private const float SwayRadiansPerMeter = 9f;
+        private const float SwayFullSpeed = 4f;
+        private const int DepenetrationSteps = 8;
+        private const float DropSeparationMargin = 0.02f;
+        private const float DropRiseStep = 0.15f;
+        private const float DropBoxScale = 0.9f;
+        // Margin kept between a released item and the first obstacle on its way out (same role as the held-item skin).
+        private const float HoldSkin = 0.04f;
+        private static readonly Collider[] OverlapBuffer = new Collider[16];
+        private static readonly RaycastHit[] SweepHits = new RaycastHit[16];
+
+        private struct DropContext
+        {
+            public Vector3 Axis;
+            public Vector3 Facing;
+            public float CapsuleRadius;
+            public LayerMask Mask;
+        }
 
         private enum PoseKind : byte { None, Held, Pinned }
 
@@ -92,6 +116,17 @@ namespace BetterTogether.Interaction
         private bool _startPoseValid;
         private bool _startPoseRechecked;
         private bool _startPoseWarned;
+        private Vector3 _holdHalfExtents = new(0.15f, 0.15f, 0.15f);
+        private Vector3 _holdCenter;
+        private bool _smoothValid;
+        private Vector3 _smoothOffset;
+        private Quaternion _smoothRotation;
+        private Vector3 _smoothHolderPosition;
+        private float _swaySpeed;
+        private float _swayPhase;
+        private DropContext _lastDrop;
+        private bool _wasSoloMoving;
+        private bool _releaseHandled;
 
         [Networked] private PlayerInteractor HolderA { get; set; }
         [Networked] private PlayerInteractor HolderB { get; set; }
@@ -99,6 +134,18 @@ namespace BetterTogether.Interaction
         [Networked] private byte PinSlot { get; set; }
 
         public string DisplayName => _displayName;
+
+        /// <summary>Half-extents of the item's colliders in its own (scaled) axes, in metres. Independent of how it is rotated in the scene.</summary>
+        public Vector3 HoldHalfExtents => _holdHalfExtents;
+
+        /// <summary>Centre of the item's colliders relative to its pivot, in its own (scaled) axes.</summary>
+        public Vector3 HoldCenter => _holdCenter;
+
+        /// <summary>Largest horizontal local half-extent, in metres. A held item is posed this much farther from the eye.</summary>
+        public float HoldRadius => Mathf.Max(0.05f, _holdHalfExtents.x, _holdHalfExtents.z);
+
+        /// <summary>Rotation of the item relative to the holder's view while held alone.</summary>
+        public Vector3 HoldEuler => _holdEuler;
 
         /// <summary>
         /// State authority only (not networked): someone has held the item since the last match reset. The campfire only
@@ -163,6 +210,70 @@ namespace BetterTogether.Interaction
             _startPosition = transform.position;
             _startRotation = transform.rotation;
             _startPoseValid = ComputeStartPoseValid();
+            ComputeHoldBox();
+        }
+
+        // The oriented box of the colliders in the item's local space (scaled), so it does not depend on how the item
+        // is rotated in the scene. Colliders are still enabled in Awake.
+        private void ComputeHoldBox()
+        {
+            var found = false;
+            var bounds = default(Bounds);
+            foreach (var c in _colliders)
+            {
+                if (c == null || !c.enabled || c.isTrigger)
+                    continue;
+
+                GetLocalBox(c, out var center, out var extents);
+                for (var i = 0; i < 8; i++)
+                {
+                    var sign = new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f);
+                    var corner = transform.InverseTransformPoint(c.transform.TransformPoint(center + Vector3.Scale(extents, sign)));
+                    if (found)
+                        bounds.Encapsulate(corner);
+                    else
+                        bounds = new Bounds(corner, Vector3.zero);
+                    found = true;
+                }
+            }
+
+            if (!found)
+                return;
+
+            var scale = transform.lossyScale;
+            scale = new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
+            _holdHalfExtents = Vector3.Scale(bounds.extents, scale);
+            _holdCenter = Vector3.Scale(bounds.center, scale);
+        }
+
+        // A collider's box in its own transform space.
+        private static void GetLocalBox(Collider collider, out Vector3 center, out Vector3 extents)
+        {
+            switch (collider)
+            {
+                case BoxCollider box:
+                    center = box.center;
+                    extents = box.size * 0.5f;
+                    return;
+                case SphereCollider sphere:
+                    center = sphere.center;
+                    extents = Vector3.one * sphere.radius;
+                    return;
+                case CapsuleCollider capsule:
+                    center = capsule.center;
+                    extents = Vector3.one * capsule.radius;
+                    extents[capsule.direction] = Mathf.Max(capsule.height * 0.5f, capsule.radius);
+                    return;
+                case MeshCollider { sharedMesh: not null } meshCollider:
+                    center = meshCollider.sharedMesh.bounds.center;
+                    extents = meshCollider.sharedMesh.bounds.extents;
+                    return;
+                default:
+                    // Unknown shape: the world bounds seen from the collider are the best guess.
+                    center = collider.transform.InverseTransformPoint(collider.bounds.center);
+                    extents = collider.bounds.extents;
+                    return;
+            }
         }
 
         public override void Spawned()
@@ -218,7 +329,11 @@ namespace BetterTogether.Interaction
                 || (HeldByGnomes && interactor.Role == PlayerRole.Gnome && HolderCount < _gnomesRequired);
         }
 
-        public void Interact(PlayerInteractor interactor) => RPC_RequestGrab(interactor.Id);
+        public void Interact(PlayerInteractor interactor)
+        {
+            interactor.NoteGrabRequest();
+            RPC_RequestGrab(interactor.Id);
+        }
 
         public void RequestRelease(PlayerInteractor who) => RPC_RequestRelease(who.Id, false, default);
 
@@ -230,6 +345,8 @@ namespace BetterTogether.Interaction
         {
             HolderA = null;
             HolderB = null;
+            // The caller places the item itself (pin, eat, reset): the lost-holder settle must not move it again.
+            _releaseHandled = true;
         }
 
         /// <summary>Authority only: rests the item on the spot (in <paramref name="slot"/> when it has several), kinematic, until someone grabs it.</summary>
@@ -385,8 +502,12 @@ namespace BetterTogether.Interaction
             if (!Runner.TryFindBehaviour(interactorId, out PlayerInteractor who) || !IsHeldBy(who))
                 return;
 
-            // Keep the carry height; physics takes it to the ground once released.
-            if (hasDropPoint && IsMoving)
+            _releaseHandled = true;
+
+            // Let go at a coherent, empty place: in front of the holder, outside its capsule and out of geometry.
+            if (HolderCount == 1 && IsMoving)
+                PlaceForRelease(who, hasDropPoint, dropPoint);
+            else if (hasDropPoint && IsMoving)
                 transform.position = new Vector3(dropPoint.x, transform.position.y, dropPoint.z);
 
             if (HolderA == who)
@@ -395,6 +516,160 @@ namespace BetterTogether.Interaction
                 HolderB = null;
 
             Compact();
+        }
+
+        // Authority only. The release pose is computed explicitly (the hold pose with its retraction, no local smoothing),
+        // moved to the drop point if given, then settled by a sweep outside the holder's capsule and out of any geometry.
+        private void PlaceForRelease(PlayerInteractor holder, bool hasDropPoint, Vector3 dropPoint)
+        {
+            if (!holder.TryGetHoldPose(this, true, out var position, out var rotation))
+            {
+                position = transform.position;
+                rotation = transform.rotation;
+            }
+
+            if (hasDropPoint)
+                position = new Vector3(dropPoint.x, position.y, dropPoint.z);
+
+            position = SettleSafely(MakeDropContext(holder), position, rotation);
+            transform.SetPositionAndRotation(position, rotation);
+        }
+
+        // Footprint of a holder that is needed to place an item next to it. Kept apart from the holder itself so it can be
+        // remembered and still used after the holder has left (see SettleAfterLostHolder).
+        private static DropContext MakeDropContext(PlayerInteractor holder)
+        {
+            var context = new DropContext { Axis = holder.transform.position, Mask = holder.HoldObstacleMask };
+            if (holder.TryGetComponent<CharacterController>(out var capsule))
+            {
+                var scale = capsule.transform.lossyScale;
+                context.CapsuleRadius = capsule.radius * Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z));
+                context.Axis = capsule.transform.TransformPoint(capsule.center);
+            }
+
+            var facing = holder.transform.forward;
+            facing.y = 0f;
+            context.Facing = facing.sqrMagnitude > 1e-4f ? facing.normalized : Vector3.forward;
+            return context;
+        }
+
+        // Projection of the item's oriented box (half-extents rotated by rotation) on a horizontal direction.
+        private float ExtentAlong(Quaternion rotation, Vector3 direction) =>
+            Mathf.Abs(Vector3.Dot(rotation * Vector3.right, direction)) * _holdHalfExtents.x
+            + Mathf.Abs(Vector3.Dot(rotation * Vector3.up, direction)) * _holdHalfExtents.y
+            + Mathf.Abs(Vector3.Dot(rotation * Vector3.forward, direction)) * _holdHalfExtents.z;
+
+        // Distance from the holder's axis to the item's pivot, along direction, at which the box clears the capsule.
+        private float NeededDistance(in DropContext context, Quaternion rotation, Vector3 direction) =>
+            Mathf.Max(0f, context.CapsuleRadius + ExtentAlong(rotation, direction) + DropSeparationMargin
+                - Vector3.Dot(rotation * _holdCenter, direction));
+
+        // Never teleports through geometry: the item is swept from the holder's axis toward the wanted spot and stops short of
+        // the first obstacle. It goes in front (or where it was asked to go) if it fits, else behind, else to the sides; the
+        // first spot whose box is clear wins. If none fits it tries rising above the best one, and as a last resort stays on
+        // the holder's side at the safest swept distance (never above the head).
+        private Vector3 SettleSafely(in DropContext context, Vector3 position, Quaternion rotation)
+        {
+            var flat = position - context.Axis;
+            flat.y = 0f;
+            var facing = context.Facing;
+            var firstNeeded = NeededDistance(context, rotation, facing);
+            var firstDirection = facing;
+            var firstDesired = firstNeeded;
+            if (flat.sqrMagnitude > 1e-4f)
+            {
+                var direction = flat.normalized;
+                var needed = NeededDistance(context, rotation, direction);
+                if (flat.magnitude >= needed)
+                {
+                    firstDirection = direction;
+                    firstNeeded = needed;
+                    firstDesired = flat.magnitude;
+                }
+            }
+
+            var right = new Vector3(facing.z, 0f, -facing.x);
+            var bestStop = -1f;
+            var bestPosition = position;
+            var bestDirection = firstDirection;
+            for (var attempt = 0; attempt < 4; attempt++)
+            {
+                var direction = attempt switch { 0 => firstDirection, 1 => -facing, 2 => right, _ => -right };
+                var needed = attempt == 0 ? firstNeeded : NeededDistance(context, rotation, direction);
+                var desired = attempt == 0 ? firstDesired : needed;
+                var stop = SweepDistance(context, position.y, rotation, direction, desired);
+                var candidate = new Vector3(context.Axis.x + direction.x * stop, position.y, context.Axis.z + direction.z * stop);
+                if (stop > bestStop)
+                {
+                    bestStop = stop;
+                    bestPosition = candidate;
+                    bestDirection = direction;
+                }
+
+                if (stop >= needed - 1e-3f && !BoxBlocked(candidate, rotation, context.Mask))
+                    return candidate;
+            }
+
+            for (var i = 1; i <= DepenetrationSteps; i++)
+            {
+                var candidate = bestPosition + Vector3.up * (i * DropRiseStep);
+                if (!BoxBlocked(candidate, rotation, context.Mask))
+                    return candidate;
+            }
+
+            return bestPosition;
+        }
+
+        // How far (pivot distance from the holder's axis, at most desired) the item can travel along a horizontal direction.
+        // A box cast finds solid obstacles; a ray from the box centre also catches walls thinner than the box that the cast
+        // starts inside of (a cast never reports a collider it begins overlapping).
+        private float SweepDistance(in DropContext context, float height, Quaternion rotation, Vector3 direction, float desired)
+        {
+            var center = new Vector3(context.Axis.x, height, context.Axis.z) + rotation * _holdCenter;
+            var extent = ExtentAlong(rotation, direction);
+            var limit = desired;
+
+            var count = Physics.BoxCastNonAlloc(center, _holdHalfExtents * DropBoxScale, direction, SweepHits, rotation,
+                desired + HoldSkin, context.Mask, QueryTriggerInteraction.Ignore);
+            for (var i = 0; i < count; i++)
+            {
+                if (SweepHits[i].distance > 0f && !IgnoresForSweep(SweepHits[i].collider))
+                    limit = Mathf.Min(limit, SweepHits[i].distance - HoldSkin);
+            }
+
+            count = Physics.RaycastNonAlloc(center, direction, SweepHits, desired + extent + HoldSkin, context.Mask, QueryTriggerInteraction.Ignore);
+            for (var i = 0; i < count; i++)
+            {
+                if (!IgnoresForSweep(SweepHits[i].collider))
+                    limit = Mathf.Min(limit, SweepHits[i].distance - extent - HoldSkin);
+            }
+
+            return Mathf.Max(0f, limit);
+        }
+
+        // Same filter as a held item's (PlayerInteractor.IgnoresForHold), usable once the holder is gone: this item and players.
+        private bool IgnoresForSweep(Collider collider) =>
+            collider.transform.IsChildOf(transform) || collider.GetComponentInParent<PlayerInteractor>() != null;
+
+        // Everything counts, the holder's own capsule included; only this item's colliders are skipped.
+        private bool BoxBlocked(Vector3 position, Quaternion rotation, LayerMask mask)
+        {
+            var count = Physics.OverlapBoxNonAlloc(position + rotation * _holdCenter, _holdHalfExtents * DropBoxScale, OverlapBuffer, rotation,
+                mask, QueryTriggerInteraction.Ignore);
+            for (var i = 0; i < count; i++)
+            {
+                if (!OverlapBuffer[i].transform.IsChildOf(transform))
+                    return true;
+            }
+
+            return false;
+        }
+
+        // Authority only. The holder left without a release call (disconnected): the item is still in its last carried pose,
+        // which may be inside a wall or the holder's capsule, so it gets the same safe placement before physics takes over.
+        private void SettleAfterLostHolder()
+        {
+            transform.position = SettleSafely(_lastDrop, transform.position, transform.rotation);
         }
 
         public override void FixedUpdateNetwork()
@@ -419,6 +694,12 @@ namespace BetterTogether.Interaction
                 HolderA = null;
             }
 
+            // A lone carrier vanished without a release call (it disconnected): settle the item like a normal release.
+            if (_wasSoloMoving && HolderCount == 0 && !_releaseHandled && !IsPinned && !Inert)
+                SettleAfterLostHolder();
+
+            _releaseHandled = false;
+
             // Lost items return to their start pose. This runs before the kinematic rule, which then sees the released item.
             CheckLost(HolderCount == 0 && !IsPinned && !Inert);
 
@@ -435,8 +716,14 @@ namespace BetterTogether.Interaction
                 _freeSince = -1f;
             }
 
-            if (TryGetFollowPose(out var position, out var rotation))
+            // Raw hold pose: no local smoothing or bob (those are drawing only). Release recomputes it with retraction.
+            if (TryGetFollowPose(false, out var position, out var rotation))
                 transform.SetPositionAndRotation(position, rotation);
+
+            // Remember the lone carrier's footprint for the tick it might disappear in.
+            _wasSoloMoving = HolderCount == 1 && IsMoving;
+            if (_wasSoloMoving)
+                _lastDrop = MakeDropContext(Holder(0));
         }
 
         /// <summary>
@@ -578,7 +865,7 @@ namespace BetterTogether.Interaction
             if (!_isSpawned)
                 return;
 
-            var hasPose = TryGetFollowPose(out var position, out var rotation);
+            var hasPose = TryGetFollowPose(true, out var position, out var rotation);
             var kind = PoseKind.None;
             var keyId = default(NetworkBehaviourId);
             var keySlot = 0;
@@ -598,6 +885,7 @@ namespace BetterTogether.Interaction
 
             if (!hasPose)
             {
+                _smoothValid = false;
                 _blending = false;
                 _hasRested = true;
                 _restPosition = transform.position;
@@ -605,12 +893,56 @@ namespace BetterTogether.Interaction
                 return;
             }
 
+            // Weight and walking bob only for what the local player holds alone; proxies already interpolate.
+            if (kind == PoseKind.Held && HolderCount == 1 && Holder(0) == PlayerInteractor.Local)
+                ApplyHoldWeight(Holder(0), ref position, ref rotation);
+            else
+                _smoothValid = false;
+
             if (_blending)
                 BlendPose(ref position, ref rotation);
 
             transform.SetPositionAndRotation(position, rotation);
             _drawnPosition = position;
             _drawnRotation = rotation;
+        }
+
+        // Local presentation: the item trails the view a little (smoothed relative to the eyes, so walking adds no lag)
+        // and bobs with the player's steps. The first frame starts exactly on the target pose.
+        private void ApplyHoldWeight(PlayerInteractor holder, ref Vector3 position, ref Quaternion rotation)
+        {
+            var dt = Time.deltaTime;
+            var eye = holder.EyePosition;
+            var offset = position - eye;
+            var holderPosition = holder.transform.position;
+
+            if (!_smoothValid)
+            {
+                _smoothValid = true;
+                _smoothOffset = offset;
+                _smoothRotation = rotation;
+                _smoothHolderPosition = holderPosition;
+                _swaySpeed = 0f;
+            }
+            else if (dt > 0f)
+            {
+                var follow = 1f - Mathf.Exp(-holder.HoldSharpness * dt);
+                _smoothOffset = Vector3.Lerp(_smoothOffset, offset, follow);
+                _smoothRotation = Quaternion.Slerp(_smoothRotation, rotation, follow);
+
+                var moved = holderPosition - _smoothHolderPosition;
+                moved.y = 0f;
+                _smoothHolderPosition = holderPosition;
+                var speed = Mathf.Min(moved.magnitude / dt, SwayFullSpeed * 2f);
+                _swaySpeed = Mathf.Lerp(_swaySpeed, speed, follow);
+                _swayPhase = Mathf.Repeat(_swayPhase + _swaySpeed * dt * SwayRadiansPerMeter, 4f * Mathf.PI);
+            }
+
+            var amount = Mathf.Clamp01(_swaySpeed / SwayFullSpeed) * holder.SwayAmplitude;
+            var sway = Vector3.up * (Mathf.Sin(_swayPhase) * amount)
+                       + holder.transform.right * (Mathf.Cos(_swayPhase * 0.5f) * amount * 0.5f);
+            position = eye + _smoothOffset + sway;
+            rotation = _smoothRotation;
         }
 
         private PoseKind GetPoseKey(out NetworkBehaviourId id, out int slot)
@@ -652,12 +984,17 @@ namespace BetterTogether.Interaction
             rotation = Quaternion.Slerp(_blendFromRotation, rotation, eased);
         }
 
-        private bool TryGetFollowPose(out Vector3 position, out Quaternion rotation)
+        // presentation: also retract a held item from geometry (every peer's drawn pose); the authority's simulation pose does not.
+        private bool TryGetFollowPose(bool presentation, out Vector3 position, out Quaternion rotation)
         {
             position = default;
             rotation = transform.rotation;
             if (!IsMoving)
                 return TryGetPinPose(out position, out rotation);
+
+            // A lone holder keeps the item in front of the view; two gnomes carry it between their anchors.
+            if (HolderCount == 1 && Holder(0).TryGetHoldPose(this, presentation, out position, out rotation))
+                return true;
 
             var first = Holder(0).CarryAnchor;
             if (HolderCount == 1)
@@ -675,14 +1012,24 @@ namespace BetterTogether.Interaction
             return true;
         }
 
+        /// <summary>The point of the pin spot the item currently rests on, if it is pinned (and not inert).</summary>
+        public bool TryGetPinPoint(out Transform point)
+        {
+            point = null;
+            if (Inert || !IsPinned || Runner == null || !Runner.TryFindBehaviour(PinOwnerId, out NetworkBehaviour owner) || owner is not IPinSpot spot)
+                return false;
+
+            point = spot.GetPinPoint(PinSlot);
+            return point != null;
+        }
+
         private bool TryGetPinPose(out Vector3 position, out Quaternion rotation)
         {
             position = default;
             rotation = transform.rotation;
-            if (Inert || !IsPinned || Runner == null || !Runner.TryFindBehaviour(PinOwnerId, out NetworkBehaviour owner) || owner is not IPinSpot spot)
+            if (!TryGetPinPoint(out var point))
                 return false;
 
-            var point = spot.GetPinPoint(PinSlot);
             position = point.position;
             rotation = point.rotation;
             return true;
