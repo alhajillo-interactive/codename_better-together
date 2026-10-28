@@ -55,6 +55,10 @@ namespace BetterTogether.UI
             if (status == null && fire != null && !fire.IsLit && !fire.HasEnoughWood && carried.TryGetComponent<Matches>(out _))
                 status = $"Faltan {fire.RequiredWood - fire.WoodCount} leños";
 
+            var hasBucket = carried.TryGetComponent<WaterBucket>(out var bucket);
+            if (status == null && hasBucket)
+                status = bucket.IsFull ? "Cubeta: llena" : "Cubeta: vacía";
+
             if (status != null)
                 lines.Add(status);
 
@@ -67,6 +71,10 @@ namespace BetterTogether.UI
 
             if (fire != null && fire.CanPlace(local))
                 lines.Add($"[E] Colocar {carried.DisplayName} ({fire.WoodCount + 1}/{fire.RequiredWood})");
+            else if (hasBucket && bucket.CanFill(local))
+                lines.Add("[E] Llenar cubeta");
+            else if (fire != null && fire.CanPour(local))
+                lines.Add("[E] ¡Apagar fogata!");
             else
                 lines.Add(local.EdibleCarried != null ? "[E] Comer salchicha" : "[E] Soltar");
 

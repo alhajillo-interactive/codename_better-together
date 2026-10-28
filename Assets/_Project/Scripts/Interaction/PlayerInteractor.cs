@@ -101,16 +101,26 @@ namespace BetterTogether.Interaction
                 UseCarried(Carried);
         }
 
-        // Put the log on the campfire if it is in reach of it, otherwise eat it (sausage) or let it go.
+        // The item's own use first (e.g. fill the bucket), then put the log on the campfire or pour the bucket on it
+        // if it is in reach, otherwise eat it (sausage) or let it go.
         private void UseCarried(Carryable carried)
         {
             if (carried == null)
+                return;
+
+            if (carried.TryGetComponent<ICarriedUse>(out var use) && use.TryUse(this))
                 return;
 
             var fire = FireplaceManager.Instance;
             if (fire != null && fire.CanPlace(this))
             {
                 fire.RequestPlace(this);
+                return;
+            }
+
+            if (fire != null && fire.CanPour(this))
+            {
+                fire.RequestPour(this);
                 return;
             }
 

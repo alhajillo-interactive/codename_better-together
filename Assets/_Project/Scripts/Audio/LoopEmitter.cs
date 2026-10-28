@@ -1,3 +1,4 @@
+using BetterTogether.Helpers;
 using UnityEngine;
 
 namespace BetterTogether.Audio
@@ -91,29 +92,7 @@ namespace BetterTogether.Audio
             }
 
             if (_listener != null)
-                _source.transform.position = ClosestPointOnPath(_listener.transform.position);
-        }
-
-        private Vector3 ClosestPointOnPath(Vector3 point)
-        {
-            var best = _path[0];
-            var bestSqr = float.MaxValue;
-            for (var i = 0; i < _path.Length - 1; i++)
-            {
-                var a = _path[i];
-                var segment = _path[i + 1] - a;
-                var length = segment.sqrMagnitude;
-                var t = length > 0.0001f ? Mathf.Clamp01(Vector3.Dot(point - a, segment) / length) : 0f;
-                var candidate = a + segment * t;
-                var sqr = (candidate - point).sqrMagnitude;
-                if (sqr < bestSqr)
-                {
-                    bestSqr = sqr;
-                    best = candidate;
-                }
-            }
-
-            return best;
+                _source.transform.position = Polyline.ClosestPoint(_path, _listener.transform.position);
         }
 
         private void OnDrawGizmosSelected()

@@ -4,7 +4,6 @@ using BetterTogether.Combat;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
-using BetterTogether.Networking;
 using BetterTogether.Player;
 using Fusion;
 using TMPro;
@@ -17,8 +16,9 @@ namespace BetterTogether.Fireplace
     /// <summary>
     /// The campfire. Logs rest in slots arranged like a small teepee; once every slot is taken, a camper holding the matches can light it.
     /// A log is placed by carrying it into the area and pressing interact, or it snaps into a free slot by itself when it lies still inside.
-    /// Only the camper places logs, and a placed log can't be taken out again. Gnomes put a lit fire out by mashing interact;
-    /// the camper then lights it again with the matches.
+    /// Only the camper places logs, and a placed log can't be taken out again. Gnomes put a lit fire out by pouring a
+    /// full <see cref="WaterBucket"/> on it (a short pour that anything can interrupt); a log then jumps out, and the camper
+    /// lights it again with the matches. The milestone (see <see cref="MatchStage"/>) is derived from <see cref="IsLit"/>.
     /// Master-client object: the state authority snaps logs and validates requests.
     /// </summary>
     public class FireplaceManager : NetworkBehaviour, IInteractable, IPinSpot, IMatchResettable
@@ -29,9 +29,9 @@ namespace BetterTogether.Fireplace
         private const float PlaceFovPunchTime = 0.1f;
         private const float HintPulseHz = 3f;
         private const float HintScale = 1.05f;
-        private const float DousePunchFov = 0.5f;
-        private const float DousePunchTime = 0.07f;
-        private const float DouseSfxInterval = 0.1f;
+        private const float PourFovPunch = 1f;
+        private const float PourFovPunchTime = 0.1f;
+        private const float EjectWaitSeconds = 1f;
         private const float DouseFireScale = 0.35f;
         private const float FireScaleSmoothing = 12f;
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
@@ -55,26 +55,25 @@ namespace BetterTogether.Fireplace
         [SerializeField, Min(0f)] private float _placeTolerance = 0.5f;
 
         [Header("Put out")]
-        [Tooltip("A gnome must be closer than this to the fireplace (horizontally) to put it out.")]
-        [SerializeField, Min(0f)] private float _douseRange = 3.5f;
-        [Tooltip("Presses needed to put the fire out the first time.")]
-        [SerializeField, Min(1)] private int _dousePressesBase = 18;
-        [Tooltip("Extra presses needed for every time the fire has already been put out this match.")]
-        [SerializeField, Min(0)] private int _dousePressesPerExtinguish = 6;
-        [Tooltip("The presses needed never go above this.")]
-        [SerializeField, Min(1)] private int _dousePressesMax = 36;
-        [Tooltip("Presses from the same gnome closer together than this (s) are ignored, to blunt autoclickers.")]
-        [SerializeField, Min(0f)] private float _minPressInterval = 0.07f;
-        [Tooltip("Seconds without a press before the progress starts to fall back.")]
-        [SerializeField, Min(0f)] private float _douseDecayDelay = 0.5f;
-        [Tooltip("Presses per second the progress falls once it decays.")]
-        [SerializeField, Min(0f)] private float _douseDecayPerSecond = 5f;
-        [Tooltip("Seconds after the fire is lit during which it can't be put out.")]
-        [SerializeField, Min(0f)] private float _litGraceTime = 2f;
+        [Tooltip("A gnome with a full bucket must be closer than this to the fireplace (horizontally) to pour it.")]
+        [SerializeField, Min(0f)] private float _pourRange = 2f;
+        [Tooltip("Seconds a pour takes; the flames shrink meanwhile and anything that interrupts it spills the bucket.")]
+        [SerializeField, Min(0.1f)] private float _pourTime = 0.8f;
+        [Tooltip("Extra metres the pouring gnome may walk away before the pour is cancelled.")]
+        [SerializeField, Min(0f)] private float _pourCancelSlack = 0.5f;
+        [Tooltip("Seconds after the fire is lit during which it can't be put out, so the change of milestone can be read.")]
+        [SerializeField, Min(0f)] private float _litGraceTime = 4f;
+        [Tooltip("Speed (m/s) at which a log jumps out of the fireplace when the fire is put out.")]
+        [SerializeField, Min(0f)] private float _logEjectSpeed = 3f;
+        [Tooltip("Angle above the ground (degrees) of the jump of that log.")]
+        [SerializeField, Range(0f, 89f)] private float _logEjectElevation = 45f;
         [Tooltip("Heard by everyone, from the fireplace, when the fire is put out.")]
         [SerializeField] private SoundCue _extinguishSfx;
-        [Tooltip("Heard by everyone, from the fireplace, as a gnome press is counted (at most about 10 per second).")]
-        [SerializeField] private SoundCue _douseSfx;
+        [FormerlySerializedAs("_douseSfx")]
+        [Tooltip("Heard by everyone, from the fireplace, when a pour starts (the hiss).")]
+        [SerializeField] private SoundCue _pourSfx;
+        [Tooltip("Optional smoke puff played when the fire goes out.")]
+        [SerializeField] private ParticleSystem _smokePuff;
 
         [Header("Slots")]
         [Tooltip("Distance from the fireplace centre to the middle of each log.")]
@@ -116,10 +115,13 @@ namespace BetterTogether.Fireplace
         private bool[] _occupied;
         private Vector3 _ghostScale = Vector3.one;
         private MaterialPropertyBlock _block;
-        private readonly Dictionary<NetworkBehaviourId, float> _lastPress = new();
         private int _lastLogs;
         private int _lastExtinguishCount;
-        private float _lastDouseSfx = float.NegativeInfinity;
+        // Authority only: the log that jumped out and the speed it must get once physics owns it again.
+        private Carryable _ejectedLog;
+        private Vector3 _ejectVelocity;
+        private float _ejectUntil;
+        private bool _ejectPending;
         private int _labelPercent = -1;
         private float _fireFactor = 1f;
         private Vector3 _fireScale = Vector3.one;
@@ -131,19 +133,19 @@ namespace BetterTogether.Fireplace
         [Networked, OnChangedRender(nameof(OnLitChanged))]
         public NetworkBool IsLit { get; private set; }
 
-        // Put-out progress is replicated as "value at the last press + tick of that press" (see CurrentDouse); it is
-        // written only on a press, a light or a put-out, never while it decays. Every press moves DouseTick, so that is
-        // the property that signals a press to the presentation (the anchor alone can repeat a value).
-        [Networked]
-        private float DouseAnchor { get; set; }
-
-        [Networked, OnChangedRender(nameof(OnDousePressed))]
-        private int DouseTick { get; set; }
-
         [Networked, OnChangedRender(nameof(OnExtinguishCountChanged))]
         private int ExtinguishCount { get; set; }
 
         [Networked] private TickTimer LitGrace { get; set; }
+
+        // A pour is replicated as a timer plus who pours what; the progress is derived from the timer (see DouseFraction).
+        // Pourer and PourBucket are ids, so a new master can tell whether the pour is still valid.
+        [Networked, OnChangedRender(nameof(OnPourChanged))]
+        private TickTimer PourTimer { get; set; }
+
+        [Networked] private PlayerInteractor Pourer { get; set; }
+
+        [Networked] private WaterBucket PourBucket { get; set; }
 
         public static FireplaceManager Instance { get; private set; }
 
@@ -151,25 +153,21 @@ namespace BetterTogether.Fireplace
         public int WoodCount => _isSpawned ? LogsInside : 0;
         public bool HasEnoughWood => _isSpawned && LogsInside >= _requiredWood;
 
-        /// <summary>Presses gnomes need to put the fire out now; grows each time it has been put out this match.</summary>
-        public int RequiredDousePresses =>
-            Mathf.Min(_dousePressesMax, _dousePressesBase + _dousePressesPerExtinguish * (_isSpawned ? ExtinguishCount : 0));
-
-        /// <summary>How close the gnomes are to putting the fire out, 0 to 1.</summary>
-        public float DouseFraction => _isSpawned && IsLit ? Mathf.Clamp01(CurrentDouse / RequiredDousePresses) : 0f;
-
-        /// <summary>True while gnomes are putting the fire out.</summary>
-        public bool IsBeingDoused => _isSpawned && IsLit && CurrentDouse > 0f;
-
-        // Anchor minus the decay since the last press: it holds for the delay, then falls linearly down to zero.
-        private float CurrentDouse
+        /// <summary>How far the pour has gone, 0 to 1; the flames shrink with it. Derived from the pour timer.</summary>
+        public float DouseFraction
         {
             get
             {
-                var decaying = Mathf.Max(0f, NetAnchor.Elapsed(Runner, DouseTick) - _douseDecayDelay);
-                return Mathf.Max(0f, DouseAnchor - decaying * _douseDecayPerSecond);
+                if (!IsBeingDoused)
+                    return 0f;
+
+                var remaining = PourTimer.RemainingTime(Runner) ?? 0f;
+                return Mathf.Clamp01(1f - remaining / _pourTime);
             }
         }
+
+        /// <summary>True while a gnome is pouring water on the fire.</summary>
+        public bool IsBeingDoused => _isSpawned && IsLit && PourTimer.IsRunning;
 
         private void Awake()
         {
@@ -215,29 +213,25 @@ namespace BetterTogether.Fireplace
         public void ResetForMatch()
         {
             IsLit = false;
-            DouseAnchor = 0f;
             ExtinguishCount = 0;
             LitGrace = default;
-            _lastPress.Clear();
+            ClearPour();
+            _ejectedLog = null;
+            _ejectPending = false;
         }
 
         public string GetPrompt(PlayerInteractor interactor) =>
-            interactor.Role == PlayerRole.Gnome ? "Apagar fogata (¡machaca E!)" : "Prender fogata";
+            interactor.Role == PlayerRole.Gnome ? "¡Apagar fogata!" : "Prender fogata";
 
         /// <summary>Mirrors the authority's rules using the replicated state.</summary>
-        public bool CanInteract(PlayerInteractor interactor) => CanLight(interactor) || CanDouse(interactor, 0f);
+        public bool CanInteract(PlayerInteractor interactor) => CanLight(interactor) || CanPour(interactor, 0f);
 
         public void Interact(PlayerInteractor interactor)
         {
             if (interactor.Role == PlayerRole.Gnome)
-            {
-                RPC_RequestDouse(interactor.Id);
-                if (CameraPunch.Instance != null)
-                    CameraPunch.Instance.PunchFov(DousePunchFov, DousePunchTime);
-                return;
-            }
-
-            RPC_RequestLight(interactor.Id);
+                RequestPour(interactor);
+            else
+                RPC_RequestLight(interactor.Id);
         }
 
         // A camper holding the matches can light a ready fire.
@@ -250,18 +244,44 @@ namespace BetterTogether.Fireplace
             return carried != null && carried.TryGetComponent<Matches>(out _);
         }
 
-        // A free-handed gnome close enough to a lit fire can press to put it out.
-        private bool CanDouse(PlayerInteractor who, float tolerance)
+        /// <summary>Whether this gnome can start pouring its full bucket on the fire right now. Mirrors the authority's rules.</summary>
+        public bool CanPour(PlayerInteractor who) => CanPour(who, 0f);
+
+        // A gnome carrying a full bucket close enough to a lit fire, once the grace time after lighting is over.
+        // LitGrace and PourTimer are read from the replicated state; if a proxy lags a tick the authority simply refuses.
+        private bool CanPour(PlayerInteractor who, float tolerance)
         {
-            if (!_isSpawned || !MatchManager.AllowsInteraction || !IsLit || who.Role != PlayerRole.Gnome || who.Carried != null)
+            if (!_isSpawned || !MatchManager.AllowsInteraction || !IsLit || who.Role != PlayerRole.Gnome
+                || PourTimer.IsRunning || !LitGrace.ExpiredOrNotRunning(Runner))
                 return false;
 
-            if ((who.TryGetComponent<Petrifiable>(out var petrifiable) && petrifiable.IsStone)
-                || (who.TryGetComponent<Kickable>(out var kickable) && kickable.IsStunned))
+            var carried = who.Carried;
+            if (carried == null || carried.HolderCount != 1 || !carried.TryGetComponent<WaterBucket>(out var bucket) || !bucket.IsFull)
                 return false;
 
-            var offset = who.transform.position - transform.position;
-            return new Vector2(offset.x, offset.z).magnitude <= _douseRange + tolerance;
+            if (IsDisabled(who))
+                return false;
+
+            return HorizontalDistance(who.transform.position) <= _pourRange + tolerance;
+        }
+
+        // Stone or stunned players can't act (and a pour in their hands is interrupted).
+        private static bool IsDisabled(PlayerInteractor who) =>
+            (who.TryGetComponent<Petrifiable>(out var petrifiable) && petrifiable.IsStone)
+            || (who.TryGetComponent<Kickable>(out var kickable) && kickable.IsStunned);
+
+        private float HorizontalDistance(Vector3 position)
+        {
+            var offset = position - transform.position;
+            return new Vector2(offset.x, offset.z).magnitude;
+        }
+
+        /// <summary>Asks the authority to start pouring the carried bucket on the fire.</summary>
+        public void RequestPour(PlayerInteractor who)
+        {
+            RPC_RequestPour(who.Id);
+            if (CameraPunch.Instance != null)
+                CameraPunch.Instance.PunchFov(PourFovPunch, PourFovPunchTime);
         }
 
         /// <summary>Whether the log this player carries can be put into a free slot right now. Mirrors the authority's rules.</summary>
@@ -294,37 +314,19 @@ namespace BetterTogether.Fireplace
                 return;
 
             IsLit = true;
-            DouseAnchor = 0f;
             LitGrace = TickTimer.CreateFromSeconds(Runner, _litGraceTime);
+            ClearPour();
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        private void RPC_RequestDouse(NetworkBehaviourId interactorId)
+        private void RPC_RequestPour(NetworkBehaviourId interactorId)
         {
-            if (!Runner.TryFindBehaviour(interactorId, out PlayerInteractor who) || !CanDouse(who, _placeTolerance))
+            if (!Runner.TryFindBehaviour(interactorId, out PlayerInteractor who) || !CanPour(who, _placeTolerance))
                 return;
 
-            if (LitGrace.IsRunning && !LitGrace.Expired(Runner))
-                return;
-
-            var now = Time.time;
-            if (_lastPress.TryGetValue(interactorId, out var last) && now - last < _minPressInterval)
-                return;
-
-            _lastPress[interactorId] = now;
-
-            // Re-anchor on the press: the decayed value now plus this press.
-            var progress = CurrentDouse + 1f;
-            if (progress < RequiredDousePresses)
-            {
-                DouseAnchor = progress;
-                DouseTick = Runner.Tick.Raw;
-                return;
-            }
-
-            IsLit = false;
-            DouseAnchor = 0f;
-            ExtinguishCount++;
+            PourBucket = who.Carried.GetComponent<WaterBucket>();
+            Pourer = who;
+            PourTimer = TickTimer.CreateFromSeconds(Runner, _pourTime);
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -349,12 +351,121 @@ namespace BetterTogether.Fireplace
             Carryable.GetPinnedTo(this, _pinned);
             LogsInside = _pinned.Count;
 
-            // The put-out progress decays by itself (derived from DouseAnchor/DouseTick), so nothing is written per tick.
+            TickPour();
+            TickEjectedLog();
+
             if (IsLit && !HasEnoughWood)
             {
                 IsLit = false;
-                DouseAnchor = 0f;
+                ClearPour();
             }
+        }
+
+        // Authority only: follows a running pour. Anything that invalidates it cancels it and spills the bucket,
+        // including the pourer leaving the game or the master changing (the new master finds a pourer that is gone).
+        private void TickPour()
+        {
+            if (!PourTimer.IsRunning)
+                return;
+
+            var bucket = PourBucket;
+            if (!IsLit || !IsPourValid(bucket))
+            {
+                if (bucket != null)
+                    bucket.RequestSpill();
+                ClearPour();
+                return;
+            }
+
+            if (PourTimer.Expired(Runner))
+                FinishPour(bucket);
+        }
+
+        private bool IsPourValid(WaterBucket bucket)
+        {
+            var pourer = Pourer;
+            if (pourer == null || pourer.Object == null || !pourer.Object.IsValid || bucket == null || bucket.Object == null || !bucket.Object.IsValid)
+                return false;
+
+            return MatchManager.AllowsInteraction
+                && bucket.IsFull
+                && Carryable.FindHeldBy(pourer) == bucket.Carryable
+                && !IsDisabled(pourer)
+                && HorizontalDistance(pourer.transform.position) <= _pourRange + _pourCancelSlack;
+        }
+
+        // The water is out: the fire dies, the bucket is empty and one log jumps out, so lighting it again takes a log and matches.
+        private void FinishPour(WaterBucket bucket)
+        {
+            bucket.RequestSpill();
+            ClearPour();
+            IsLit = false;
+            LitGrace = default;
+            ExtinguishCount++;
+            EjectTopLog();
+        }
+
+        private void ClearPour()
+        {
+            if (PourTimer.IsRunning)
+                PourTimer = default;
+            if (Pourer != null)
+                Pourer = null;
+            if (PourBucket != null)
+                PourBucket = null;
+        }
+
+        // Authority only: unpins the log of the highest occupied slot. It is kinematic until the Carryable's own rule turns
+        // it dynamic (which also zeroes its velocity), so the jump is applied in TickEjectedLog afterwards.
+        private void EjectTopLog()
+        {
+            Carryable.GetPinnedTo(this, _pinned);
+            Carryable top = null;
+            foreach (var log in _pinned)
+            {
+                if (top == null || log.PinnedSlot > top.PinnedSlot)
+                    top = log;
+            }
+
+            if (top == null)
+                return;
+
+            var outward = Vector3.ProjectOnPlane(top.transform.position - transform.position, Vector3.up);
+            if (outward.sqrMagnitude < 0.0001f)
+                outward = transform.forward;
+
+            var elevation = _logEjectElevation * Mathf.Deg2Rad;
+            _ejectVelocity = (outward.normalized * Mathf.Cos(elevation) + Vector3.up * Mathf.Sin(elevation)) * _logEjectSpeed;
+            _ejectedLog = top;
+            _ejectPending = true;
+            _ejectUntil = Time.time + EjectWaitSeconds;
+            top.Unpin();
+        }
+
+        // Gives the jump to the ejected log once it is under physics; gives up if that takes too long.
+        private void TickEjectedLog()
+        {
+            if (!_ejectPending)
+                return;
+
+            var log = _ejectedLog;
+            if (log == null || log.Object == null || !log.Object.IsValid || Time.time > _ejectUntil)
+            {
+                _ejectPending = false;
+                return;
+            }
+
+            if (log.IsPinned || log.IsHeld || !log.TryGetComponent<Rigidbody>(out var body))
+            {
+                _ejectPending = false;
+                return;
+            }
+
+            if (body.isKinematic)
+                return;
+
+            body.linearVelocity = _ejectVelocity;
+            _ejectPending = false;
         }
 
         // Logs that lie still inside the area settle into a free slot; a log with no slot left just stays where it is.
@@ -368,7 +479,10 @@ namespace BetterTogether.Fireplace
                 if (!_results[i].TryGetComponent<FireplaceWood>(out var wood) || !_seen.Add(wood))
                     continue;
 
-                if (!wood.TryGetComponent<Carryable>(out var log) || !log.WasHandled || !log.LastHeldByCamper || log.FreeTime < _settleTime || log.HolderCount > 0 || log.IsPinned || log.Inert
+                if (!wood.TryGetComponent<Carryable>(out var log) || IsEjectedAndLoose(log))
+                    continue;
+
+                if (!log.WasHandled || !log.LastHeldByCamper || log.FreeTime < _settleTime || log.HolderCount > 0 || log.IsPinned || log.Inert
                     || !wood.TryGetComponent<Rigidbody>(out var body) || body.linearVelocity.magnitude >= _restSpeed
                     || !IsInArea(log.transform.position))
                     continue;
@@ -380,6 +494,21 @@ namespace BetterTogether.Fireplace
                 log.Pin(this, slot);
                 _occupied[slot] = true;
             }
+        }
+
+        // The log that just jumped out must not snap straight back in; the camper has to pick it up and place it.
+        private bool IsEjectedAndLoose(Carryable log)
+        {
+            if (_ejectedLog != log)
+                return false;
+
+            if (log.HolderCount > 0 || !IsInArea(log.transform.position))
+            {
+                _ejectedLog = null;
+                return false;
+            }
+
+            return true;
         }
 
         private bool IsInArea(Vector3 position, float tolerance = 0f)
@@ -445,22 +574,19 @@ namespace BetterTogether.Fireplace
             UpdateLabel();
             UpdateFire();
 
-            // OnChangedRender does not fire on spawn, so late joiners don't hear it; going out stays quiet.
+            // OnChangedRender does not fire on spawn, so late joiners don't hear it.
             if (IsLit)
                 _lightSfx.PlayAt(transform.position);
+            else if (_smokePuff != null)
+                _smokePuff.Play();
         }
 
-        // DouseTick only moves on a press (a put-out or a light leaves it alone and zeroes the anchor, which stays quiet).
-        // The label follows the decay on its own in Render; this only needs to react to the press itself.
-        private void OnDousePressed()
+        // The pour timer starts (hiss) and stops (the label and flames follow DouseFraction on their own in Render).
+        private void OnPourChanged()
         {
             UpdateLabel();
-
-            if (DouseAnchor > 0f && IsLit && Time.time - _lastDouseSfx >= DouseSfxInterval)
-            {
-                _lastDouseSfx = Time.time;
-                _douseSfx.PlayAt(transform.position);
-            }
+            if (PourTimer.IsRunning)
+                _pourSfx.PlayAt(transform.position);
         }
 
         // Only a rise is a fire being put out; the count going back to 0 is a match reset, which stays quiet.
@@ -489,7 +615,7 @@ namespace BetterTogether.Fireplace
         // Percentage shown while the fire is being put out; -1 when it is not.
         private int DousePercent => IsBeingDoused ? Mathf.RoundToInt(DouseFraction * 100f) : -1;
 
-        // The put-out progress decays without any state change, so follow it here; text is only rebuilt when the shown value moves.
+        // The pour progress is derived from a timer, so follow it here; text is only rebuilt when the shown value moves.
         private void RefreshDouseLabel()
         {
             if (_amountLabel != null && DousePercent != _labelPercent)
@@ -502,7 +628,7 @@ namespace BetterTogether.Fireplace
                 _fire.SetActive(IsLit);
         }
 
-        // The flames shrink as the gnomes get closer to putting the fire out.
+        // The flames shrink as the water is poured.
         private void UpdateFireScale()
         {
             if (_fire == null)

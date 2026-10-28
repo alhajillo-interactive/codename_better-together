@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using BetterTogether.Environment;
 using BetterTogether.Fireplace;
+using BetterTogether.Interaction;
 using BetterTogether.Match;
 using BetterTogether.Player;
 using TMPro;
@@ -54,6 +55,8 @@ namespace BetterTogether.UI
         [SerializeField] private Color _pendingColor = Color.white;
         [SerializeField] private Color _doneColor = new(0.45f, 0.9f, 0.45f);
         [SerializeField] private Color _failColor = new(1f, 0.3f, 0.25f);
+        [Tooltip("Colour of the greyed-out line that previews the next milestone.")]
+        [SerializeField] private Color _mutedColor = new(0.6f, 0.6f, 0.6f);
 
         [Header("Announcer")]
         [SerializeField] private TMP_Text _announcer;
@@ -71,6 +74,8 @@ namespace BetterTogether.UI
         [SerializeField] private TMP_Text _endSubtitle;
         [SerializeField] private TMP_Text _endRematch;
         [SerializeField] private float _endFadeDuration = 0.4f;
+
+        private static readonly Dictionary<string, string> StruckCache = new();
 
         private readonly Queue<Announcement> _queue = new();
         private Line[] _lines;
@@ -93,6 +98,7 @@ namespace BetterTogether.UI
         private bool _prevLit;
         private bool _prevDoused;
         private float _nextDouseWarning;
+        private int _titleVariant = -1;
         private bool _hasSausageState;
         private Sausage.CookState _prevCook;
         private bool _endShown;
@@ -205,41 +211,116 @@ namespace BetterTogether.UI
 
         #region Objectives
 
+        // Four lines per role and milestone (see MatchStage); the variant is part of every line's key, so a change
+        // of role or milestone rebuilds all of them. Texts are literals or SetText formats: nothing allocates per frame.
         private void UpdateObjectives(bool playing)
         {
             var local = PlayerCharacter.Local;
             var camper = local == null || local.Role == PlayerRole.Camper;
-            var title = camper ? "Tu plan" : "Plan del campista (¡sabotéalo!)";
-            if (_objectivesTitle.text != title)
-                _objectivesTitle.text = title;
+            var defend = MatchStage.Current == MatchStage.Stage.DefendFire;
+            var variant = (camper ? 0 : 2) + (defend ? 1 : 0);
+            SetTitle(variant);
 
             var fire = FireplaceManager.Instance;
             var sausage = Sausage.Instance;
-
-            var lit = fire != null && fire.IsLit;
             var wood = fire != null ? fire.WoodCount : 0;
             var required = fire != null ? fire.RequiredWood : 0;
-            var woodDone = fire != null && (lit || wood >= required);
-
             var cook = sausage != null ? sausage.State : Sausage.CookState.Raw;
             var eaten = sausage != null && sausage.Eaten;
             var cookDone = sausage != null && (eaten || cook == Sausage.CookState.Cooked);
+            var sausageText = cook switch
+            {
+                Sausage.CookState.Cooked => "Salchicha: Lista",
+                Sausage.CookState.Burnt => "Salchicha: Quemada",
+                _ => "Salchicha: Cruda",
+            };
 
-            if (UpdateLine(0, woodDone, wood * 1000 + required, playing))
-                SetLineText(0, woodDone, $"Leños {wood}/{required}");
+            switch (variant)
+            {
+                case 0: // Camper, milestone 1: build and light the fire.
+                    var carried = PlayerInteractor.Local != null ? PlayerInteractor.Local.Carried : null;
+                    var hasMatches = carried != null && carried.TryGetComponent<Matches>(out _);
+                    ShowCount(0, variant, fire != null && wood >= required, false, "Leños {0:0}/{1:0}", wood, required, playing);
+                    ShowPlain(1, variant, hasMatches, false, "Consigue los fósforos", 0, playing);
+                    ShowPlain(2, variant, false, false, "Enciende la fogata", 0, playing);
+                    ShowPlain(3, variant, false, true, "(Luego: cocina y come la salchicha)", 0, playing);
+                    break;
+                case 1: // Camper, milestone 2: defend the fire while the sausage cooks.
+                    ShowPlain(0, variant, false, false, "¡Defiende la fogata!", 0, playing);
+                    ShowPlain(1, variant, cookDone, false, sausageText, (int)cook, playing);
+                    ShowPlain(2, variant, eaten, false, "Cómela cuando esté lista", 0, playing);
+                    ShowPlain(3, variant, false, false, "Patea a quien traiga agua", 0, playing);
+                    break;
+                case 2: // Gnome, milestone 1: steal and hide.
+                    ShowPlain(0, variant, false, false, "Roba leños y fósforos", 0, playing);
+                    ShowPlain(1, variant, false, false, "Escóndelos", 0, playing);
+                    ShowCount(2, variant, false, false, "Leños del campista {0:0}/{1:0}", wood, required, playing);
+                    ShowPlain(3, variant, false, true, "(Si la enciende: busca la cubeta)", 0, playing);
+                    break;
+                default: // Gnome, milestone 2: bring the water.
+                    var held = PlayerInteractor.Local != null ? PlayerInteractor.Local.Carried : null;
+                    var bucketState = 0;
+                    if (held != null && held.TryGetComponent<WaterBucket>(out var bucket))
+                        bucketState = bucket.IsFull ? 2 : 1;
 
-            if (UpdateLine(1, lit, 0, playing))
-                SetLineText(1, lit, "Encender la fogata");
+                    var bucketText = bucketState switch
+                    {
+                        2 => "¡Llévala a la fogata!",
+                        1 => "Llénala en el río",
+                        _ => "Busca la cubeta",
+                    };
 
-            if (UpdateLine(2, cookDone, (int)cook, playing))
-                SetLineText(2, cookDone, $"Cocinar la salchicha ({(sausage != null ? sausage.StateLabel : "Cruda")})");
+                    ShowPlain(0, variant, false, false, "¡Apaga la fogata!", 0, playing);
+                    ShowPlain(1, variant, false, false, bucketText, bucketState, playing);
+                    ShowPlain(2, variant, false, false, sausageText, (int)cook, playing);
+                    ShowPlain(3, variant, false, false, "Que no se la coma", 0, playing);
+                    break;
+            }
+        }
 
-            if (UpdateLine(3, eaten, 0, playing))
-                SetLineText(3, eaten, "Comer la salchicha");
+        private void SetTitle(int variant)
+        {
+            if (variant == _titleVariant)
+                return;
+
+            _titleVariant = variant;
+            _objectivesTitle.SetText(variant switch
+            {
+                0 => "Hito 1 · Arma la fogata",
+                1 => "Hito 2 · Defiéndela",
+                2 => "Hito 1 · Sabotea al campista",
+                _ => "Hito 2 · ¡Ataca la fogata!",
+            });
+        }
+
+        // A line whose text is a literal; extra tells apart the literals a line can show in one variant.
+        private void ShowPlain(int index, int variant, bool done, bool muted, string text, int extra, bool playing)
+        {
+            if (UpdateLine(index, done, variant * 16 + extra, playing, muted))
+                _lines[index].Text.SetText(done ? Struck(text) : text);
+        }
+
+        // A line with two numbers, written with SetText so no string is built.
+        private void ShowCount(int index, int variant, bool done, bool muted, string format, int a, int b, bool playing)
+        {
+            if (UpdateLine(index, done, variant * 16 + (a * 100 + b) * 64, playing, muted))
+                _lines[index].Text.SetText(done ? Struck(format) : format, a, b);
+        }
+
+        // Strikethrough version of a literal; built once per literal.
+        private static string Struck(string text)
+        {
+            if (!StruckCache.TryGetValue(text, out var struck))
+            {
+                struck = "<s>" + text + "</s>";
+                StruckCache.Add(text, struck);
+            }
+
+            return struck;
         }
 
         /// <summary>Plays the completion or failure juice and returns true when the line text must be rebuilt.</summary>
-        private bool UpdateLine(int index, bool done, int key, bool playing)
+        private bool UpdateLine(int index, bool done, int key, bool playing, bool muted)
         {
             var line = _lines[index];
 
@@ -260,7 +341,7 @@ namespace BetterTogether.UI
             line.Done = done;
 
             var failing = Time.unscaledTime < line.RedUntil;
-            var color = failing ? _failColor : done ? _doneColor : _pendingColor;
+            var color = failing ? _failColor : muted ? _mutedColor : done ? _doneColor : _pendingColor;
             if (line.Text.color != color)
                 line.Text.color = color;
 
@@ -270,11 +351,6 @@ namespace BetterTogether.UI
 
             line.Key = fullKey;
             return true;
-        }
-
-        private void SetLineText(int index, bool done, string text)
-        {
-            _lines[index].Text.text = done ? $"<s>{text}</s>" : text;
         }
 
         #endregion
@@ -344,6 +420,8 @@ namespace BetterTogether.UI
             }
         }
 
+        // The change of milestone: the fire being lit starts milestone 2, putting it out brings milestone 1 back.
+        // Texts differ per role, since the roles invert.
         private void DetectFire(bool playing)
         {
             var fire = FireplaceManager.Instance;
@@ -353,26 +431,30 @@ namespace BetterTogether.UI
                 return;
             }
 
+            var camper = PlayerCharacter.Local == null || PlayerCharacter.Local.Role == PlayerRole.Camper;
             var lit = fire.IsLit;
             if (_hasFireState && playing && lit != _prevLit)
             {
                 if (lit)
                 {
-                    Announce("¡La fogata se encendió!", new Color(1f, 0.7f, 0.3f));
+                    Announce(camper ? "¡Fuego! Defiéndelo mientras se cocina" : "¡FUEGO! Ahora los duendes atacan",
+                        new Color(1f, 0.7f, 0.3f), true, 1.6f);
                     Flash(new Color(1f, 0.6f, 0.2f, 0.2f), 0.4f);
+                    if (CameraPunch.Instance != null)
+                        CameraPunch.Instance.PunchFov(5f, 0.4f);
                 }
                 else
                 {
-                    Announce("¡Se apagó la fogata!", _failColor);
+                    Announce(camper ? "¡Apagada! Que no la vuelva a prender" : "¡Apagada! Vuelve a encenderla", _failColor, true, 1.6f);
+                    Flash(new Color(0.3f, 0.5f, 1f, 0.25f), 0.4f);
                 }
             }
 
-            // Warn the camper when gnomes start putting the fire out (not again right away if they keep on and off).
+            // Warn the camper when the water starts to pour (not again right away if a pour is interrupted and restarted).
             var doused = fire.IsBeingDoused;
-            if (_hasFireState && playing && doused && !_prevDoused && Time.unscaledTime >= _nextDouseWarning
-                && PlayerCharacter.Local is { Role: PlayerRole.Camper })
+            if (_hasFireState && playing && doused && !_prevDoused && Time.unscaledTime >= _nextDouseWarning && camper)
             {
-                Announce("¡Los duendes apagan la fogata!", _failColor);
+                Announce("¡Te apagan la fogata!", _failColor);
                 _nextDouseWarning = Time.unscaledTime + 5f;
             }
 
