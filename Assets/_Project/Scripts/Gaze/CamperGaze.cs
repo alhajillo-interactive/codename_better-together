@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
+using BetterTogether.Networking;
 using BetterTogether.Player;
 using Fusion;
 using UnityEngine;
@@ -68,7 +69,8 @@ namespace BetterTogether.Gaze
 
         private float _retargetTimer;
         private float _lostSightTime;
-        private float _sinceFocus;
+        private float _lastCameraPitch;
+        private bool _resetRequested;
         private bool _isSpawned;
         private PlayerMovement _movement;
         private InputAction _focus;
@@ -81,19 +83,54 @@ namespace BetterTogether.Gaze
 
         public float HalfAngle => _halfAngle;
 
+        // Pitch is only rewritten when it moves more than this many degrees, so mouse noise doesn't dirty it every tick.
+        private const float PitchStep = 0.5f;
+
+        // If the camera stops while the replicated pitch is still off by more than this, it is written once more so proxies converge to the exact value.
+        private const float PitchSettle = 0.01f;
+
         [Networked] private float Pitch { get; set; }
         [Networked] private Petrifiable Target { get; set; }
-        [Networked] private float Progress { get; set; }
+
+        /// <summary>Tick at which <see cref="Target"/> was locked; the lock fill is derived from it. Meaningless while there is no target.</summary>
+        [Networked] private int LockTick { get; set; }
+
+        /// <summary>
+        /// Written only by the state authority: true once its own derived lock fill reached 1 and the lock still holds;
+        /// false when a target is locked, released or lost. Replicated so that no peer acts on a full lock the camper
+        /// has not confirmed (see <see cref="LockProgress"/>).
+        /// </summary>
+        [Networked] private NetworkBool LockFull { get; set; }
+
         [Networked] public NetworkBool IsGazeEnabled { get; private set; }
         [Networked] private NetworkBool IsFocusing { get; set; }
-        [Networked] private float Stamina { get; set; }
+
+        // Stamina is replicated as "value at the last event + tick of that event" (see CurrentStamina). The anchor is
+        // rewritten only when focusing starts/stops, when the bar runs dry and when a match starts.
+        [Networked] private float StaminaAnchor { get; set; }
+        [Networked] private int StaminaTick { get; set; }
         [Networked] private NetworkBool IsExhausted { get; set; }
 
         /// <summary>True while the camper holds the focus button and has stamina; only then the gaze petrifies.</summary>
         public bool Focusing => _isSpawned && IsFocusing;
 
         /// <summary>0..1 gaze stamina.</summary>
-        public float StaminaFraction => _isSpawned ? Stamina : 1f;
+        public float StaminaFraction => _isSpawned ? CurrentStamina : 1f;
+
+        /// <summary>
+        /// Stamina now, derived from the replicated anchor: it drains while focusing, and refills after a short delay otherwise.
+        /// </summary>
+        private float CurrentStamina
+        {
+            get
+            {
+                var elapsed = NetAnchor.Elapsed(Runner, StaminaTick);
+                var value = IsFocusing
+                    ? StaminaAnchor - elapsed / Mathf.Max(_staminaSeconds, 0.01f)
+                    : StaminaAnchor + Mathf.Max(0f, elapsed - _regenDelay) / Mathf.Max(_regenSeconds, 0.01f);
+                return Mathf.Clamp01(value);
+            }
+        }
 
         /// <summary>True after the stamina ran out, until it refills to <see cref="ReuseThreshold"/>.</summary>
         public bool Exhausted => _isSpawned && IsExhausted;
@@ -107,8 +144,26 @@ namespace BetterTogether.Gaze
         /// <summary>The gnome currently locked (or frozen) by this gaze; null if none.</summary>
         public Petrifiable LockedTarget => _isSpawned ? Target : null;
 
-        /// <summary>0..1 fill of the lock grace; at 1 the target is frozen.</summary>
-        public float LockProgress => _isSpawned ? Progress : 0f;
+        /// <summary>
+        /// 0..1 fill of the lock grace; at 1 the target is frozen. The fill is derived from <see cref="LockTick"/>, but a
+        /// peer's tick can run ahead of the data it has received (the gnome that must freeze is a proxy of this gaze), so
+        /// a derived fill would reach 1 while the camper has already let go, or before it even got the target. Therefore 1 is
+        /// only returned while the authority has confirmed it with <see cref="LockFull"/>; until then it stays below 1.
+        /// </summary>
+        public float LockProgress
+        {
+            get
+            {
+                if (!_isSpawned || Target == null)
+                    return 0f;
+
+                return LockFull ? 1f : Mathf.Min(DerivedLockFill, 0.99f);
+            }
+        }
+
+        // Lock fill from the elapsed ticks alone, unconfirmed. The authority uses it to decide LockFull.
+        private float DerivedLockFill =>
+            _lockGrace > 0f ? Mathf.Clamp01(NetAnchor.Elapsed(Runner, LockTick) / _lockGrace) : 1f;
 
         /// <summary>True once spawned with the gaze turned on and the camper focusing.</summary>
         public bool IsActive => _isSpawned && IsGazeEnabled && IsFocusing;
@@ -133,7 +188,19 @@ namespace BetterTogether.Gaze
 
         public Vector3 EyePosition => _eye != null ? _eye.position : transform.position + Vector3.up * 1.6f;
 
-        public Vector3 LookDirection => Quaternion.Euler(_isSpawned ? Pitch : 0f, transform.eulerAngles.y, 0f) * Vector3.forward;
+        // The authority aims with the exact camera pitch; proxies use the replicated one.
+        public Vector3 LookDirection => Quaternion.Euler(CurrentPitch, transform.eulerAngles.y, 0f) * Vector3.forward;
+
+        private float CurrentPitch
+        {
+            get
+            {
+                if (!_isSpawned)
+                    return 0f;
+
+                return HasStateAuthority && FirstPersonCamera.Instance != null ? FirstPersonCamera.Instance.Pitch : Pitch;
+            }
+        }
 
         private void Awake() => _movement = GetComponent<PlayerMovement>();
 
@@ -146,7 +213,9 @@ namespace BetterTogether.Gaze
 
             Local = this;
             IsGazeEnabled = _enabledOnSpawn;
-            Stamina = 1f;
+            LockFull = false;
+            StaminaAnchor = 1f;
+            StaminaTick = Runner.Tick.Raw;
             IsExhausted = false;
             IsFocusing = false;
             _focus = InputSystem.actions.FindAction("Player/Focus");
@@ -166,12 +235,8 @@ namespace BetterTogether.Gaze
             }
         }
 
-        private void HandleGameStarted()
-        {
-            Stamina = 1f;
-            IsExhausted = false;
-            _sinceFocus = 0f;
-        }
+        // Raised from a render-side callback, so only flag it; the networked writes happen in FixedUpdateNetwork.
+        private void HandleGameStarted() => _resetRequested = true;
 
         public override void Render()
         {
@@ -186,38 +251,53 @@ namespace BetterTogether.Gaze
 
             // Yaw already travels with the NetworkTransform; pitch only lives on the camera, so publish it.
             if (FirstPersonCamera.Instance != null)
-                Pitch = FirstPersonCamera.Instance.Pitch;
+            {
+                var pitch = FirstPersonCamera.Instance.Pitch;
+                var delta = Mathf.Abs(pitch - Pitch);
+                if (delta > PitchStep || (delta > PitchSettle && Mathf.Approximately(pitch, _lastCameraPitch)))
+                    Pitch = pitch;
+
+                _lastCameraPitch = pitch;
+            }
 
             var dt = Runner.DeltaTime;
-            UpdateFocus(dt);
+            UpdateFocus();
             UpdateLock(dt);
         }
 
-        private void UpdateFocus(float dt)
+        // Stamina is never written per tick: it is re-anchored only when focusing flips, when the bar runs dry and when a match starts.
+        private void UpdateFocus()
         {
+            var tick = Runner.Tick.Raw;
+            if (_resetRequested)
+            {
+                _resetRequested = false;
+                StaminaAnchor = 1f;
+                StaminaTick = tick;
+                IsExhausted = false;
+            }
+
+            var stamina = CurrentStamina;
             var wantsFocus = _focus != null && _focus.IsPressed() && Cursor.lockState == CursorLockMode.Locked;
-            var focusing = wantsFocus && !IsExhausted && Stamina > 0f && IsGazeEnabled;
-            if (focusing)
+            var focusing = wantsFocus && !IsExhausted && stamina > 0f && IsGazeEnabled;
+            if (IsFocusing && stamina <= 0f)
             {
-                _sinceFocus = 0f;
-                Stamina = Mathf.Max(0f, Stamina - dt / Mathf.Max(_staminaSeconds, 0.01f));
-                if (Stamina <= 0f)
-                {
-                    IsExhausted = true;
-                    focusing = false;
-                }
+                // The bar ran dry while focusing.
+                IsExhausted = true;
+                focusing = false;
             }
-            else
+            else if (!focusing && IsExhausted && stamina >= _reuseThreshold)
             {
-                _sinceFocus += dt;
-                if (_sinceFocus >= _regenDelay)
-                    Stamina = Mathf.Min(1f, Stamina + dt / Mathf.Max(_regenSeconds, 0.01f));
-
-                if (IsExhausted && Stamina >= _reuseThreshold)
-                    IsExhausted = false;
+                IsExhausted = false;
             }
 
-            IsFocusing = focusing;
+            if (focusing != IsFocusing)
+            {
+                StaminaAnchor = stamina;
+                StaminaTick = tick;
+                IsFocusing = focusing;
+            }
+
             if (_movement != null)
                 _movement.SpeedMultiplier = focusing ? _focusMoveMultiplier : 1f;
         }
@@ -263,25 +343,32 @@ namespace BetterTogether.Gaze
 
             if (!IsFocusing)
             {
-                ReleaseLock(dt);
+                ReleaseLock();
                 return;
             }
 
             var current = Target;
             if (current != null && TryKeep(current, dt))
             {
-                Progress = _lockGrace > 0f ? Mathf.Min(1f, Progress + dt / _lockGrace) : 1f;
+                // The fill itself is derived from LockTick; only the confirmation of a full lock is written, once.
+                if (!LockFull && DerivedLockFill >= 1f)
+                    LockFull = true;
                 return;
             }
 
             if (current != null)
             {
                 Target = null;
+                LockFull = false;
                 _retargetTimer = _retargetDelay;
                 _lostSightTime = 0f;
             }
+            else if (LockFull)
+            {
+                // The locked gnome left the game: its reference reads as null without passing through the branch above.
+                LockFull = false;
+            }
 
-            Progress = Mathf.Max(0f, Progress - 2f * dt / Mathf.Max(_lockGrace, 0.01f));
             _retargetTimer -= dt;
             if (_retargetTimer > 0f)
                 return;
@@ -291,23 +378,24 @@ namespace BetterTogether.Gaze
                 return;
 
             Target = best;
-            Progress = 0f;
+            LockTick = Runner.Tick.Raw;
+            LockFull = false;
             _lostSightTime = 0f;
         }
 
-        // Same as losing sight: the gnome is released at once, and the lock drains.
-        private void ReleaseLock(float dt)
+        // Same as losing sight: the gnome is released at once.
+        private void ReleaseLock()
         {
             Target = null;
+            LockFull = false;
             _retargetTimer = 0f;
             _lostSightTime = 0f;
-            Progress = Mathf.Max(0f, Progress - 2f * dt / Mathf.Max(_lockGrace, 0.01f));
         }
 
         private void ClearLock()
         {
             Target = null;
-            Progress = 0f;
+            LockFull = false;
             _retargetTimer = 0f;
             _lostSightTime = 0f;
         }
@@ -319,7 +407,8 @@ namespace BetterTogether.Gaze
                 return false;
 
             // Full lock and the gnome already turned to stone: let go so the gaze can move on to a free gnome.
-            if (Progress >= 1f && target.IsStone)
+            var locked = DerivedLockFill >= 1f; // Authority only: its own fill, not the one confirmed to peers.
+            if (locked && target.IsStone)
                 return false;
 
             if (target.IsVisibleTo(this, _hysteresisAngle, _hysteresisRange))
@@ -328,7 +417,7 @@ namespace BetterTogether.Gaze
                 return true;
             }
 
-            if (Progress < 1f)
+            if (!locked)
                 return false;
 
             _lostSightTime += dt;

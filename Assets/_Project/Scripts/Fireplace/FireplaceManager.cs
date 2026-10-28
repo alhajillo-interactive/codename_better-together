@@ -4,6 +4,7 @@ using BetterTogether.Combat;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
+using BetterTogether.Networking;
 using BetterTogether.Player;
 using Fusion;
 using TMPro;
@@ -118,9 +119,8 @@ namespace BetterTogether.Fireplace
         private readonly Dictionary<NetworkBehaviourId, float> _lastPress = new();
         private int _lastLogs;
         private int _lastExtinguishCount;
-        private float _lastValidPress = float.NegativeInfinity;
         private float _lastDouseSfx = float.NegativeInfinity;
-        private float _lastDouseProgress;
+        private int _labelPercent = -1;
         private float _fireFactor = 1f;
         private Vector3 _fireScale = Vector3.one;
         private bool _isSpawned;
@@ -131,8 +131,14 @@ namespace BetterTogether.Fireplace
         [Networked, OnChangedRender(nameof(OnLitChanged))]
         public NetworkBool IsLit { get; private set; }
 
-        [Networked, OnChangedRender(nameof(OnDouseProgressChanged))]
-        private float DouseProgress { get; set; }
+        // Put-out progress is replicated as "value at the last press + tick of that press" (see CurrentDouse); it is
+        // written only on a press, a light or a put-out, never while it decays. Every press moves DouseTick, so that is
+        // the property that signals a press to the presentation (the anchor alone can repeat a value).
+        [Networked]
+        private float DouseAnchor { get; set; }
+
+        [Networked, OnChangedRender(nameof(OnDousePressed))]
+        private int DouseTick { get; set; }
 
         [Networked, OnChangedRender(nameof(OnExtinguishCountChanged))]
         private int ExtinguishCount { get; set; }
@@ -150,10 +156,20 @@ namespace BetterTogether.Fireplace
             Mathf.Min(_dousePressesMax, _dousePressesBase + _dousePressesPerExtinguish * (_isSpawned ? ExtinguishCount : 0));
 
         /// <summary>How close the gnomes are to putting the fire out, 0 to 1.</summary>
-        public float DouseFraction => _isSpawned && IsLit ? Mathf.Clamp01(DouseProgress / RequiredDousePresses) : 0f;
+        public float DouseFraction => _isSpawned && IsLit ? Mathf.Clamp01(CurrentDouse / RequiredDousePresses) : 0f;
 
         /// <summary>True while gnomes are putting the fire out.</summary>
-        public bool IsBeingDoused => _isSpawned && IsLit && DouseProgress > 0f;
+        public bool IsBeingDoused => _isSpawned && IsLit && CurrentDouse > 0f;
+
+        // Anchor minus the decay since the last press: it holds for the delay, then falls linearly down to zero.
+        private float CurrentDouse
+        {
+            get
+            {
+                var decaying = Mathf.Max(0f, NetAnchor.Elapsed(Runner, DouseTick) - _douseDecayDelay);
+                return Mathf.Max(0f, DouseAnchor - decaying * _douseDecayPerSecond);
+            }
+        }
 
         private void Awake()
         {
@@ -181,7 +197,6 @@ namespace BetterTogether.Fireplace
             Instance = this;
             _lastLogs = LogsInside;
             _lastExtinguishCount = ExtinguishCount;
-            _lastDouseProgress = DouseProgress;
             UpdateLabel();
             UpdateFire();
         }
@@ -200,7 +215,7 @@ namespace BetterTogether.Fireplace
         public void ResetForMatch()
         {
             IsLit = false;
-            DouseProgress = 0f;
+            DouseAnchor = 0f;
             ExtinguishCount = 0;
             LitGrace = default;
             _lastPress.Clear();
@@ -279,7 +294,7 @@ namespace BetterTogether.Fireplace
                 return;
 
             IsLit = true;
-            DouseProgress = 0f;
+            DouseAnchor = 0f;
             LitGrace = TickTimer.CreateFromSeconds(Runner, _litGraceTime);
         }
 
@@ -297,13 +312,18 @@ namespace BetterTogether.Fireplace
                 return;
 
             _lastPress[interactorId] = now;
-            _lastValidPress = now;
-            DouseProgress += 1f;
-            if (DouseProgress < RequiredDousePresses)
+
+            // Re-anchor on the press: the decayed value now plus this press.
+            var progress = CurrentDouse + 1f;
+            if (progress < RequiredDousePresses)
+            {
+                DouseAnchor = progress;
+                DouseTick = Runner.Tick.Raw;
                 return;
+            }
 
             IsLit = false;
-            DouseProgress = 0f;
+            DouseAnchor = 0f;
             ExtinguishCount++;
         }
 
@@ -329,13 +349,12 @@ namespace BetterTogether.Fireplace
             Carryable.GetPinnedTo(this, _pinned);
             LogsInside = _pinned.Count;
 
+            // The put-out progress decays by itself (derived from DouseAnchor/DouseTick), so nothing is written per tick.
             if (IsLit && !HasEnoughWood)
+            {
                 IsLit = false;
-
-            if (!IsLit)
-                DouseProgress = 0f;
-            else if (DouseProgress > 0f && Time.time - _lastValidPress > _douseDecayDelay)
-                DouseProgress = Mathf.Max(0f, DouseProgress - _douseDecayPerSecond * Runner.DeltaTime);
+                DouseAnchor = 0f;
+            }
         }
 
         // Logs that lie still inside the area settle into a free slot; a log with no slot left just stays where it is.
@@ -431,18 +450,17 @@ namespace BetterTogether.Fireplace
                 _lightSfx.PlayAt(transform.position);
         }
 
-        private void OnDouseProgressChanged()
+        // DouseTick only moves on a press (a put-out or a light leaves it alone and zeroes the anchor, which stays quiet).
+        // The label follows the decay on its own in Render; this only needs to react to the press itself.
+        private void OnDousePressed()
         {
             UpdateLabel();
 
-            var progress = DouseProgress;
-            if (progress > _lastDouseProgress && Time.time - _lastDouseSfx >= DouseSfxInterval)
+            if (DouseAnchor > 0f && IsLit && Time.time - _lastDouseSfx >= DouseSfxInterval)
             {
                 _lastDouseSfx = Time.time;
                 _douseSfx.PlayAt(transform.position);
             }
-
-            _lastDouseProgress = progress;
         }
 
         // Only a rise is a fire being put out; the count going back to 0 is a match reset, which stays quiet.
@@ -459,10 +477,23 @@ namespace BetterTogether.Fireplace
             if (_amountLabel == null)
                 return;
 
-            if (IsBeingDoused)
-                _amountLabel.text = $"¡Apagando! {Mathf.RoundToInt(DouseFraction * 100f)}%";
+            _labelPercent = DousePercent;
+            if (_labelPercent >= 0)
+                _amountLabel.SetText("¡Apagando! {0:0}%", _labelPercent); // SetText with a format doesn't allocate a string.
+            else if (IsLit)
+                _amountLabel.SetText("¡Encendida!");
             else
-                _amountLabel.text = IsLit ? "¡Encendida!" : $"{LogsInside}/{_requiredWood}";
+                _amountLabel.SetText("{0:0}/{1:0}", LogsInside, _requiredWood);
+        }
+
+        // Percentage shown while the fire is being put out; -1 when it is not.
+        private int DousePercent => IsBeingDoused ? Mathf.RoundToInt(DouseFraction * 100f) : -1;
+
+        // The put-out progress decays without any state change, so follow it here; text is only rebuilt when the shown value moves.
+        private void RefreshDouseLabel()
+        {
+            if (_amountLabel != null && DousePercent != _labelPercent)
+                UpdateLabel();
         }
 
         private void UpdateFire()
@@ -544,6 +575,7 @@ namespace BetterTogether.Fireplace
         public override void Render()
         {
             UpdateFire();
+            RefreshDouseLabel();
             UpdateFireScale();
             if (_block == null)
                 return;

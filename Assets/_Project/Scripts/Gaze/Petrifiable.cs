@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using BetterTogether.Audio;
 using BetterTogether.Match;
+using BetterTogether.Networking;
 using BetterTogether.Player;
 using Fusion;
 using UnityEngine;
@@ -14,7 +15,9 @@ namespace BetterTogether.Gaze
     /// the player break free by mashing the interact key. Once petrified the player stays stone, even if the camper
     /// looks away, until it mashes the interact key or is kicked free (and never between matches).
     /// Every client tints a petrified player like stone.
-    /// Runs after the interactor so the key press that frees the gnome doesn't also pick something up.
+    /// The key press that frees the gnome doesn't also pick something up: the press is only counted here in Update
+    /// (while still stone), and the release happens in a later FixedUpdateNetwork, in a frame where
+    /// WasPressedThisFrame is already false for the interactor.
     /// </summary>
     [RequireComponent(typeof(PlayerMovement))]
     [DefaultExecutionOrder(100)]
@@ -73,7 +76,7 @@ namespace BetterTogether.Gaze
         private MaterialPropertyBlock _block;
         private float _focusHeight;
         private float _stoneAmount;
-        private float _sinceLastPress;
+        private int _pendingPresses;
         private float _requiredForFreeze;
         private int _timesPetrified;
         private bool _wasLocked;
@@ -86,7 +89,10 @@ namespace BetterTogether.Gaze
         public static IReadOnlyList<Petrifiable> All => _all;
 
         [Networked] public NetworkBool IsPetrified { get; private set; }
-        [Networked] private float NetBreakProgress { get; set; }
+        // Break progress is replicated as "value at the last press + tick of that press" (see CurrentBreak); it is
+        // written only when the player presses, freezes or is released, never while it decays.
+        [Networked] private float BreakAnchor { get; set; }
+        [Networked] private int BreakTick { get; set; }
         [Networked] private TickTimer GazeImmunity { get; set; }
 
         /// <summary>Safe to read at any time, unlike <see cref="IsPetrified"/> which needs a spawned object.</summary>
@@ -98,7 +104,17 @@ namespace BetterTogether.Gaze
         public bool IsGazeImmune => _isSpawned && !GazeImmunity.ExpiredOrNotRunning(Runner);
 
         /// <summary>Presses accumulated while frozen (decays when the player stops pressing).</summary>
-        public float BreakProgress => _isSpawned ? NetBreakProgress : 0f;
+        public float BreakProgress => _isSpawned ? CurrentBreak : 0f;
+
+        // Anchor minus the decay since the last press: it holds for the delay, then falls linearly down to zero.
+        private float CurrentBreak
+        {
+            get
+            {
+                var decaying = Mathf.Max(0f, NetAnchor.Elapsed(Runner, BreakTick) - _decayDelay);
+                return Mathf.Max(0f, BreakAnchor - decaying * _decayPerSecond);
+            }
+        }
 
         /// <summary>Presses needed to break free of the current freeze, or of the next one when not frozen.</summary>
         public float RequiredPresses => IsStone ? _requiredForFreeze : ComputeRequired();
@@ -212,18 +228,13 @@ namespace BetterTogether.Gaze
                 GazeImmunity = TickTimer.CreateFromSeconds(Runner, immunitySeconds);
         }
 
+        // Owner only, every frame: local input and presentation. Nothing networked is written here; the presses
+        // are counted and handed to FixedUpdateNetwork, which owns the state.
         private void Update()
         {
             if (Local != this)
                 return;
 
-            // Nobody is stone between matches, and the gaze can't freeze anyone in the lobby or the countdown.
-            var match = MatchManager.Instance;
-            var betweenMatches = match != null && (match.Phase == MatchPhase.Waiting || match.Phase == MatchPhase.Countdown);
-            if (betweenMatches && IsPetrified)
-                ClearStone();
-
-            var dt = Time.deltaTime;
             var locker = LockedBy;
             var locked = locker != null;
             if (locked && !_wasLocked)
@@ -232,46 +243,64 @@ namespace BetterTogether.Gaze
             _wasLocked = locked;
             IsLockTarget = locked;
 
-            var immune = IsGazeImmune;
-            var shouldFreeze = !betweenMatches && locked && locker.LockProgress >= 1f && !immune;
+            if (IsPetrified && _interact != null && _interact.WasPressedThisFrame())
+            {
+                _pendingPresses++;
+                PressCount++;
+                _pressSfx.Play();
+            }
+
+            _movement.IsFrozen = IsPetrified;
+            IsWatched = locked && !IsPetrified;
+            WarningProgress = ComputeWarning(locker, IsGazeImmune);
+        }
+
+        // Owner only: freezes the player when the camper's lock is full, applies the buffered presses and releases it.
+        public override void FixedUpdateNetwork()
+        {
+            if (!HasStateAuthority)
+                return;
+
+            var presses = _pendingPresses;
+            _pendingPresses = 0;
+
+            // Nobody is stone between matches, and the gaze can't freeze anyone in the lobby or the countdown.
+            var match = MatchManager.Instance;
+            var betweenMatches = match != null && (match.Phase == MatchPhase.Waiting || match.Phase == MatchPhase.Countdown);
+            if (betweenMatches && IsPetrified)
+                ClearStone();
+
+            var locker = LockedBy;
+            var shouldFreeze = !betweenMatches && locker != null && locker.LockProgress >= 1f && !IsGazeImmune;
             if (shouldFreeze && !IsPetrified)
                 BeginFreeze();
 
             if (IsPetrified)
-                UpdateBreaking(dt);
+                UpdateBreaking(presses);
 
             _movement.IsFrozen = IsPetrified;
-            IsWatched = locked && !IsPetrified;
-            WarningProgress = ComputeWarning(locker, immune);
         }
 
         private void BeginFreeze()
         {
             _requiredForFreeze = ComputeRequired();
             _timesPetrified++;
-            NetBreakProgress = 0f;
-            _sinceLastPress = 0f;
+            BreakAnchor = 0f;
+            BreakTick = Runner.Tick.Raw;
             IsPetrified = true;
             _petrifySfx.PlayAt(transform.position);
         }
 
-        private void UpdateBreaking(float dt)
+        private void UpdateBreaking(int presses)
         {
-            _sinceLastPress += dt;
-
-            if (_interact != null && _interact.WasPressedThisFrame())
+            // Re-anchor only on a press: the new anchor is the decayed value now plus the presses of this tick.
+            if (presses > 0)
             {
-                NetBreakProgress += 1f;
-                _sinceLastPress = 0f;
-                PressCount++;
-                _pressSfx.Play();
-            }
-            else if (_sinceLastPress > _decayDelay)
-            {
-                NetBreakProgress = Mathf.Max(0f, NetBreakProgress - _decayPerSecond * dt);
+                BreakAnchor = CurrentBreak + presses;
+                BreakTick = Runner.Tick.Raw;
             }
 
-            if (NetBreakProgress >= _requiredForFreeze)
+            if (CurrentBreak >= _requiredForFreeze)
                 Release(_releaseImmunity, true);
         }
 
@@ -290,7 +319,8 @@ namespace BetterTogether.Gaze
         private void ClearStone()
         {
             IsPetrified = false;
-            NetBreakProgress = 0f;
+            BreakAnchor = 0f;
+            _pendingPresses = 0;
             _movement.IsFrozen = false;
         }
 

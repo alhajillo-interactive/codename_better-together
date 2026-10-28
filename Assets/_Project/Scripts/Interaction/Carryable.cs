@@ -13,11 +13,13 @@ namespace BetterTogether.Interaction
     /// <summary>
     /// An object players can pick up and put down. The camper carries anything alone; big items need several gnomes.
     /// Master-client object: the state authority is the single arbiter of grabs and releases (via RPCs),
-    /// and every client poses the item on its holders' carry anchors. The item is a Rigidbody synced by
-    /// NetworkTransform: the authority keeps it kinematic while carried and lets physics drop it otherwise.
+    /// and every client poses the item on its holders' carry anchors.
+    /// Physics model: the state authority simulates; proxies are kinematic and follow NetworkTransform. The authority
+    /// keeps the item kinematic while it is carried, pinned or inert, and lets physics drop it otherwise.
+    /// An item lost below the level (or left outside <see cref="LevelBounds"/> for too long) returns to its start pose.
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
-    public class Carryable : NetworkBehaviour, IInteractable, IMatchResettable
+    public class Carryable : NetworkBehaviour, IInteractable, IMatchResettable, IStateAuthorityChanged
     {
         private static readonly List<Carryable> All = new();
 
@@ -49,6 +51,14 @@ namespace BetterTogether.Interaction
         [Tooltip("Height of the arc the item draws while settling on a pin spot.")]
         [SerializeField, Min(0f)] private float _snapArc = 0.25f;
 
+        [Header("Lost items")]
+        [Tooltip("Below this world Y the item is lost and returns to its start pose.")]
+        [SerializeField] private float _killHeight = -5f;
+        [Tooltip("Seconds the item may rest outside the level bounds before it returns to its start pose. 0 disables this check.")]
+        [SerializeField, Min(0f)] private float _lostSeconds = 20f;
+        [Tooltip("Heard by everyone, from the start pose, when a lost item returns.")]
+        [SerializeField] private SoundCue _respawnSfx;
+
         private const float ReceiveFovPunch = 2f;
         private const float ReceiveFovPunchTime = 0.12f;
 
@@ -78,6 +88,10 @@ namespace BetterTogether.Interaction
         private Quaternion _restRotation;
         private PlayerInteractor _lastHolder;
         private int _lastHolderCount;
+        private float _outsideSince = -1f;
+        private bool _startPoseValid;
+        private bool _startPoseRechecked;
+        private bool _startPoseWarned;
 
         [Networked] private PlayerInteractor HolderA { get; set; }
         [Networked] private PlayerInteractor HolderB { get; set; }
@@ -148,12 +162,27 @@ namespace BetterTogether.Interaction
             _networkTransform = GetComponent<NetworkTransform>();
             _startPosition = transform.position;
             _startRotation = transform.rotation;
+            _startPoseValid = ComputeStartPoseValid();
         }
 
         public override void Spawned()
         {
             _isSpawned = true;
             All.Add(this);
+            _outsideSince = -1f;
+            ApplyPhysicsOwnership();
+        }
+
+        /// <summary>Called on every peer when the state authority of this item changes (e.g. the master leaves).</summary>
+        public void StateAuthorityChanged()
+        {
+            if (!_isSpawned)
+                return;
+
+            // The loss timers only run on the authority; a new authority must not inherit a stale countdown.
+            _freeSince = -1f;
+            _outsideSince = -1f;
+            ApplyPhysicsOwnership();
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -220,22 +249,40 @@ namespace BetterTogether.Interaction
             PinSlot = 0;
         }
 
-        /// <summary>Authority only: drops the item and puts it back where it started.</summary>
-        public void ResetForMatch()
+        /// <summary>Authority only: drops the item and puts it back where it started, without a sound.</summary>
+        public void ResetForMatch() => ReturnToStart(false);
+
+        /// <summary>Authority only: drops the item and puts it back at its start pose. Everyone hears it when <paramref name="announce"/> is true.</summary>
+        private void ReturnToStart(bool announce)
         {
+            if (!HasStateAuthority)
+                return;
+
             WasHandled = false;
             LastHeldByCamper = false;
             ForceReleaseAll();
             Unpin();
+            _freeSince = -1f;
+            _outsideSince = -1f;
 
-            _body.isKinematic = false;
-            _body.linearVelocity = Vector3.zero;
-            _body.angularVelocity = Vector3.zero;
+            // The one kinematic rule decides: an inert item stays kinematic, a loose one goes back to physics at rest.
+            ApplyAuthorityKinematic();
+            if (!_body.isKinematic)
+            {
+                _body.linearVelocity = Vector3.zero;
+                _body.angularVelocity = Vector3.zero;
+            }
 
             transform.SetPositionAndRotation(_startPosition, _startRotation);
             if (_networkTransform != null)
                 _networkTransform.Teleport(_startPosition, _startRotation);
+
+            if (announce)
+                RPC_PlayRespawn(_startPosition);
         }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        private void RPC_PlayRespawn(Vector3 position) => _respawnSfx.PlayAt(position);
 
         /// <summary>Whether the item currently rests on this spot.</summary>
         public bool IsPinnedTo(NetworkBehaviour spot) => IsPinned && PinOwnerId.Equals(spot.Id);
@@ -372,17 +419,10 @@ namespace BetterTogether.Interaction
                 HolderA = null;
             }
 
-            // Kinematic while carried; dynamic (falls under gravity) otherwise. Proxies are left to NetworkTransform.
-            var shouldBeKinematic = IsMoving || IsPinned || Inert;
-            if (_body.isKinematic != shouldBeKinematic)
-            {
-                _body.isKinematic = shouldBeKinematic;
-                if (!shouldBeKinematic)
-                {
-                    _body.linearVelocity = Vector3.zero;
-                    _body.angularVelocity = Vector3.zero;
-                }
-            }
+            // Lost items return to their start pose. This runs before the kinematic rule, which then sees the released item.
+            CheckLost(HolderCount == 0 && !IsPinned && !Inert);
+
+            ApplyAuthorityKinematic();
 
             // Loose and falling under physics: the campfire waits for it to settle before snapping it in.
             if (HolderCount == 0 && !IsPinned && !_body.isKinematic)
@@ -398,6 +438,95 @@ namespace BetterTogether.Interaction
             if (TryGetFollowPose(out var position, out var rotation))
                 transform.SetPositionAndRotation(position, rotation);
         }
+
+        /// <summary>
+        /// Proxies are kinematic and follow NetworkTransform; the authority applies the shared kinematic rule.
+        /// Called from Spawned and StateAuthorityChanged, so every peer agrees after a spawn or a master change.
+        /// </summary>
+        private void ApplyPhysicsOwnership()
+        {
+            // Rigidbody interpolation stays off: the replicated pose is presented in Render.
+            _body.interpolation = RigidbodyInterpolation.None;
+            if (!HasStateAuthority)
+            {
+                _body.isKinematic = true;
+                return;
+            }
+
+            ApplyAuthorityKinematic();
+        }
+
+        // Authority only. The one place that decides kinematic on the authority: carried, pinned or inert items are
+        // kinematic and follow their holders or slot; loose items fall under gravity.
+        private void ApplyAuthorityKinematic()
+        {
+            var shouldBeKinematic = IsMoving || IsPinned || Inert;
+            if (_body.isKinematic == shouldBeKinematic)
+                return;
+
+            _body.isKinematic = shouldBeKinematic;
+            if (!shouldBeKinematic)
+            {
+                _body.linearVelocity = Vector3.zero;
+                _body.angularVelocity = Vector3.zero;
+            }
+        }
+
+        // Authority only. A loose item below the kill height returns at once; one outside LevelBounds returns after _lostSeconds.
+        // Allocation-free: the countdown is a single float.
+        private void CheckLost(bool loose)
+        {
+            if (!loose)
+            {
+                _outsideSince = -1f;
+                return;
+            }
+
+            if (transform.position.y < _killHeight)
+            {
+                if (StartPoseIsUsable())
+                    ReturnToStart(true);
+                return;
+            }
+
+            if (_lostSeconds <= 0f || LevelBounds.Instance == null || LevelBounds.Instance.Contains(transform.position))
+            {
+                _outsideSince = -1f;
+                return;
+            }
+
+            if (_outsideSince < 0f)
+            {
+                _outsideSince = Time.time;
+                return;
+            }
+
+            if (Time.time - _outsideSince > _lostSeconds && StartPoseIsUsable())
+                ReturnToStart(true);
+        }
+
+        // The start pose must itself be usable, or a returned item would be lost again. Rechecked once, the first time an
+        // item is found lost, because LevelBounds may appear after Awake. Warns once and then stays silent.
+        private bool StartPoseIsUsable()
+        {
+            if (!_startPoseRechecked)
+            {
+                _startPoseRechecked = true;
+                _startPoseValid = ComputeStartPoseValid();
+            }
+
+            if (!_startPoseValid && !_startPoseWarned)
+            {
+                _startPoseWarned = true;
+                var reason = _startPosition.y < _killHeight ? "below the kill height" : "outside LevelBounds";
+                Debug.LogWarning($"{name}: start pose {_startPosition} is {reason}; lost items will not return to it.", this);
+            }
+
+            return _startPoseValid;
+        }
+
+        private bool ComputeStartPoseValid() =>
+            _startPosition.y >= _killHeight && (LevelBounds.Instance == null || LevelBounds.Instance.Contains(_startPosition));
 
         // Only the authority simulates the physics; the impact is announced to everyone.
         private void OnCollisionEnter(Collision collision)

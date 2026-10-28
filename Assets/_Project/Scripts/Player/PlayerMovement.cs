@@ -212,7 +212,9 @@ namespace BetterTogether.Player
 
             // The gnome tree ends at 0.5; the camper tree has walk at 0.5 and sprint at 1.
             var movementScale = _petrifiable != null ? (sprinting ? 0.5f : 0.25f) : (sprinting ? 1f : 0.5f);
-            AnimationMovement = Mathf.Clamp01(move.magnitude) * movementScale;
+            // Quantized to steps of 0.05: Fusion doesn't send a write that leaves the value unchanged, so the
+            // quantization is what saves bandwidth (analogue noise no longer changes the value every tick).
+            AnimationMovement = Mathf.Round(Mathf.Clamp01(move.magnitude) * movementScale * 20f) / 20f;
             AnimationJump = !stunned && (jumped || !_controller.isGrounded);
             AnimationDancing = _petrifiable != null && _dance != null && _dance.IsPressed() && !stunned && !locked &&
                 _controller.isGrounded && move.sqrMagnitude < 0.01f && _knockback.sqrMagnitude < 0.01f;
