@@ -96,7 +96,14 @@ namespace BetterTogether.Interaction
         public float Reach => _reach;
         public PlayerRole Role => _character.Role;
 
+        /// <summary>What the replicated state says this player holds. Game logic reads this one; it never includes a prediction.</summary>
         public Carryable Carried => Carryable.FindHeldBy(this);
+
+        /// <summary>
+        /// HUD only: what the local presentation shows in the hands, counting a grab that is predicted but not confirmed yet
+        /// and ignoring an item that was just released or placed. Never use it for game rules.
+        /// </summary>
+        public Carryable CarriedOrPredicted => Carryable.FindHeldOrPredictedBy(this);
         public IInteractable Focused { get; private set; }
 
         /// <summary>The cooked sausage this player is holding and can eat, if any.</summary>

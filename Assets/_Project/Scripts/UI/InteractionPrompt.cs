@@ -102,7 +102,7 @@ namespace BetterTogether.UI
         private bool DecidingStateChanged(PlayerInteractor local)
         {
             var focused = local.Focused;
-            var carried = local.Carried;
+            var carried = local.CarriedOrPredicted;
             var stunned = local.TryGetComponent<Kickable>(out var kickable) && kickable.IsStunned;
             var stack = GnomeStack.Local;
             var riding = stack != null && stack.IsRiding;
@@ -154,7 +154,7 @@ namespace BetterTogether.UI
         private static string ResolveText(PlayerInteractor local)
         {
             string text = null;
-            var carried = local.Carried;
+            var carried = local.CarriedOrPredicted;
             if (local.TryGetComponent<Kickable>(out var kickable) && kickable.IsStunned)
             {
                 text = "¡Aturdido!";
