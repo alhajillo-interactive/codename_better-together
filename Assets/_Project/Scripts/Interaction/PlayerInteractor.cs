@@ -39,11 +39,18 @@ namespace BetterTogether.Interaction
         [SerializeField, Min(0f)] private float _swayAmplitude = 0.015f;
 
         private static readonly RaycastHit[] FocusHits = new RaycastHit[16];
-        private static readonly RaycastHit[] HoldHits = new RaycastHit[8];
+        private static readonly RaycastHit[] HoldHits = new RaycastHit[16];
 
         // The replicated view pitch is only rewritten when it differs by at least this many degrees.
         private const int AimPitchStep = 2;
         private const float MaxAimPitch = 85f;
+
+        // Held-item sweep: skin added to the cast so the pose never jumps, box shrink so flush contact does not count as a hit,
+        // clearance kept between the item's underside and the floor, and how long the pitch keeps being published after a grab request.
+        private const float HoldSkin = 0.04f;
+        private const float HoldBoxScale = 0.9f;
+        private const float GroundClearance = 0.03f;
+        private const float GrabPublishSeconds = 0.5f;
 
         private InputAction _interact;
         private PlayerMovement _movement;
@@ -51,6 +58,7 @@ namespace BetterTogether.Interaction
         private GnomeStack _stack;
         private bool _isSpawned;
         private float _lastCameraPitch;
+        private float _publishPitchUntil;
 
         /// <summary>
         /// View pitch in whole degrees, written by the owner only while it holds something (nobody else needs it otherwise).
@@ -97,6 +105,8 @@ namespace BetterTogether.Interaction
             TryGetComponent(out _stack); // Only gnomes can stack.
             if (_eye == null)
                 _eye = FindByName(transform, "CameraAnchor");
+            if (_eye == null)
+                Debug.LogWarning($"{name}: no CameraAnchor found; held items are posed from the player root.", this);
         }
 
         // Runs once in Awake; prefabs are not edited, so the anchor is found by name.
@@ -129,13 +139,20 @@ namespace BetterTogether.Interaction
                 Local = null;
         }
 
+        /// <summary>Local player only: asked to take an item, so the view pitch is published right away for its holder pose.</summary>
+        public void NoteGrabRequest() => _publishPitchUntil = Time.time + GrabPublishSeconds;
+
         public override void FixedUpdateNetwork()
         {
-            if (!HasStateAuthority || FirstPersonCamera.Instance == null || Carried == null)
+            if (!HasStateAuthority || FirstPersonCamera.Instance == null)
+                return;
+
+            // Nobody needs the pitch unless an item is held, about to be (looking at one) or just requested.
+            if (Carried == null && Focused is not Carryable && Time.time >= _publishPitchUntil)
                 return;
 
             // Yaw already travels with the NetworkTransform; the pitch only lives on the camera, so publish it, but only
-            // while something is held, only on a real change and once more when the view stops (so proxies converge).
+            // on a real change and once more when the view stops (so proxies converge).
             var pitch = Mathf.Clamp(Mathf.Round(FirstPersonCamera.Instance.Pitch), -MaxAimPitch, MaxAimPitch);
             var delta = Mathf.Abs(pitch - AimPitch);
             if (delta >= AimPitchStep || (delta > 0f && Mathf.Approximately(pitch, _lastCameraPitch)))
@@ -146,8 +163,9 @@ namespace BetterTogether.Interaction
 
         /// <summary>
         /// Where a single holder keeps <paramref name="item"/>: in front of the eyes, following yaw and (clamped) pitch.
-        /// <paramref name="presentation"/> also retracts the pose from geometry in the way; the state authority's
-        /// simulation pose leaves that out. The owner uses the exact camera angles, proxies the replicated pitch.
+        /// <paramref name="presentation"/> also lifts the pose off the floor and retracts it from geometry in the way,
+        /// so the item never crosses a wall; without it the pose is the raw hold pose. No smoothing either way (that is
+        /// local drawing only). The owner uses the exact camera angles, proxies the replicated pitch.
         /// </summary>
         public bool TryGetHoldPose(Carryable item, bool presentation, out Vector3 position, out Quaternion rotation)
         {
@@ -171,18 +189,53 @@ namespace BetterTogether.Interaction
 
             var eye = EyePosition;
             var eyeHeight = Mathf.Max(0.1f, eye.y - transform.position.y);
-            var radius = item.HoldRadius;
+            var half = item.HoldHalfExtents;
             var aim = Quaternion.Euler(Mathf.Clamp(pitch, _minHoldPitch, _maxHoldPitch), yaw, 0f);
-            position = eye + aim * new Vector3(0f, -eyeHeight * _holdDropFactor, eyeHeight * _holdDistanceFactor + radius);
+
+            // Lower by half the item's height so its top edge does not cover the aim.
+            var drop = eyeHeight * _holdDropFactor + half.y;
+            position = eye + aim * new Vector3(0f, -drop, eyeHeight * _holdDistanceFactor + item.HoldRadius);
             rotation = aim * Quaternion.Euler(item.HoldEuler);
 
             if (presentation)
-                position = RetractFromObstacles(eye, position, radius * 0.5f, item);
+            {
+                position = LiftAboveGround(eye, position, rotation, item);
+                position = RetractFromObstacles(eye, position, rotation, item);
+            }
+
             return true;
         }
 
-        // Sweeps a sphere from the eye to the pose and stops in front of the first obstacle.
-        private Vector3 RetractFromObstacles(Vector3 eye, Vector3 pose, float sweepRadius, Carryable item)
+        // Raises the pose so the item's underside stays above the floor below it, instead of retracting against the floor.
+        private Vector3 LiftAboveGround(Vector3 eye, Vector3 pose, Quaternion rotation, Carryable item)
+        {
+            var centerOffset = rotation * item.HoldCenter;
+            var origin = new Vector3(pose.x, Mathf.Max(eye.y, pose.y), pose.z);
+            var count = Physics.RaycastNonAlloc(origin, Vector3.down, HoldHits, 4f, _holdObstacleMask, QueryTriggerInteraction.Ignore);
+            var nearest = float.MaxValue;
+            var groundY = 0f;
+            for (var i = 0; i < count; i++)
+            {
+                if (HoldHits[i].distance > 0f && HoldHits[i].distance < nearest && !IgnoresForHold(HoldHits[i].collider, item))
+                {
+                    nearest = HoldHits[i].distance;
+                    groundY = HoldHits[i].point.y;
+                }
+            }
+
+            if (nearest == float.MaxValue)
+                return pose;
+
+            var bottom = pose.y + centerOffset.y - item.HoldHalfExtents.y;
+            var missing = groundY + GroundClearance - bottom;
+            if (missing > 0f)
+                pose.y += missing;
+            return pose;
+        }
+
+        // Sweeps the item's oriented box (a little smaller) from the eye to the pose and stops in front of the first
+        // obstacle. The cast reaches HoldSkin past the pose, so an obstacle entering at the edge moves the pose smoothly.
+        private Vector3 RetractFromObstacles(Vector3 eye, Vector3 pose, Quaternion rotation, Carryable item)
         {
             var toPose = pose - eye;
             var distance = toPose.magnitude;
@@ -190,18 +243,22 @@ namespace BetterTogether.Interaction
                 return pose;
 
             var direction = toPose / distance;
-            var count = Physics.SphereCastNonAlloc(eye, sweepRadius, direction, HoldHits, distance, _holdObstacleMask, QueryTriggerInteraction.Ignore);
+            var center = eye + rotation * item.HoldCenter;
+            var count = Physics.BoxCastNonAlloc(center, item.HoldHalfExtents * HoldBoxScale, direction, HoldHits, rotation,
+                distance + HoldSkin, _holdObstacleMask, QueryTriggerInteraction.Ignore);
             var nearest = float.MaxValue;
             for (var i = 0; i < count; i++)
             {
-                if (HoldHits[i].distance < nearest && !IgnoresForHold(HoldHits[i].collider, item))
+                // A distance of 0 means the box was born overlapping that collider: no usable contact point.
+                if (HoldHits[i].distance > 0f && HoldHits[i].distance < nearest && !IgnoresForHold(HoldHits[i].collider, item))
                     nearest = HoldHits[i].distance;
             }
 
-            if (nearest >= distance)
+            if (nearest - HoldSkin >= distance)
                 return pose;
 
-            return eye + direction * Mathf.Min(distance, Mathf.Max(_minHoldDistance, nearest - sweepRadius));
+            var minDistance = Mathf.Max(_minHoldDistance, item.HoldHalfExtents.z + 0.05f);
+            return eye + direction * Mathf.Min(distance, Mathf.Max(minDistance, nearest - HoldSkin));
         }
 
         /// <summary>Whether a collider is not geometry for a held item: this player, other players and the item itself.</summary>
