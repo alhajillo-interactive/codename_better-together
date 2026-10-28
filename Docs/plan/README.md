@@ -8,10 +8,20 @@ Resumen ejecutable del plan que está en Notion («Técnico → Plan por fases y
 | --- | --- | --- | --- |
 | Orquestador / game designer | Fable (esta sesión) | Diseña, escribe tarjetas explícitas, decide orden y paralelismo, integra ramas, actualiza Notion | Tarjetas, decisiones, merge |
 | Worker | Haiku 5.5 (tareas mecánicas) o Sonnet 5.5 (tareas con semántica de red delicada) | Implementa **una** tarjeta en un worktree, sin salirse del alcance | Diff + reporte de worker |
-| Auditor | Opus 5.5 | Revisa el diff contra la tarjeta y la checklist V1; no reescribe, señala | Informe de auditoría |
+| Auditor | Opus 5.5 si la tarjeta toca red/autoridad/física; Sonnet 5.5 si es herramienta, UI, telemetría o docs | Revisa el diff contra la tarjeta y la checklist V1; no reescribe, señala | Informe de auditoría |
 | Persona (Bryan / equipo) | — | Ejecuta V2 en el editor con Multiplayer Play Mode, playtest, decide balance | Resultado de V2, notas de playtest |
 
 Ciclo por tarjeta: worker → auditor → worker corrige → auditor aprueba (máx. 3 vueltas) → orquestador integra → persona ejecuta V2. Las tarjetas marcadas **pulido** exigen al menos 2 vueltas con playtest antes de darse por hechas.
+
+## Presupuesto de tokens (desde el 28 oct 2026)
+
+- **Auditor por riesgo**: Opus sólo para cambios en red, autoridad o física (`Carryable`, `FireplaceManager`, gaze, RPC). El resto, Sonnet.
+- **Auditoría sobre el diff**: el auditor lee el diff y las funciones tocadas, no archivos completos salvo que el diff no se entienda sin ellos.
+- **Re-auditoría corta**: la vuelta 2+ revisa sólo `git show <commit>` de las correcciones contra los hallazgos previos (reanudando al mismo auditor).
+- **Informes acotados**: worker ≤ 25 líneas; auditor ≤ 30 líneas de hallazgos (sólo Bloqueante/Importante/Menor; las sugerencias en una línea cada una). La lista V2 se pide **sólo en la vuelta que aprueba**, y va directa a la tarjeta.
+- **Arreglos de una línea los aplica el orquestador** al integrar, sin otra vuelta.
+- **Compilar una vez por lote**, no tras cada integración, salvo que una tarjeta toque firmas de RPC.
+- **Notion**: actualizar con `update_content` sobre textos conocidos, sin volver a leer la página entera; una actualización por lote.
 
 ## Estados de una tarjeta
 
@@ -71,7 +81,7 @@ Multiplayer Play Mode: editor + 3 jugadores virtuales, misma sala. Siempre:
 
 ```
 # Cx.y — Título
-Fase · Prioridad · Worker: modelo · Auditor: Opus · Iteraciones máx · Pulido: sí/no
+Fase · Prioridad · Worker: modelo · Auditor: Opus|Sonnet (según riesgo) · Iteraciones máx · Pulido: sí/no
 ## Objetivo (qué y por qué, con la métrica que mejora)
 ## Lee antes (archivos y páginas)
 ## Cambios exactos (archivo → función → qué)

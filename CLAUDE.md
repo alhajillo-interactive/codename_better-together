@@ -51,4 +51,4 @@ Reglas obligatorias (se auditan en cada cambio):
 
 ## Flujo con agentes
 
-Orquestador (diseño, tarjetas, integración) → **Worker** (modelo barato, implementa una tarjeta en una rama/worktree y entrega el reporte) → **Auditor** (Opus, revisa contra la tarjeta y la checklist, devuelve hallazgos ordenados por severidad) → Worker corrige → Auditor aprueba → Orquestador integra y una persona hace V2. Máximo 3 iteraciones; tarjetas de pulido (`game feel`) exigen al menos 2 iteraciones con playtest. El formato de reporte está en `Docs/plan/README.md`.
+Orquestador (diseño, tarjetas, integración) → **Worker** (modelo barato, implementa una tarjeta en una rama/worktree y entrega el reporte) → **Auditor** (Opus en cambios de red/autoridad/física, Sonnet en el resto; revisa contra la tarjeta y la checklist, devuelve hallazgos ordenados por severidad) → Worker corrige → Auditor aprueba → Orquestador integra y una persona hace V2. Máximo 3 iteraciones; tarjetas de pulido (`game feel`) exigen al menos 2 iteraciones con playtest. El formato de reporte y el presupuesto de tokens están en `Docs/plan/README.md`.
