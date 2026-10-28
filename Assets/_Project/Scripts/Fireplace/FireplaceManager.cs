@@ -416,9 +416,10 @@ namespace BetterTogether.Fireplace
                 return;
 
             var bucket = PourBucket;
-            if (!IsLit || !IsPourValid(bucket))
+            var check = IsLit ? CheckPour(bucket) : PourCheck.FireOut;
+            if (check != PourCheck.Valid)
             {
-                if (Telemetry.Enabled) LogPourCancelled(bucket);
+                if (Telemetry.Enabled) LogPourCancelled(bucket, check);
                 if (bucket != null)
                     bucket.RequestSpill();
                 ClearPour();
@@ -429,17 +430,36 @@ namespace BetterTogether.Fireplace
                 FinishPour(bucket);
         }
 
-        private bool IsPourValid(WaterBucket bucket)
+        private enum PourCheck
+        {
+            Valid,
+            FireOut,
+            PourerLeft,
+            BucketGone,
+            MatchOver,
+            BucketEmpty,
+            BucketDropped,
+            Disabled,
+            TooFar,
+        }
+
+        // Why a running pour is (in)valid; the first failing check wins. Valid means the pour goes on.
+        private PourCheck CheckPour(WaterBucket bucket)
         {
             var pourer = Pourer;
-            if (pourer == null || pourer.Object == null || !pourer.Object.IsValid || bucket == null || bucket.Object == null || !bucket.Object.IsValid)
-                return false;
-
-            return MatchManager.AllowsInteraction
-                && bucket.IsFull
-                && Carryable.FindHeldBy(pourer) == bucket.Carryable
-                && !IsDisabled(pourer)
-                && HorizontalDistance(pourer.transform.position) <= _pourRange + _pourCancelSlack;
+            if (pourer == null || pourer.Object == null || !pourer.Object.IsValid)
+                return PourCheck.PourerLeft;
+            if (bucket == null || bucket.Object == null || !bucket.Object.IsValid)
+                return PourCheck.BucketGone;
+            if (!MatchManager.AllowsInteraction)
+                return PourCheck.MatchOver;
+            if (!bucket.IsFull)
+                return PourCheck.BucketEmpty;
+            if (Carryable.FindHeldBy(pourer) != bucket.Carryable)
+                return PourCheck.BucketDropped;
+            if (IsDisabled(pourer))
+                return PourCheck.Disabled;
+            return HorizontalDistance(pourer.transform.position) <= _pourRange + _pourCancelSlack ? PourCheck.Valid : PourCheck.TooFar;
         }
 
         // The water is out: the fire dies, the bucket is empty and one log jumps out, so lighting it again takes a log and matches.
@@ -509,29 +529,22 @@ namespace BetterTogether.Fireplace
             f.Int("logs", LogsInside).Int("extinguish", ExtinguishCount + 1).Send();
         }
 
-        // Telemetry only (authority): the pour was interrupted. The reason mirrors the checks of IsPourValid.
-        private void LogPourCancelled(WaterBucket bucket)
+        // Telemetry only (authority): the pour was interrupted; the reason comes from CheckPour.
+        private void LogPourCancelled(WaterBucket bucket, PourCheck check)
         {
             var pourer = Pourer;
             var pourerValid = pourer != null && pourer.Object != null && pourer.Object.IsValid;
-            var bucketValid = bucket != null && bucket.Object != null && bucket.Object.IsValid;
-            string reason;
-            if (!IsLit)
-                reason = "fire_out";
-            else if (!pourerValid)
-                reason = "pourer_left";
-            else if (!bucketValid)
-                reason = "bucket_gone";
-            else if (!MatchManager.AllowsInteraction)
-                reason = "match_over";
-            else if (!bucket.IsFull)
-                reason = "bucket_empty";
-            else if (Carryable.FindHeldBy(pourer) != bucket.Carryable)
-                reason = "bucket_dropped";
-            else if (IsDisabled(pourer))
-                reason = "stunned_or_stone";
-            else
-                reason = "too_far";
+            var reason = check switch
+            {
+                PourCheck.FireOut => "fire_out",
+                PourCheck.PourerLeft => "pourer_left",
+                PourCheck.BucketGone => "bucket_gone",
+                PourCheck.MatchOver => "match_over",
+                PourCheck.BucketEmpty => "bucket_empty",
+                PourCheck.BucketDropped => "bucket_dropped",
+                PourCheck.Disabled => "stunned_or_stone",
+                _ => "too_far",
+            };
 
             var e = pourerValid ? Telemetry.Begin("pour_end", pourer) : Telemetry.Begin("pour_end");
             e.Str("result", "cancelled").Str("reason", reason).Send();

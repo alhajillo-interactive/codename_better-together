@@ -121,9 +121,26 @@ namespace BetterTogether.Combat
                 }
             }
 
+            // A miss still reports how far the nearest gnome was (no allocations: indexed loop over the cached list).
+            if (nearest == null)
+            {
+                var all = PlayerCharacter.All;
+                for (var i = 0; i < all.Count; i++)
+                {
+                    var player = all[i];
+                    if (player == null || player.Role != PlayerRole.Gnome)
+                        continue;
+
+                    var distance = Flat(player.transform.position - transform.position).magnitude;
+                    if (distance < nearestDistance)
+                        nearestDistance = distance;
+                }
+            }
+
+            var found = nearestDistance < float.MaxValue;
             var targetId = nearest != null && nearest.Object != null && nearest.Object.IsValid ? nearest.Object.StateAuthority.PlayerId : -1;
             Telemetry.Begin("kick").Bool("hit", hit).Int("targets", _targets.Count).Int("target", targetId)
-                .Float("distance", nearest != null ? nearestDistance : -1f).Send();
+                .Float("distance", found ? nearestDistance : -1f).Send();
         }
 
         private void FindTargets()

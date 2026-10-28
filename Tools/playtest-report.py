@@ -100,12 +100,12 @@ def merge_match_ids(events):
 
 
 def dedupe(events):
-    """The same stage change is logged by every machine; keep the earliest of each."""
+    """The same stage change is logged by every machine; keep one per (match, stage, second)."""
     seen = set()
     result = []
     for e in sorted(events, key=lambda e: e.t):
         if e.name == "stage_change":
-            key = (e.match, e.data.get("stage"))
+            key = (e.match, e.data.get("stage"), round(e.t))
             if key in seen:
                 continue
             seen.add(key)
@@ -181,6 +181,7 @@ def report_funnel(by_match):
         ("matches picked up", lambda e: e.name == "pickup" and "sforos" in e.data.get("object", "")),
         ("fire lit", lambda e: e.name == "fire_lit"),
         ("stage: defend", lambda e: e.name == "stage_change" and e.data.get("stage") == "defend"),
+        ("sausage on grill", lambda e: e.name == "sausage_state" and e.data.get("on_grill") == "1"),
         ("sausage cooked", lambda e: e.name == "sausage_state" and e.data.get("state") == "cooked"),
         ("sausage eaten", lambda e: e.name == "sausage_eaten"),
     ]
@@ -191,6 +192,16 @@ def report_funnel(by_match):
             if moment is not None:
                 times.append(moment)
         print("  {:<18} reached in {}/{} matches, {}".format(label, len(times), len(by_match), summarize(times)))
+
+    # Time from the sausage first on the grill to the end state, from the event times (cook_s only counts lit-fire time).
+    for label, name in (("eaten", "sausage_eaten"), ("burnt", "sausage_burnt")):
+        spans = []
+        for events in by_match.values():
+            on = first_time(events, lambda e: e.name == "sausage_state" and e.data.get("on_grill") == "1")
+            end = first_time(events, lambda e, name=name: e.name == name)
+            if on is not None and end is not None and end >= on:
+                spans.append(end - on)
+        print("  grill -> {:<6} {}".format(label, summarize(spans)))
 
     section("Fire out / pours")
     outs = sum(1 for events in by_match.values() for e in events if e.name == "fire_out")
@@ -234,22 +245,29 @@ def report_kicks(by_match):
         print("  Stuns: {}, mean duration {:.2f} s".format(len(stuns), statistics.mean(stuns)))
 
 
-def report_freezes(by_match, durations):
+def report_freezes(by_match):
     section("Freezes")
-    starts = sum(1 for events in by_match.values() for e in events if e.name == "freeze_start")
-    lengths = [to_float(e.data.get("duration")) for events in by_match.values() for e in events if e.name == "freeze_end"]
-    escapes = sum(1 for events in by_match.values() for e in events if e.name == "freeze_escape")
-    minutes = sum(durations) / 60.0
+    # Only finished matches count, so the per-minute rate uses the same matches as its numerator.
+    counted = [events for events in by_match.values() if any(e.name == "match_end" for e in events)]
+    minutes = sum(to_float(e.data.get("duration")) for events in counted for e in events if e.name == "match_end") / 60.0
+    starts = sum(1 for events in counted for e in events if e.name == "freeze_start")
+    escapes = sum(1 for events in counted for e in events
+                  if e.name == "freeze_escape" and e.data.get("how") == "lost_sight")
+    lengths = [to_float(e.data.get("duration")) for events in counted for e in events if e.name == "freeze_end"]
     if starts == 0 and escapes == 0:
         print("  No freezes.")
         return
     rate = "{:.2f}".format(starts / minutes) if minutes > 0 else "n/a"
-    print("  Freezes: {} ({} per minute of play), gnomes that escaped a lock: {}".format(starts, rate, escapes))
+    print("  Freezes: {} ({} per minute of play, {} finished matches)".format(starts, rate, len(counted)))
+    attempts = starts + escapes
+    if attempts:
+        print("  Escape rate (lost_sight / (lost_sight + freezes)): {}/{} = {:.0f}% (target 20-40%)".format(
+            escapes, attempts, 100.0 * escapes / attempts))
     if lengths:
         print("  Mean time frozen: {:.1f} s (median {:.1f}, n={})".format(
             statistics.mean(lengths), statistics.median(lengths), len(lengths)))
     hows = defaultdict(int)
-    for events in by_match.values():
+    for events in counted:
         for e in events:
             if e.name == "freeze_end":
                 hows[e.data.get("how", "?")] += 1
@@ -363,7 +381,7 @@ def main(argv):
     report_win_rate(by_match)
     report_funnel(by_match)
     report_kicks(by_match)
-    report_freezes(by_match, durations)
+    report_freezes(by_match)
     report_idle(by_match)
     report_drops(by_match)
     report_voice(by_match)

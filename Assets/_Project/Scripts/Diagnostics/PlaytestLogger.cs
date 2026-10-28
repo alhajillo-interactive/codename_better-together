@@ -46,6 +46,7 @@ namespace BetterTogether.Diagnostics
         private InputAction _interact;
         private InputAction _attack;
         private InputAction _jump;
+        private InputAction _focus;
         private float _lastActivity;
 
         private bool _talking;
@@ -120,13 +121,13 @@ namespace BetterTogether.Diagnostics
                     OpenMatch(manager);
                     break;
                 case MatchPhase.Playing:
-                case MatchPhase.Ended:
                     if (!Telemetry.Enabled)
                         OpenMatch(manager); // Late joiner: the countdown happened before we connected.
-                    if (phase == MatchPhase.Playing)
-                        ResetSamples();
-                    else
-                        EndOfPlay();
+                    ResetSamples();
+                    break;
+                case MatchPhase.Ended:
+                    // Joining during the end screen opens nothing: there is no play left to record.
+                    EndOfPlay();
                     break;
                 default:
                     CloseMatch();
@@ -176,6 +177,7 @@ namespace BetterTogether.Diagnostics
             _interact = InputSystem.actions != null ? InputSystem.actions.FindAction("Player/Interact") : null;
             _attack = InputSystem.actions != null ? InputSystem.actions.FindAction("Player/Attack") : null;
             _jump = InputSystem.actions != null ? InputSystem.actions.FindAction("Player/Jump") : null;
+            _focus = InputSystem.actions != null ? InputSystem.actions.FindAction("Player/Focus") : null;
             _lastActivity = Time.time;
             _nextPosition = Time.time + _positionInterval;
         }
@@ -246,7 +248,8 @@ namespace BetterTogether.Diagnostics
             var active = (_move != null && _move.ReadValue<Vector2>().sqrMagnitude > 0.0001f)
                 || (_interact != null && _interact.IsPressed())
                 || (_attack != null && _attack.IsPressed())
-                || (_jump != null && _jump.IsPressed());
+                || (_jump != null && _jump.IsPressed())
+                || (_focus != null && _focus.IsPressed());
             if (!active)
                 return;
 

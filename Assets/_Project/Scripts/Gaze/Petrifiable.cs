@@ -83,7 +83,9 @@ namespace BetterTogether.Gaze
         private bool _wasLocked;
         private bool _isSpawned;
         private bool _lastPetrified;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
         private float _freezeStartTime; // Owner only, telemetry: when the current freeze began.
+#endif
 
         public static Petrifiable Local { get; private set; }
 
@@ -291,8 +293,10 @@ namespace BetterTogether.Gaze
             BreakTick = Runner.Tick.Raw;
             IsPetrified = true;
             _petrifySfx.PlayAt(transform.position);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             _freezeStartTime = Time.time;
             if (Telemetry.Enabled) Telemetry.Begin("freeze_start").Int("gnome", Object.StateAuthority.PlayerId).CamperOffset(transform).Send();
+#endif
         }
 
         private void UpdateBreaking(int presses)
@@ -322,8 +326,10 @@ namespace BetterTogether.Gaze
         // Silent release: no immunity, hop, sound or release count (also used between matches).
         private void ClearStone(string how)
         {
-            if (Telemetry.Enabled && IsPetrified)
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            if (Telemetry.Enabled && IsPetrified && how != "reset") // A reset happens between matches, outside the play window.
                 Telemetry.Begin("freeze_end").Int("gnome", Object.StateAuthority.PlayerId).Float("duration", Time.time - _freezeStartTime).Str("how", how).CamperOffset(transform).Send();
+#endif
             IsPetrified = false;
             BreakAnchor = 0f;
             _pendingPresses = 0;

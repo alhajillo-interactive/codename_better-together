@@ -4,6 +4,7 @@ using BetterTogether.Player;
 using UnityEngine;
 
 #if (UNITY_EDITOR || DEVELOPMENT_BUILD) && FUSION_WEAVER
+using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -101,7 +102,21 @@ namespace BetterTogether.Diagnostics
             return Start(evt, character, character.transform);
         }
 
+        // Telemetry must never break gameplay or network logic: any failure while building a row drops that row.
         private static Event Start(string evt, PlayerCharacter character, Transform at)
+        {
+            try
+            {
+                return StartRow(evt, character, at);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Telemetry] Could not start an event: {e.Message}");
+                return default;
+            }
+        }
+
+        private static Event StartRow(string evt, PlayerCharacter character, Transform at)
         {
             Tick();
             var playerId = -1;
@@ -145,7 +160,7 @@ namespace BetterTogether.Diagnostics
             {
                 _writer.WriteLine(Row.ToString());
             }
-            catch (IOException e)
+            catch (Exception e)
             {
                 Debug.LogWarning($"[Telemetry] Could not write an event: {e.Message}");
             }

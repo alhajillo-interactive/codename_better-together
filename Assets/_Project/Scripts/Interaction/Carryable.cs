@@ -18,6 +18,8 @@ namespace BetterTogether.Interaction
         Kick,
         Distance,
         Respawn,
+        Fall,
+        Handoff,
     }
 
     /// <summary>
@@ -493,7 +495,8 @@ namespace BetterTogether.Interaction
             if (info.Source != giver && !(info.Source == PlayerRef.None && Runner.LocalPlayer == giver))
                 return;
 
-            if (Telemetry.Enabled) { Telemetry.Begin("drop", from).Str("object", _displayName).Int("holders", 0).Str("reason", ReasonName(DropReason.Voluntary)).Send(); Telemetry.Begin("pickup", to).Str("object", _displayName).Int("holders", 1).Send(); }
+            if (Telemetry.Enabled) Telemetry.Begin("drop", from).Str("object", _displayName).Int("holders", 0).Str("reason", ReasonName(DropReason.Handoff)).Send();
+            if (Telemetry.Enabled) Telemetry.Begin("pickup", to).Str("object", _displayName).Int("holders", 1).Send();
             HolderA = to;
             HolderB = null;
         }
@@ -550,6 +553,8 @@ namespace BetterTogether.Interaction
             DropReason.Kick => "kick",
             DropReason.Distance => "distance",
             DropReason.Respawn => "respawn",
+            DropReason.Fall => "fall",
+            DropReason.Handoff => "handoff",
             _ => "voluntary",
         };
 
