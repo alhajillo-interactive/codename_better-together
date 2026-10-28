@@ -55,6 +55,7 @@ namespace BetterTogether.Interaction
         private InputAction _interact;
         private PlayerMovement _movement;
         private PlayerCharacter _character;
+        private CharacterController _controller;
         private GnomeStack _stack;
         private bool _isSpawned;
         private float _lastCameraPitch;
@@ -71,7 +72,18 @@ namespace BetterTogether.Interaction
         public Transform CarryAnchor => _carryAnchor;
 
         /// <summary>World position of the holder's eyes (the camera anchor).</summary>
-        public Vector3 EyePosition => _eye != null ? _eye.position : transform.position + Vector3.up * 1.2f;
+        public Vector3 EyePosition
+        {
+            get
+            {
+                if (_eye != null)
+                    return _eye.position;
+                // Fallbacks without a camera anchor: the top of the character capsule, else the carry anchor, else the root.
+                if (_controller != null)
+                    return transform.TransformPoint(_controller.center + Vector3.up * (_controller.height * 0.5f));
+                return _carryAnchor != null ? _carryAnchor.position : transform.position;
+            }
+        }
 
         /// <summary>Layers a held item retracts from.</summary>
         public LayerMask HoldObstacleMask => _holdObstacleMask;
@@ -103,6 +115,7 @@ namespace BetterTogether.Interaction
         {
             _character = GetComponent<PlayerCharacter>();
             TryGetComponent(out _stack); // Only gnomes can stack.
+            TryGetComponent(out _controller);
             if (_eye == null)
                 _eye = FindByName(transform, "CameraAnchor");
             if (_eye == null)
