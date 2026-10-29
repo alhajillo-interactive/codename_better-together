@@ -15,7 +15,7 @@ namespace BetterTogether.Interaction
     /// another peer's state or transform. Every peer only turns off the gnome's collisions while it is held.
     /// </summary>
     [RequireComponent(typeof(Petrifiable), typeof(PlayerMovement))]
-    [DefaultExecutionOrder(150)]
+    [DefaultExecutionOrder(-250)]
     public class GnomeCapture : NetworkBehaviour, IInteractable
     {
         private enum CaptureState
@@ -188,10 +188,17 @@ namespace BetterTogether.Interaction
         // The owner draws its own body every frame at the anchor (the tick rate alone would look jittery to the carried player).
         private void LateUpdate()
         {
-            if (!_isSpawned || !HasStateAuthority || _state != CaptureState.Carried || _carrier == null || !_carryStarted)
+            if (!_isSpawned)
                 return;
 
-            transform.SetPositionAndRotation(_carrier.AnchorPosition, _carrier.AnchorRotation);
+            // Every peer draws the carried gnome in the camper's hands (presentation only: the NetworkTransform
+            // rewrites a proxy's pose on the next Render, and the owner's own pose is the one it replicates).
+            if (HasStateAuthority && (_state != CaptureState.Carried || !_carryStarted))
+                return;
+
+            var carrier = HasStateAuthority ? _carrier : (IsCarried ? GnomeCarrier.FindCarrying(Object.Id) : null);
+            if (carrier != null)
+                transform.SetPositionAndRotation(carrier.AnchorPosition, carrier.AnchorRotation);
         }
 
         private void Transition(CaptureState next, GnomeCarrier carrier, GnomeCage cage)
@@ -211,7 +218,7 @@ namespace BetterTogether.Interaction
                 case CaptureState.Caged:
                     _movement.IsCaptured = true;
                     // Out of the stone (it is not needed any more) and into the cage; the cage keeps it immune meanwhile.
-                    _petrifiable.ForceRelease(cage.CageSeconds + _exitImmunity);
+                    _petrifiable.ReleaseForCage(cage.CageSeconds + _exitImmunity);
                     _movement.Teleport(cage.InsidePoint.position, cage.InsidePoint.rotation);
                     break;
 

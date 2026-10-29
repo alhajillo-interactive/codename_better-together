@@ -565,7 +565,9 @@ namespace BetterTogether.Player
             if (aimed == null || !_isSpawned)
                 return false;
 
-            if (_movement.IsFrozen)
+            if (TryGetComponent<GnomeCapture>(out var own) && own.IsCaptured)
+                reason = "Estás atrapado";
+            else if (_movement.IsFrozen)
                 reason = "Estás petrificado";
             else if (TowerHasStone(aimed))
                 reason = "La torre está petrificada";

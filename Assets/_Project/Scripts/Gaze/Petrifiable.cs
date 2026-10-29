@@ -257,6 +257,17 @@ namespace BetterTogether.Gaze
             return false;
         }
 
+        /// <summary>Owner only: frees a stone gnome that was put in the cage, silently (no release count or sound), with immunity.</summary>
+        public void ReleaseForCage(float immunitySeconds)
+        {
+            if (!_isSpawned || !HasStateAuthority)
+                return;
+
+            if (IsPetrified)
+                ClearStone("cage");
+            GazeImmunity = TickTimer.CreateFromSeconds(Runner, immunitySeconds);
+        }
+
         /// <summary>Owner only (called by the kick): frees the statue, grants immunity and forgets the break progress.</summary>
         public void ForceRelease(float immunitySeconds)
         {

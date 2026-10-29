@@ -339,6 +339,11 @@ namespace BetterTogether.Gaze
             for (var i = 0; i < count; i++)
             {
                 var hit = _hits[i].transform;
+                // A gnome carried or caged by the camper is not scenery.
+                var held = hit.GetComponentInParent<GnomeCapture>();
+                if (held != null && held.IsCaptured)
+                    continue;
+
                 if (!hit.IsChildOf(target) && !hit.IsChildOf(transform) && hit.GetComponentInParent<Carryable>() == null)
                     return false;
             }
