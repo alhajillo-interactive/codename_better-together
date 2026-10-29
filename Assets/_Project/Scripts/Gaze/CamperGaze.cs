@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BetterTogether.Fireplace;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
 using BetterTogether.Networking;
@@ -25,6 +26,9 @@ namespace BetterTogether.Gaze
         [Tooltip("Half-angle of the petrifying cone. The camera sees ~45° to each side, so 22° leaves the edges free.")]
         [Range(1f, 90f)]
         [SerializeField] private float _halfAngle = 22f;
+        [Tooltip("Half-angle of the cone while the camper's comeback bonus is active (see FireplaceManager).")]
+        [Range(1f, 90f)]
+        [SerializeField] private float _comebackHalfAngle = 26f;
         [Tooltip("Base reach of the gaze in metres.")]
         [SerializeField] private float _range = 8f;
         [Tooltip("Layers that block the gaze (walls, tents, trees...).")]
@@ -82,7 +86,15 @@ namespace BetterTogether.Gaze
         /// <summary>The local camper's gaze (state authority).</summary>
         public static CamperGaze Local { get; private set; }
 
-        public float HalfAngle => _halfAngle;
+        /// <summary>Current cone half-angle: widened while the replicated comeback timer runs (the camper decides on their own gaze).</summary>
+        public float HalfAngle
+        {
+            get
+            {
+                var fire = FireplaceManager.Instance;
+                return fire != null && fire.ComebackActive ? Mathf.Max(_halfAngle, _comebackHalfAngle) : _halfAngle;
+            }
+        }
 
         // Pitch is only rewritten when it moves more than this many degrees, so mouse noise doesn't dirty it every tick.
         private const float PitchStep = 0.5f;
@@ -319,7 +331,7 @@ namespace BetterTogether.Gaze
             var eye = EyePosition;
             var toPoint = point - eye;
             var distance = toPoint.magnitude;
-            if (distance > Range + extraRange || Vector3.Angle(LookDirection, toPoint) > _halfAngle + extraAngle)
+            if (distance > Range + extraRange || Vector3.Angle(LookDirection, toPoint) > HalfAngle + extraAngle)
                 return false;
 
             // Blocked by scenery, but not by the target itself, the camper, or items (a gnome can't hide behind its log).
@@ -475,8 +487,8 @@ namespace BetterTogether.Gaze
             Gizmos.color = new Color(0.6f, 0.2f, 1f, 0.8f);
             foreach (var axis in new[] { Vector3.up, transform.right })
             {
-                Gizmos.DrawLine(eye, eye + Quaternion.AngleAxis(_halfAngle, axis) * forward * length);
-                Gizmos.DrawLine(eye, eye + Quaternion.AngleAxis(-_halfAngle, axis) * forward * length);
+                Gizmos.DrawLine(eye, eye + Quaternion.AngleAxis(HalfAngle, axis) * forward * length);
+                Gizmos.DrawLine(eye, eye + Quaternion.AngleAxis(-HalfAngle, axis) * forward * length);
             }
         }
     }

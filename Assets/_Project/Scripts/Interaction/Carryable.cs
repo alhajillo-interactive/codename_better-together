@@ -586,12 +586,20 @@ namespace BetterTogether.Interaction
         public void ResetForMatch() => ReturnToStart(false);
 
         /// <summary>Authority only: drops the item and puts it back at its start pose. Everyone hears it when <paramref name="announce"/> is true.</summary>
-        private void ReturnToStart(bool announce)
+        private void ReturnToStart(bool announce) => Relocate(_startPosition, _startRotation, announce);
+
+        /// <summary>Authority only: drops the item (any holder lets go) and sets it down, at rest, at the given pose. Silent.</summary>
+        public void PlaceAt(Vector3 position, Quaternion rotation) => Relocate(position, rotation, false);
+
+        /// <summary>Whether gnomes are currently carrying the item.</summary>
+        public bool IsHeldByGnomes => _isSpawned && HeldByGnomes;
+
+        private void Relocate(Vector3 position, Quaternion rotation, bool announce)
         {
             if (!HasStateAuthority)
                 return;
 
-            if (Telemetry.Enabled && announce) LogDropAll(DropReason.Respawn);
+            if (Telemetry.Enabled && (announce || HolderCount > 0)) LogDropAll(DropReason.Respawn);
             WasHandled = false;
             LastHeldByCamper = false;
             ForceReleaseAll();
@@ -607,12 +615,12 @@ namespace BetterTogether.Interaction
                 _body.angularVelocity = Vector3.zero;
             }
 
-            transform.SetPositionAndRotation(_startPosition, _startRotation);
+            transform.SetPositionAndRotation(position, rotation);
             if (_networkTransform != null)
-                _networkTransform.Teleport(_startPosition, _startRotation);
+                _networkTransform.Teleport(position, rotation);
 
             if (announce)
-                RPC_PlayRespawn(_startPosition);
+                RPC_PlayRespawn(position);
         }
 
         [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
