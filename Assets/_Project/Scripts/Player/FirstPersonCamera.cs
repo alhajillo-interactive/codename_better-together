@@ -33,6 +33,9 @@ namespace BetterTogether.Player
         public float Yaw { get; private set; }
         public float Pitch => _pitch;
 
+        /// <summary>Movement of the local player this camera is mounted on, or null while it follows nobody.</summary>
+        public PlayerMovement TargetMovement => _targetMovement;
+
         /// <summary>Multiplies the mouse sensitivity, e.g. lowered while the camper focuses.</summary>
         public float SensitivityScale { get; set; } = 1f;
 
