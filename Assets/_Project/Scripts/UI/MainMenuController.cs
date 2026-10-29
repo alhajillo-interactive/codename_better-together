@@ -32,6 +32,9 @@ namespace BetterTogether.UI
         [SerializeField] Button joinRoomBTN;
         [SerializeField] Button creditsBTN;
         [SerializeField] Button exitBTN;
+        [Tooltip("Optional: opens the settings panel (built by GnoMore/Construir ajustes).")]
+        [SerializeField] Button settingsBTN;
+        [SerializeField] SettingsPanel settingsPanel;
         [SerializeField] Button joinBTN;
         [SerializeField] Button creditsCloseBTN;
         [SerializeField] GameObject credits;
@@ -52,6 +55,8 @@ namespace BetterTogether.UI
             exitBTN.onClick.AddListener(ExitGame);
             joinBTN.onClick.AddListener(OnSubmitClicked);
             creditsCloseBTN.onClick.AddListener(CreditClose);
+            if (settingsBTN != null)
+                settingsBTN.onClick.AddListener(OpenSettings);
 
             roomName.characterLimit = MaxRoomCodeLength;
             roomName.onValueChanged.AddListener(OnRoomNameChanged);
@@ -86,6 +91,8 @@ namespace BetterTogether.UI
             exitBTN.onClick.RemoveListener(ExitGame);
             joinBTN.onClick.RemoveListener(OnSubmitClicked);
             creditsCloseBTN.onClick.RemoveListener(CreditClose);
+            if (settingsBTN != null)
+                settingsBTN.onClick.RemoveListener(OpenSettings);
             roomName.onValueChanged.RemoveListener(OnRoomNameChanged);
         }
 
@@ -94,6 +101,9 @@ namespace BetterTogether.UI
             var keyboard = Keyboard.current;
             if (keyboard == null)
                 return;
+
+            if (settingsPanel != null && settingsPanel.IsOpen)
+                return; // the panel closes itself with Esc
 
             if (keyboard.escapeKey.wasPressedThisFrame)
             {
@@ -107,6 +117,12 @@ namespace BetterTogether.UI
             {
                 OnSubmitClicked();
             }
+        }
+
+        private void OpenSettings()
+        {
+            if (settingsPanel != null)
+                settingsPanel.Open();
         }
 
         private void CreditClose() => credits.SetActive(false);
