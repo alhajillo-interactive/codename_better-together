@@ -530,6 +530,10 @@ namespace BetterTogether.Player
                 reason = "Estás petrificado";
             else if (_movement.IsStunned)
                 reason = "Estás aturdido";
+            else if (_movement.IsCrouching)
+                reason = "Estás agachado";
+            else if (aimed._movement.IsCrouching)
+                reason = "Ese duende está agachado";
             else if (_interactor != null && _interactor.Carried != null)
                 reason = "Tienes las manos ocupadas";
             else if (aimed.Base == this)

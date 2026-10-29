@@ -18,11 +18,17 @@ namespace BetterTogether.Player
         [Tooltip("Degrees per pixel of mouse delta.")]
         [SerializeField] private float _mouseSensitivity = 0.1f;
         [SerializeField] private float _maxPitch = 85f;
+        [Tooltip("Seconds the eye takes to move between standing and crouched height.")]
+        [SerializeField, Min(0.01f)] private float _crouchEyeSmoothTime = 0.15f;
 
         private Transform _target;
         private InputAction _look;
         private float _pitch;
         private bool _wasCursorFree;
+        private PlayerMovement _targetMovement;
+        private float _standingEyeHeight;
+        private float _eyeDrop;
+        private float _eyeDropVelocity;
 
         public float Yaw { get; private set; }
         public float Pitch => _pitch;
@@ -50,6 +56,10 @@ namespace BetterTogether.Player
         public void Follow(Transform anchor)
         {
             _target = anchor;
+            _targetMovement = anchor.GetComponentInParent<PlayerMovement>();
+            _standingEyeHeight = _targetMovement != null ? anchor.position.y - _targetMovement.transform.position.y : 0f;
+            _eyeDrop = 0f;
+            _eyeDropVelocity = 0f;
             Yaw = anchor.eulerAngles.y;
             _pitch = 0f;
             SetCursorLocked(true);
@@ -67,6 +77,7 @@ namespace BetterTogether.Player
                 return;
 
             _target = null;
+            _targetMovement = null;
             SetCursorLocked(false);
         }
 
@@ -95,7 +106,12 @@ namespace BetterTogether.Player
             else if (cursorLocked)
                 ApplyLook();
 
-            transform.SetPositionAndRotation(_target.position, Quaternion.Euler(_pitch, Yaw, 0f));
+            var targetDrop = _targetMovement != null && _targetMovement.IsCrouching
+                ? _targetMovement.CrouchEyeDrop(_standingEyeHeight)
+                : 0f;
+            _eyeDrop = Mathf.SmoothDamp(_eyeDrop, targetDrop, ref _eyeDropVelocity, _crouchEyeSmoothTime);
+
+            transform.SetPositionAndRotation(_target.position - Vector3.up * _eyeDrop, Quaternion.Euler(_pitch, Yaw, 0f));
         }
 
         private void ApplyLook()
