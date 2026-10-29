@@ -22,6 +22,13 @@ namespace BetterTogether.Player
         [SerializeField] private float _sprintSpeed = 3.5f;
         [SerializeField] private float _jumpHeight = 0.5f;
         [SerializeField] private float _gravity = -20f;
+        [Header("Jump feel")]
+        [Tooltip("Seconds after leaving the ground (without jumping) during which a jump is still allowed.")]
+        [SerializeField, Min(0f)] private float _coyoteTime = 0.12f;
+        [Tooltip("Seconds a jump press made in the air is remembered and executed on landing.")]
+        [SerializeField, Min(0f)] private float _jumpBuffer = 0.12f;
+        [Tooltip("Horizontal speed (m/s) at which a player standing on top of another player is pushed off.")]
+        [SerializeField, Min(0f)] private float _slideOffSpeed = 2.5f;
         [Tooltip("Speed multiplier while this player and another gnome carry a heavy item together.")]
         [SerializeField, Range(0.1f, 1f)] private float _pairCarrySpeedMultiplier = 0.7f;
         [Header("Crouch")]
@@ -62,7 +69,16 @@ namespace BetterTogether.Player
         private Kickable _kickable;
         private Petrifiable _petrifiable;
         private float _verticalVelocity;
-        private bool _jumpQueued;
+        // Owner only, local simulation state (never replicated): remaining seconds of the buffered press / coyote window.
+        private float _jumpBufferTimer;
+        private float _coyoteTimer;
+        // Set from OnControllerColliderHit during Move: standing on another player's capsule instead of real ground.
+        private bool _onPlayerThisMove;
+        private bool _onPlayerLastMove;
+        // Same, for real ground (anything but another player) under the feet: only slide when the other player is the sole support.
+        private bool _groundThisMove;
+        private bool _groundLastMove;
+        private Vector3 _otherPlayerPosition;
         private bool _isRiding;
         private bool _isCaptured;
         private bool _isSpawned;
@@ -262,7 +278,7 @@ namespace BetterTogether.Player
                 {
                     _knockback = Vector3.zero;
                     _verticalVelocity = 0f;
-                    _jumpQueued = false;
+                    ClearJump();
                 }
 
                 _isRiding = value;
@@ -282,7 +298,7 @@ namespace BetterTogether.Player
                 {
                     _knockback = Vector3.zero;
                     _verticalVelocity = 0f;
-                    _jumpQueued = false;
+                    ClearJump();
                     _stunTimer = 0f;
                 }
 
@@ -301,7 +317,7 @@ namespace BetterTogether.Player
             _knockback = new Vector3(velocity.x, 0f, velocity.z);
             _verticalVelocity = velocity.y;
             _stunTimer = Mathf.Max(_stunTimer, stunDuration);
-            _jumpQueued = false;
+            ClearJump();
             AnimationMovement = 0f;
             AnimationJump = false;
             AnimationDancing = false;
@@ -323,7 +339,7 @@ namespace BetterTogether.Player
             _knockback = Vector3.zero;
             _verticalVelocity = 0f;
             _stunTimer = 0f;
-            _jumpQueued = false;
+            ClearJump();
             AnimationMovement = 0f;
             AnimationJump = false;
             AnimationDancing = false;
@@ -342,8 +358,36 @@ namespace BetterTogether.Player
             // FixedUpdateNetwork may not run every rendered frame, so buffer the press.
             // _jump is only assigned on the state authority (see Spawned).
             if (_jump != null && _jump.WasPressedThisFrame() && !IsRiding && !IsCaptured)
-                _jumpQueued = true;
+                _jumpBufferTimer = Mathf.Max(_jumpBuffer, 0.001f);
         }
+
+        // Owner only: remembers the capsule under the feet when it belongs to another player (Move calls this).
+        private void OnControllerColliderHit(ControllerColliderHit hit)
+        {
+            if (hit.normal.y < 0.3f || hit.moveDirection.y > -0.01f || hit.controller != _controller)
+                return;
+
+            var other = hit.collider;
+            if (!(other is CharacterController) || (_standUpPlayersMask & (1 << other.gameObject.layer)) == 0)
+            {
+                _groundThisMove = true;
+                return;
+            }
+
+            _onPlayerThisMove = true;
+            _otherPlayerPosition = other.transform.position;
+        }
+
+        private void ClearJump()
+        {
+            _jumpBufferTimer = 0f;
+            _coyoteTimer = 0f;
+            _onPlayerThisMove = _onPlayerLastMove = false;
+            _groundThisMove = _groundLastMove = false;
+        }
+
+        /// <summary>Upward speed that reaches the given jump height with this player's gravity.</summary>
+        public float JumpSpeedForHeight(float height) => Mathf.Sqrt(2f * Mathf.Max(0f, height) * -_gravity);
 
         // Owner only: slowed while carrying an item together with another gnome (replicated holder state, no allocation).
         private float PairCarryMultiplier
@@ -374,8 +418,11 @@ namespace BetterTogether.Player
                 return;
             }
 
-            var grounded = _controller.isGrounded;
-            if (grounded && _verticalVelocity < 0f)
+            var touching = _controller.isGrounded;
+            // Resting on another player's head is not ground: no jump, no coyote time, and we slide off.
+            var onPlayer = touching && _onPlayerLastMove && !_groundLastMove;
+            var grounded = touching && !onPlayer;
+            if (touching && _verticalVelocity < 0f)
                 _verticalVelocity = -1f; // Small push keeps the controller stuck to the ground.
 
             var dt = Runner.DeltaTime;
@@ -391,15 +438,45 @@ namespace BetterTogether.Player
             var sprinting = !locked && !crouching && _sprint.IsPressed();
             var speed = (sprinting ? _sprintSpeed : _walkSpeed) * SpeedMultiplier * LoadMultiplier * PairCarryMultiplier * (crouching ? CrouchSpeed : 1f);
 
-            var jumped = _jumpQueued && grounded && !stunned && !locked && !crouching;
+            var jumpBlocked = stunned || locked || crouching;
+            if (grounded)
+                _coyoteTimer = _coyoteTime;
+            else if (onPlayer)
+                _coyoteTimer = 0f;
+            var viaCoyote = !grounded && _coyoteTimer > 0f;
+            var jumped = _jumpBufferTimer > 0f && (grounded || viaCoyote) && !jumpBlocked;
             if (jumped)
-                _verticalVelocity = Mathf.Sqrt(2f * _jumpHeight * -_gravity);
-            _jumpQueued = false;
+            {
+                _verticalVelocity = JumpSpeedForHeight(_jumpHeight);
+                if (Telemetry.Enabled) Telemetry.Begin("jump").Int("coyote", viaCoyote ? 1 : 0).Send();
+            }
+
+            if (jumped || jumpBlocked)
+                ClearJump();
+            else
+            {
+                _jumpBufferTimer = Mathf.Max(0f, _jumpBufferTimer - dt);
+                _coyoteTimer = Mathf.Max(0f, _coyoteTimer - dt);
+            }
+
+            var slide = Vector3.zero;
+            if (onPlayer && !jumped)
+            {
+                var away = transform.position - _otherPlayerPosition;
+                away.y = 0f;
+                if (away.sqrMagnitude < 0.0004f)
+                    away = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+                slide = away.normalized * _slideOffSpeed;
+            }
 
             _knockback = Vector3.MoveTowards(_knockback, Vector3.zero, (grounded ? _knockbackGroundDrag : _knockbackAirDrag) * dt);
 
             _verticalVelocity += _gravity * dt;
-            _controller.Move((direction * speed + _knockback + Vector3.up * _verticalVelocity) * dt);
+            _onPlayerThisMove = false;
+            _groundThisMove = false;
+            _controller.Move((direction * speed + _knockback + slide + Vector3.up * _verticalVelocity) * dt);
+            _onPlayerLastMove = _onPlayerThisMove;
+            _groundLastMove = _groundThisMove;
 
             transform.rotation = Quaternion.Euler(0f, yaw, 0f);
 
@@ -416,7 +493,7 @@ namespace BetterTogether.Player
         // The body is placed by GnomeCapture; only the animation state is cleared.
         private void CapturedTick()
         {
-            _jumpQueued = false;
+            ClearJump();
             AnimationMovement = 0f;
             AnimationJump = false;
             AnimationDancing = false;
@@ -426,7 +503,7 @@ namespace BetterTogether.Player
         private void RideTick()
         {
             _stunTimer = Mathf.Max(0f, _stunTimer - Runner.DeltaTime);
-            _jumpQueued = false;
+            ClearJump();
 
             var yaw = FirstPersonCamera.Instance != null && !IsFrozen ? FirstPersonCamera.Instance.Yaw : transform.eulerAngles.y;
             transform.rotation = Quaternion.Euler(0f, yaw, 0f);
