@@ -1,3 +1,4 @@
+using BetterTogether.Environment;
 using BetterTogether.Match;
 using BetterTogether.Player;
 using UnityEngine;
@@ -18,6 +19,8 @@ namespace BetterTogether.Audio
         [SerializeField] private MusicTrack _playing;
         [Tooltip("Optional. Plays instead of the playing track while the fire is lit (milestone 2, defending it); empty keeps the playing track.")]
         [SerializeField] private MusicTrack _playingDefend;
+        [Tooltip("Optional. Tense track that replaces the playing and defend tracks once night falls; empty keeps them.")]
+        [SerializeField] private MusicTrack _playingNight;
         [Tooltip("Short ending piece; set it to not loop.")]
         [SerializeField] private MusicTrack _ended;
 
@@ -31,6 +34,9 @@ namespace BetterTogether.Audio
         private MatchPhase? _shownTrackPhase;
         private MatchPhase? _lastPhase;
         private bool _shownDefend;
+        private bool _shownNight;
+        private DayNightCycle _cycle;
+        private float _nextCycleSearch;
         private bool _resultPending;
 
         private void Awake() => _match = GetComponent<MatchManager>();
@@ -48,17 +54,31 @@ namespace BetterTogether.Audio
 
             // The milestone is derived from the lit fire, so late joiners and a new master hear the same track.
             var defend = phase == MatchPhase.Playing && _playingDefend != null && MatchStage.Current == MatchStage.Stage.DefendFire;
-            if (phase == _shownTrackPhase && defend == _shownDefend)
+            var night = phase == MatchPhase.Playing && _playingNight != null && IsNight();
+            if (phase == _shownTrackPhase && defend == _shownDefend && night == _shownNight)
                 return;
 
             _shownTrackPhase = phase;
             _shownDefend = defend;
+            _shownNight = night;
             AudioManager.PlayMusic(phase switch
             {
                 MatchPhase.Waiting => _lobby,
-                MatchPhase.Playing => defend ? _playingDefend : _playing,
+                MatchPhase.Playing => night ? _playingNight : defend ? _playingDefend : _playing,
                 _ => _ended,
             });
+        }
+
+        // Night comes from the sky clock, which derives from the match timer: late joiners and a new master agree.
+        private bool IsNight()
+        {
+            if (_cycle == null && Time.unscaledTime >= _nextCycleSearch)
+            {
+                _cycle = FindAnyObjectByType<DayNightCycle>();
+                _nextCycleSearch = Time.unscaledTime + 1f;
+            }
+
+            return _cycle != null && _cycle.IsNight;
         }
 
         private void OnDestroy()
