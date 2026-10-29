@@ -35,6 +35,9 @@ namespace BetterTogether.UI
         [Tooltip("Optional: opens the settings panel (built by GnoMore/Construir ajustes).")]
         [SerializeField] Button settingsBTN;
         [SerializeField] SettingsPanel settingsPanel;
+        [Tooltip("Optional: opens the public games panel (built by GnoMore/Construir partidas públicas).")]
+        [SerializeField] Button publicBTN;
+        [SerializeField] PublicLobbyPanel publicPanel;
         [SerializeField] Button joinBTN;
         [SerializeField] Button creditsCloseBTN;
         [SerializeField] GameObject credits;
@@ -57,6 +60,10 @@ namespace BetterTogether.UI
             creditsCloseBTN.onClick.AddListener(CreditClose);
             if (settingsBTN != null)
                 settingsBTN.onClick.AddListener(OpenSettings);
+            if (publicBTN != null)
+                publicBTN.onClick.AddListener(OpenPublic);
+            if (publicPanel != null)
+                publicPanel.Closed += OnPublicClosed;
 
             roomName.characterLimit = MaxRoomCodeLength;
             roomName.onValueChanged.AddListener(OnRoomNameChanged);
@@ -93,6 +100,10 @@ namespace BetterTogether.UI
             creditsCloseBTN.onClick.RemoveListener(CreditClose);
             if (settingsBTN != null)
                 settingsBTN.onClick.RemoveListener(OpenSettings);
+            if (publicBTN != null)
+                publicBTN.onClick.RemoveListener(OpenPublic);
+            if (publicPanel != null)
+                publicPanel.Closed -= OnPublicClosed;
             roomName.onValueChanged.RemoveListener(OnRoomNameChanged);
         }
 
@@ -109,6 +120,8 @@ namespace BetterTogether.UI
             {
                 if (credits.activeSelf)
                     CreditClose();
+                else if (publicPanel != null && publicPanel.IsOpen)
+                    publicPanel.Close();
                 else if (joinUI.activeSelf && !_busy)
                     BackToMainMenu();
             }
@@ -124,6 +137,17 @@ namespace BetterTogether.UI
             if (settingsPanel != null)
                 settingsPanel.Open();
         }
+
+        private void OpenPublic()
+        {
+            if (publicPanel == null)
+                return;
+
+            mainMenu.SetActive(false);
+            publicPanel.Open();
+        }
+
+        private void OnPublicClosed() => mainMenu.SetActive(true);
 
         private void CreditClose() => credits.SetActive(false);
 
@@ -226,6 +250,8 @@ namespace BetterTogether.UI
         {
             createRoomBTN.interactable = value;
             joinRoomBTN.interactable = value;
+            if (publicBTN != null)
+                publicBTN.interactable = value;
             creditsBTN.interactable = value;
             exitBTN.interactable = value;
             joinBTN.interactable = value;
