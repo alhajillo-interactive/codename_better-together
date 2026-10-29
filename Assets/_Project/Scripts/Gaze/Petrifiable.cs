@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using BetterTogether.Audio;
 using BetterTogether.Diagnostics;
+using BetterTogether.Interaction;
 using BetterTogether.Match;
 using BetterTogether.Networking;
 using BetterTogether.Player;
@@ -99,6 +100,7 @@ namespace BetterTogether.Gaze
         private bool _lastPetrified;
         private bool _stoneSnapped; // The first Render after spawn sets the tint without a sweep (late joiners).
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
+        private GnomeCapture _capture;
         private float _freezeStartTime; // Owner only, telemetry: when the current freeze began.
 #endif
 
@@ -183,6 +185,9 @@ namespace BetterTogether.Gaze
         /// <summary>Owner only: how many times this player was set free, for HUD feedback.</summary>
         public int ReleaseCount { get; private set; }
 
+        /// <summary>Root of the visual (renderers only); presentation code may offset it briefly, never the networked root.</summary>
+        public Transform Visual => _visual;
+
         /// <summary>Cached disguise component of this gnome (null on players without one).</summary>
         public GardenDisguise Disguise { get; private set; }
 
@@ -205,6 +210,7 @@ namespace BetterTogether.Gaze
             _movement = GetComponent<PlayerMovement>();
             Disguise = GetComponent<GardenDisguise>();
             _stack = GetComponent<GnomeStack>();
+            TryGetComponent(out _capture);
             _block = new MaterialPropertyBlock();
             _renderers = _visual != null ? _visual.GetComponentsInChildren<Renderer>() : new Renderer[0];
             BuildTintSlots();
@@ -387,6 +393,13 @@ namespace BetterTogether.Gaze
 
         private void Hop()
         {
+            // Freed from the camper's hands: start from where the camper really is (extrapolated) and leave to its side.
+            if (_capture != null && _capture.TryPlaceForEscape(out var outward))
+            {
+                _movement.ApplyKnockback(outward * _hopForward + Vector3.up * _hopUp, _hopStun);
+                return;
+            }
+
             var forward = FirstPersonCamera.Instance != null ? FirstPersonCamera.Instance.transform.forward : transform.forward;
             forward = Vector3.ProjectOnPlane(forward, Vector3.up);
             forward = forward.sqrMagnitude > 0.0001f ? forward.normalized : transform.forward;

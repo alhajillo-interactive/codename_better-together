@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BetterTogether.Diagnostics;
 using BetterTogether.Gaze;
 using BetterTogether.Player;
 using BetterTogether.UI;
@@ -37,6 +38,26 @@ namespace BetterTogether.Interaction
         [Tooltip("Players a dropped gnome may not overlap. Empty = Player + Gnome, chosen in Awake.")]
         [SerializeField] private LayerMask _playerMask;
 
+        [Header("Escape")]
+        [Tooltip("Upper bound in seconds of how far ahead the camper is extrapolated when the gnome breaks free (latency + interpolation).")]
+        [SerializeField, Min(0f)] private float _maxLead = 0.3f;
+        [Tooltip("Seconds a remote body is shown behind its real position by interpolation, added to half the round trip.")]
+        [SerializeField, Min(0f)] private float _interpolationDelay = 0.1f;
+        [Tooltip("Degrees to the side of the camper's facing that a freed gnome hops towards (the side alternates).")]
+        [SerializeField, Range(0f, 120f)] private float _hopSideAngle = 70f;
+
+        [Header("Release presentation")]
+        [Tooltip("Seconds the drawn gnome takes to glide from the camper's hands to its real pose when it stops being carried.")]
+        [SerializeField, Min(0f)] private float _releaseBlend = 0.15f;
+        [Tooltip("Metres the drawn gnome rises at the middle of that glide.")]
+        [SerializeField, Min(0f)] private float _releaseArc = 0.12f;
+        [Tooltip("Camera FOV punch (degrees) on the camper when the gnome slips out of its hands.")]
+        [SerializeField] private float _escapeFovPunch = 3f;
+        [Tooltip("Camera roll punch (degrees) on the camper when the gnome slips out of its hands.")]
+        [SerializeField] private float _escapeRollPunch = 1.5f;
+        [Tooltip("Seconds the escape camera punch takes to settle.")]
+        [SerializeField, Min(0.05f)] private float _escapePunchTime = 0.25f;
+
         [Header("Cage")]
         [Tooltip("Seconds after leaving the cage during which the camper cannot petrify this gnome again.")]
         [SerializeField, Min(0f)] private float _exitImmunity = 3f;
@@ -61,6 +82,20 @@ namespace BetterTogether.Interaction
         private Vector3 _lastCarrierPosition;
         private Vector3 _lastCarrierForward;
         private bool _carryStarted;
+
+        // Presentation only (every peer).
+        private Transform _visual;
+        private Vector3 _visualRestPosition;
+        private Quaternion _visualRestRotation;
+        private Vector3 _lastAnchorPosition;
+        private Quaternion _lastAnchorRotation;
+        private bool _hasAnchor;
+        private bool _wasCarriedByLocal;
+        private bool _blending;
+        private bool _blendFresh;
+        private float _blendStart;
+        private Vector3 _blendOffset;
+        private Quaternion _blendTurn;
 
         /// <summary>Every spawned gnome with this component.</summary>
         public static IReadOnlyList<GnomeCapture> All => AllGnomes;
@@ -136,12 +171,21 @@ namespace BetterTogether.Interaction
             // Late joiners start from whatever is already replicated: no announcements for the past.
             _lastCarried = IsCarried;
             _lastCaged = IsCaged;
+            _blending = false;
+            _hasAnchor = false;
+            _visual = _petrifiable.Visual;
+            if (_visual != null)
+            {
+                _visualRestPosition = _visual.localPosition;
+                _visualRestRotation = _visual.localRotation;
+            }
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             _isSpawned = false;
             AllGnomes.Remove(this);
+            EndBlend();
             SetCollisions(true);
             if (_movement != null)
                 _movement.IsCaptured = false;
@@ -191,14 +235,72 @@ namespace BetterTogether.Interaction
             if (!_isSpawned)
                 return;
 
+            DrawCarried();
+            BlendVisual();
+        }
+
+        private void DrawCarried()
+        {
             // Every peer draws the carried gnome in the camper's hands (presentation only: the NetworkTransform
             // rewrites a proxy's pose on the next Render, and the owner's own pose is the one it replicates).
-            if (HasStateAuthority && (_state != CaptureState.Carried || !_carryStarted))
+            if (HasStateAuthority && (_state != CaptureState.Carried || !_carryStarted || !_petrifiable.IsStone))
                 return;
 
             var carrier = HasStateAuthority ? _carrier : (IsCarried ? GnomeCarrier.FindCarrying(Object.Id) : null);
             if (carrier != null)
-                transform.SetPositionAndRotation(carrier.AnchorPosition, carrier.AnchorRotation);
+            {
+                _lastAnchorPosition = carrier.AnchorPosition;
+                _lastAnchorRotation = carrier.AnchorRotation;
+                _hasAnchor = true;
+                transform.SetPositionAndRotation(_lastAnchorPosition, _lastAnchorRotation);
+            }
+        }
+
+        // After being carried the drawn body glides (with a small arc) from the last hand pose to the real pose
+        // instead of snapping; only the visual child moves, never the networked root or the colliders.
+        private void BlendVisual()
+        {
+            if (!_blending)
+                return;
+
+            if (_visual == null)
+            {
+                _blending = false;
+                return;
+            }
+
+            if (_blendFresh)
+            {
+                // First frame after the release: the root already holds its final pose, so measure the gap now.
+                _blendFresh = false;
+                _blendOffset = _lastAnchorPosition - transform.position;
+                _blendTurn = _lastAnchorRotation * Quaternion.Inverse(transform.rotation);
+            }
+
+            var k = _releaseBlend > 0f ? (Time.time - _blendStart) / _releaseBlend : 1f;
+            if (k >= 1f)
+            {
+                EndBlend();
+                return;
+            }
+
+            var ease = k * k * (3f - 2f * k);
+            var parent = _visual.parent;
+            var naturalPosition = parent != null ? parent.TransformPoint(_visualRestPosition) : _visualRestPosition;
+            var naturalRotation = parent != null ? parent.rotation * _visualRestRotation : _visualRestRotation;
+            var position = naturalPosition + _blendOffset * (1f - ease) + Vector3.up * (_releaseArc * Mathf.Sin(Mathf.PI * k));
+            _visual.SetPositionAndRotation(position, Quaternion.Slerp(_blendTurn, Quaternion.identity, ease) * naturalRotation);
+        }
+
+        private void EndBlend()
+        {
+            if (_blending && _visual != null)
+            {
+                _visual.localPosition = _visualRestPosition;
+                _visual.localRotation = _visualRestRotation;
+            }
+
+            _blending = false;
         }
 
         private void Transition(CaptureState next, GnomeCarrier carrier, GnomeCage cage)
@@ -270,28 +372,108 @@ namespace BetterTogether.Interaction
             _cage = null;
         }
 
-        // Puts the gnome down in front of where the camper was, never inside geometry or another player.
+        // Puts the gnome down where the camper decided (its replicated drop spot). Without one (the camper left),
+        // it falls back to the last carrier pose this peer saw.
         private void PutDown()
         {
-            var forward = Vector3.ProjectOnPlane(_lastCarrierForward, Vector3.up);
+            if (_carrier != null && _carrier.TryGetDrop(Object.Id, out var point, out var yaw))
+            {
+                _movement.Teleport(point, Quaternion.Euler(0f, yaw, 0f));
+                return;
+            }
+
+            ComputeDropPoint(_lastCarrierPosition, _lastCarrierForward, out var spot, out var spotYaw);
+            _movement.Teleport(spot, Quaternion.Euler(0f, spotYaw, 0f));
+        }
+
+        /// <summary>
+        /// A safe spot to put this gnome down in front of a camper standing at <paramref name="camperPosition"/> facing
+        /// <paramref name="camperForward"/>: on the ground, never inside geometry or another player.
+        /// Uses only this gnome's size and the physics world, so any peer can compute it.
+        /// </summary>
+        public void ComputeDropPoint(Vector3 camperPosition, Vector3 camperForward, out Vector3 point, out float yaw)
+        {
+            var forward = Vector3.ProjectOnPlane(camperForward, Vector3.up);
             forward = forward.sqrMagnitude > 0.0001f ? forward.normalized : transform.forward;
-            var scale = Mathf.Max(0.01f, Mathf.Abs(transform.lossyScale.y));
-            var radius = Mathf.Max(0.02f, _controller.radius * scale * 0.9f);
-            var height = Mathf.Max(radius * 2f, _controller.height * scale);
+            yaw = Quaternion.LookRotation(forward, Vector3.up).eulerAngles.y;
+            GetBodySize(out var radius, out var height);
 
             for (var i = 0; i < _dropAttempts; i++)
             {
-                var candidate = _lastCarrierPosition + forward * (_dropDistance + i * _dropStep);
+                var candidate = camperPosition + forward * (_dropDistance + i * _dropStep);
                 if (TryGround(candidate, out var ground) && IsFree(ground, radius, height))
                 {
-                    _movement.Teleport(ground, Quaternion.LookRotation(forward, Vector3.up));
+                    point = ground;
                     return;
                 }
             }
 
-            // Everything in front is blocked: the ground under the current spot (gravity does the rest).
-            if (TryGround(transform.position, out var below))
-                _movement.Teleport(below, transform.rotation);
+            // Everything in front is blocked: the ground under the camper (gravity does the rest).
+            point = TryGround(camperPosition, out var below) ? below : camperPosition;
+        }
+
+        /// <summary>
+        /// Owner only, called when this carried gnome breaks free: puts it beside where the camper is "now"
+        /// (its delayed body plus velocity times the estimated delay) and returns the horizontal direction to hop in,
+        /// out and to a side of the camper, never backwards. False if nobody carries it (the old hop applies).
+        /// </summary>
+        public bool TryPlaceForEscape(out Vector3 direction)
+        {
+            direction = default;
+            if (!_isSpawned || !HasStateAuthority)
+                return false;
+
+            var carrier = GnomeCarrier.FindCarrying(Object.Id);
+            if (carrier == null)
+                return false;
+
+            var rtt = 0.0;
+            if (Runner != null)
+            {
+                var camper = carrier.Object.StateAuthority;
+                rtt = camper != PlayerRef.None ? Runner.GetPlayerRtt(camper) : 0.0;
+                if (rtt <= 0.0)
+                    rtt = Runner.GetPlayerRtt(Runner.LocalPlayer); // No direct estimate for that peer: use ours.
+            }
+
+            var lead = Mathf.Clamp((float)rtt * 0.5f + _interpolationDelay, 0f, _maxLead);
+            var origin = carrier.transform.position + carrier.Velocity * lead;
+            var facing = Vector3.ProjectOnPlane(carrier.transform.forward, Vector3.up);
+            facing = facing.sqrMagnitude > 0.0001f ? facing.normalized : transform.forward;
+            GetBodySize(out var radius, out var height);
+
+            var firstSide = (_petrifiable.ReleaseCount & 1) == 0 ? 1f : -1f;
+            var rotation = Quaternion.LookRotation(facing, Vector3.up);
+            direction = Quaternion.Euler(0f, _hopSideAngle * firstSide, 0f) * facing;
+            var placed = false;
+            for (var i = 0; i < _dropAttempts && !placed; i++)
+            {
+                for (var s = 0; s < 2 && !placed; s++)
+                {
+                    var side = s == 0 ? firstSide : -firstSide;
+                    var candidateDirection = Quaternion.Euler(0f, _hopSideAngle * side, 0f) * facing;
+                    var candidate = origin + candidateDirection * (_dropDistance + i * _dropStep);
+                    if (TryGround(candidate, out var ground) && IsFree(ground, radius, height))
+                    {
+                        direction = candidateDirection;
+                        _movement.Teleport(ground, rotation);
+                        placed = true;
+                    }
+                }
+            }
+
+            // Boxed in on both sides: it stays where the hands were; the hop still goes out to the side.
+            if (Telemetry.Enabled)
+                Telemetry.Begin("gnome_drop").Str("reason", "escape_hop").Float("lead_ms", lead * 1000f).Int("placed", placed ? 1 : 0).Send();
+
+            return true;
+        }
+
+        private void GetBodySize(out float radius, out float height)
+        {
+            var scale = Mathf.Max(0.01f, Mathf.Abs(transform.lossyScale.y));
+            radius = Mathf.Max(0.02f, _controller.radius * scale * 0.9f);
+            height = Mathf.Max(radius * 2f, _controller.height * scale);
         }
 
         private bool TryGround(Vector3 around, out Vector3 ground)
@@ -342,6 +524,31 @@ namespace BetterTogether.Interaction
                 else if (caged && !_lastCaged)
                     Announce("En la jaula: tus amigos pueden liberarte");
             }
+
+            if (carried)
+                _wasCarriedByLocal = GnomeCarrier.FindCarrying(Object.Id) == GnomeCarrier.Local;
+
+            // Stopped being carried (put down, escaped, camper left): glide the drawn body instead of snapping.
+            // Caging is a deliberate move to the cage, not a release.
+            if (_lastCarried && !carried && !caged)
+            {
+                if (_hasAnchor && _visual != null && _releaseBlend > 0f)
+                {
+                    _blending = true;
+                    _blendFresh = true;
+                    _blendStart = Time.time;
+                }
+
+                // The camper feels it when the gnome slips out of its hands (not when it puts the gnome down itself).
+                if (_wasCarriedByLocal && !IsStoneNow && CameraPunch.Instance != null)
+                {
+                    CameraPunch.Instance.PunchFov(_escapeFovPunch, _escapePunchTime);
+                    CameraPunch.Instance.PunchRoll(Random.value < 0.5f ? -_escapeRollPunch : _escapeRollPunch, _escapePunchTime);
+                }
+            }
+
+            if (!carried)
+                _wasCarriedByLocal = false;
 
             _lastCarried = carried;
             _lastCaged = caged;
