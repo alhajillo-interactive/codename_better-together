@@ -4,6 +4,7 @@ using BetterTogether.Interaction;
 using BetterTogether.Match;
 using BetterTogether.Player;
 using Fusion;
+using PrimeTween;
 using UnityEngine;
 
 namespace BetterTogether.Fireplace
@@ -35,6 +36,38 @@ namespace BetterTogether.Fireplace
         [Tooltip("Heard by everyone, from the sausage, when the camper eats it.")]
         [SerializeField] private SoundCue _eatSfx;
         [SerializeField] private Transform _visual;
+
+        [Header("Feel (C2.3) - all derived from replicated state in Render")]
+        [Tooltip("Looping sizzle while on a lit grill. Volume and pitch rise with cook progress.")]
+        [SerializeField] private AudioClip _sizzleLoop;
+        [Tooltip("Sizzle volume at the start and at the end of the cook.")]
+        [SerializeField] private Vector2 _sizzleVolume = new(0.15f, 0.8f);
+        [Tooltip("Sizzle pitch at the start and at the end of the cook.")]
+        [SerializeField] private Vector2 _sizzlePitch = new(0.8f, 1.4f);
+        [Tooltip("Distance (m) at which the sizzle is no longer heard.")]
+        [SerializeField] private float _sizzleMaxDistance = 12f;
+        [Tooltip("Played when the sausage becomes ready.")]
+        [SerializeField] private SoundCue _readySfx;
+        [Tooltip("Seconds of warning before it burns (beeping and smoke).")]
+        [SerializeField] private float _alarmLead = 3f;
+        [Tooltip("Beep interval (s) at the start and at the end of the alarm; it speeds up.")]
+        [SerializeField] private Vector2 _beepInterval = new(0.55f, 0.12f);
+        [Tooltip("Beep played during the burn alarm.")]
+        [SerializeField] private SoundCue _alarmSfx;
+        [Tooltip("Played when the sausage burns.")]
+        [SerializeField] private SoundCue _burntSfx;
+        [Tooltip("Scale multiplier reached at the top of the 'ready' hop.")]
+        [SerializeField] private float _readyHopScale = 1.15f;
+        [Tooltip("Total duration (s) of the 'ready' hop.")]
+        [SerializeField] private float _readyHopTime = 0.2f;
+        [Tooltip("Seconds per bite; the sausage shrinks in 3 steps and a bite sound plays on each.")]
+        [SerializeField] private float _biteTime = 0.15f;
+        [Tooltip("Sparks while cooking.")]
+        [SerializeField] private ParticleSystem _sparks;
+        [Tooltip("Light smoke that rises during the burn alarm.")]
+        [SerializeField] private ParticleSystem _warnSmoke;
+        [Tooltip("Black puff when it burns.")]
+        [SerializeField] private ParticleSystem _burntPuff;
         [SerializeField] private Color _rawColor = new(0.9f, 0.45f, 0.45f);
         [SerializeField] private Color _cookedColor = new(0.65f, 0.3f, 0.1f);
         [SerializeField] private Color _burntColor = new(0.08f, 0.06f, 0.05f);
@@ -51,6 +84,16 @@ namespace BetterTogether.Fireplace
         private bool _burnWatched;
         private bool _wasBurnt;
         private bool _lastEaten;
+        private AudioSource _sizzle;
+        private FireplaceGrill _grill;
+        private float _nextGrillSearch;
+        private CookState _feelState = (CookState)(-1);
+        private float _nextBeep;
+        private Vector3 _visualScale = Vector3.one;
+        private bool _biting;
+        private Sequence _feelSequence;
+        private System.Action _playBite;
+        private System.Action _endBites;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         // Telemetry: last state and grill flag seen, so only changes are logged.
         private CookState _loggedState = (CookState)(-1);
@@ -96,6 +139,19 @@ namespace BetterTogether.Fireplace
             _networkTransform = GetComponent<NetworkTransform>();
             _renderers = _visual != null ? _visual.GetComponentsInChildren<Renderer>(true) : System.Array.Empty<Renderer>();
             _block = new MaterialPropertyBlock();
+            if (_visual != null)
+                _visualScale = _visual.localScale;
+
+            _playBite = PlayBite;
+            _endBites = EndBites;
+            _sizzle = gameObject.AddComponent<AudioSource>();
+            _sizzle.playOnAwake = false;
+            _sizzle.loop = true;
+            _sizzle.clip = _sizzleLoop;
+            _sizzle.spatialBlend = 1f;
+            _sizzle.rolloffMode = AudioRolloffMode.Linear;
+            _sizzle.minDistance = 1f;
+            _sizzle.maxDistance = _sizzleMaxDistance;
         }
 
         public override void Spawned()
@@ -105,6 +161,8 @@ namespace BetterTogether.Fireplace
             _spawnPosition = transform.position;
             _spawnRotation = transform.rotation;
             _lastEaten = IsEaten; // Late joiners don't hear a bite that already happened.
+            _feelState = State; // Nor a ding or a burn that already happened.
+            _sizzle.outputAudioMixerGroup = AudioManager.SfxGroup;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             SyncLogged();
 #endif
@@ -115,6 +173,7 @@ namespace BetterTogether.Fireplace
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             _isSpawned = false;
+            StopFeel();
             if (Instance == this)
                 Instance = null;
         }
@@ -252,19 +311,160 @@ namespace BetterTogether.Fireplace
 
             var eaten = IsEaten;
             if (eaten && !_lastEaten)
-                _eatSfx.PlayAt(transform.position);
+                StartBites();
+            else if (!eaten && _lastEaten)
+                StopFeel();
             _lastEaten = eaten;
 
             ApplyEaten();
             ApplyColor();
+            RenderFeel(eaten);
+        }
+
+        // Presentation only: everything below is derived from the replicated cook state, so late joiners and a new master
+        // simply follow it without replaying past events.
+        private void RenderFeel(bool eaten)
+        {
+            var state = State;
+            var cooking = !eaten && IsCooking();
+            var progress = _burntAt > 0f ? Mathf.Clamp01(CookTime / _burntAt) : 0f;
+
+            if (state != _feelState)
+            {
+                if (_feelState == CookState.Raw && state == CookState.Cooked)
+                    PlayReady();
+                else if (state == CookState.Burnt && _feelState != CookState.Burnt)
+                    PlayBurnt();
+
+                _feelState = state;
+            }
+
+            UpdateSizzle(cooking, progress);
+            SetEmitting(_sparks, cooking && state != CookState.Burnt);
+
+            var alarm = cooking && state == CookState.Cooked && CookTime >= _burntAt - _alarmLead;
+            SetEmitting(_warnSmoke, alarm);
+            if (!alarm || Time.time < _nextBeep)
+                return;
+
+            var t = Mathf.Clamp01((CookTime - (_burntAt - _alarmLead)) / Mathf.Max(0.01f, _alarmLead));
+            _nextBeep = Time.time + Mathf.Lerp(_beepInterval.x, _beepInterval.y, t);
+            _alarmSfx.PlayAt(transform.position);
+        }
+
+        // True while it rests on the grill over a lit fire. The grill is looked up once (retried every second until found).
+        private bool IsCooking()
+        {
+            if (_grill == null)
+            {
+                if (Time.time < _nextGrillSearch)
+                    return false;
+
+                _nextGrillSearch = Time.time + 1f;
+                _grill = FindAnyObjectByType<FireplaceGrill>();
+                if (_grill == null)
+                    return false;
+            }
+
+            var fire = FireplaceManager.Instance;
+            return fire != null && fire.IsLit && _carryable.IsPinnedTo(_grill);
+        }
+
+        private void UpdateSizzle(bool cooking, float progress)
+        {
+            if (_sizzle.clip == null)
+                return;
+
+            if (!cooking)
+            {
+                if (_sizzle.isPlaying)
+                    _sizzle.Stop();
+                return;
+            }
+
+            _sizzle.volume = Mathf.Lerp(_sizzleVolume.x, _sizzleVolume.y, progress);
+            _sizzle.pitch = Mathf.Lerp(_sizzlePitch.x, _sizzlePitch.y, progress);
+            if (!_sizzle.isPlaying)
+                _sizzle.Play();
+        }
+
+        private static void SetEmitting(ParticleSystem particles, bool on)
+        {
+            if (particles == null || particles.isEmitting == on)
+                return;
+
+            if (on)
+                particles.Play();
+            else
+                particles.Stop(false, ParticleSystemStopBehavior.StopEmitting);
+        }
+
+        private void PlayReady()
+        {
+            _readySfx.PlayAt(transform.position);
+            if (_visual == null || _biting)
+                return;
+
+            _feelSequence.Stop();
+            _visual.localScale = _visualScale;
+            _feelSequence = Sequence.Create()
+                .Chain(Tween.Scale(_visual, _visualScale * _readyHopScale, _readyHopTime * 0.5f, Ease.OutQuad))
+                .Chain(Tween.Scale(_visual, _visualScale, _readyHopTime * 0.5f, Ease.InQuad));
+        }
+
+        private void PlayBurnt()
+        {
+            _burntSfx.PlayAt(transform.position);
+            if (_burntPuff != null)
+                _burntPuff.Play();
+        }
+
+        // Three bites: the sausage shrinks in 3 steps with a bite sound on each, then the visual hides.
+        private void StartBites()
+        {
+            if (_visual == null)
+            {
+                _eatSfx.PlayAt(transform.position);
+                return;
+            }
+
+            _feelSequence.Stop();
+            _biting = true;
+            _visual.localScale = _visualScale;
+            _feelSequence = Sequence.Create();
+            for (var i = 1; i <= 3; i++)
+            {
+                _feelSequence = _feelSequence.ChainCallback(_playBite);
+                _feelSequence = _feelSequence.Chain(Tween.Scale(_visual, _visualScale * (1f - i / 3f), _biteTime, Ease.InQuad));
+            }
+
+            _feelSequence = _feelSequence.ChainCallback(_endBites);
+        }
+
+        private void PlayBite() => _eatSfx.PlayAt(transform.position);
+
+        private void EndBites() => _biting = false;
+
+        // Stops any running tween and restores the visual (new match, despawn).
+        private void StopFeel()
+        {
+            _feelSequence.Stop();
+            _biting = false;
+            if (_visual != null)
+                _visual.localScale = _visualScale;
+            if (_sizzle != null && _sizzle.isPlaying)
+                _sizzle.Stop();
+            SetEmitting(_sparks, false);
+            SetEmitting(_warnSmoke, false);
         }
 
         private void ApplyEaten()
         {
             var eaten = IsEaten;
             _carryable.Inert = eaten;
-            if (_visual != null && _visual.gameObject.activeSelf == eaten)
-                _visual.gameObject.SetActive(!eaten);
+            var show = !eaten || _biting; // Stays visible while it is being bitten.
+            if (_visual != null && _visual.gameObject.activeSelf != show)
+                _visual.gameObject.SetActive(show);
         }
 
         private void ApplyColor()
