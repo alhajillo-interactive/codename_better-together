@@ -155,7 +155,7 @@ namespace BetterTogether.UI
                 _endScores.fontSize = _endScoresFontSize;
                 _endScores.enableAutoSizing = false;
                 _endScores.alignment = TextAlignmentOptions.Top;
-                _endScores.color = Color.white;
+                _endScores.color = UiTheme.Current != null ? UiTheme.Current.ink : Color.white; // sits on the paper end card
                 _endScores.richText = true;
                 // Hangs from the bottom edge of the rematch line, derived from its own rect.
                 var rematch = _endRematch.rectTransform;

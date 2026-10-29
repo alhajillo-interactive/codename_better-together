@@ -16,7 +16,8 @@ namespace BetterTogether.UI
     /// </summary>
     public class PublicLobbyPanel : MonoBehaviour
     {
-        private static readonly Color ErrorColor = new Color(1f, 0.45f, 0.4f);
+        private static readonly Color FallbackErrorColor = new Color(1f, 0.45f, 0.4f);
+        private static Color ErrorColor => UiTheme.Current != null ? UiTheme.Current.hat : FallbackErrorColor;
 
         [Tooltip("Root of the panel; shown by Open and hidden by Close.")]
         [SerializeField] private GameObject _content;
