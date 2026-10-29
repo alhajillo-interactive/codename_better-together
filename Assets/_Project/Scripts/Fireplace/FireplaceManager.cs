@@ -159,6 +159,9 @@ namespace BetterTogether.Fireplace
 
         public static FireplaceManager Instance { get; private set; }
 
+        /// <summary>Times the fire has been put out this match (replicated).</summary>
+        public int Extinguished => _isSpawned ? ExtinguishCount : 0;
+
         public int RequiredWood => _requiredWood;
         public int WoodCount => _isSpawned ? LogsInside : 0;
         public bool HasEnoughWood => _isSpawned && LogsInside >= _requiredWood;
@@ -373,6 +376,7 @@ namespace BetterTogether.Fireplace
             LitGrace = TickTimer.CreateFromSeconds(Runner, _litGraceTime);
             ClearPour();
             if (Telemetry.Enabled) Telemetry.Begin("fire_lit", who).Int("logs", LogsInside).Send();
+            if (MatchManager.Instance != null) MatchManager.Instance.NoteFireLit();
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -478,6 +482,9 @@ namespace BetterTogether.Fireplace
         private void FinishPour(WaterBucket bucket)
         {
             if (Telemetry.Enabled) LogDoused();
+            var pourer = Pourer;
+            if (MatchManager.Instance != null && pourer != null && pourer.Object != null && pourer.Object.IsValid)
+                MatchManager.Instance.Award(pourer.Object.StateAuthority, MatchManager.ScoreReason.Douse);
             bucket.RequestSpill();
             ClearPour();
             IsLit = false;

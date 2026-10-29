@@ -37,6 +37,20 @@ namespace BetterTogether.Match
         [Tooltip("Seconds the result stays on screen before the next match.")]
         [SerializeField] private float _endScreen = 6f;
 
+        [Header("Gnome scoring")]
+        [Tooltip("Points for the gnome that finishes dousing the fire with the bucket.")]
+        [SerializeField] private int _pointsDouse = 3;
+        [Tooltip("Points for the gnome that fills the bucket.")]
+        [SerializeField] private int _pointsFill = 1;
+        [Tooltip("Points for the gnome that hides an object.")]
+        [SerializeField] private int _pointsHide = 2;
+        [Tooltip("Points for a gnome that takes an object the camper was last holding.")]
+        [SerializeField] private int _pointsSteal = 1;
+        [Tooltip("Most bucket fills per player and match that give points (stops fill-spill-fill farming).")]
+        [Min(0)] [SerializeField] private int _maxFillAwards = 3;
+        [Tooltip("Points every gnome gets when the sausage burns (paid once per match).")]
+        [SerializeField] private int _pointsBurntSausage = 3;
+
         private MatchPhase _lastPhase = MatchPhase.Waiting;
         private bool _isSpawned;
         private bool _roleApplied;
@@ -46,6 +60,37 @@ namespace BetterTogether.Match
         [Networked] private MatchResult CurrentResult { get; set; }
         [Networked] private TickTimer PhaseTimer { get; set; }
         [Networked] private TickTimer MatchTimer { get; set; }
+
+        // Gnome scores: one row per player (PlayerRef + points), written only by the state authority. A row per player
+        // instead of an array indexed by PlayerId because ids keep growing when players rejoin. Rows of players who left stay until the next match.
+        [Networked, Capacity(MaxScoreRows)] private NetworkArray<ScoreEntry> Scores => default;
+
+        // Match stats for the end screen. FireSeconds is the match time of the first fire (-1: never lit).
+        [Networked] private float FireSeconds { get; set; }
+        [Networked] private int HiddenCount { get; set; }
+
+        // The burnt-sausage bonus is paid once per match.
+        [Networked] private NetworkBool BurnPaid { get; set; }
+
+        public const int MaxScoreRows = 8;
+
+        /// <summary>One scoreboard row, replicated.</summary>
+        public struct ScoreEntry : INetworkStruct
+        {
+            public PlayerRef Player;
+            public short Points;
+            public byte Fills;
+        }
+
+        /// <summary>What earned points; the value of each is a tooltip field on the match manager.</summary>
+        public enum ScoreReason
+        {
+            Douse,
+            FillBucket,
+            Hide,
+            Steal,
+            BurntSausage,
+        }
 
         /// <summary>Raised on every client when a match starts (the phase becomes Playing).</summary>
         public static event UnityAction OnGameStarted;
@@ -124,6 +169,175 @@ namespace BetterTogether.Match
             }
         }
 
+        /// <summary>Match seconds at which the fire was first lit, or -1 when it never was (valid on every peer).</summary>
+        public float FirstFireSeconds => _isSpawned ? FireSeconds : -1f;
+
+        /// <summary>Objects hidden by gnomes this match.</summary>
+        public int ObjectsHidden => _isSpawned ? HiddenCount : 0;
+
+        /// <summary>Times the fire was put out this match.</summary>
+        public int FiresExtinguished => FireplaceManager.Instance != null ? FireplaceManager.Instance.Extinguished : 0;
+
+        /// <summary>Points of a player, 0 when it has no row.</summary>
+        public int GetScore(PlayerRef player)
+        {
+            if (!_isSpawned || player == PlayerRef.None)
+                return 0;
+
+            var scores = Scores;
+            for (var i = 0; i < scores.Length; i++)
+            {
+                if (scores[i].Player == player)
+                    return scores[i].Points;
+            }
+
+            return 0;
+        }
+
+        /// <summary>Copies the scoreboard rows (players with a row) into <paramref name="results"/>, unsorted. Returns the count.</summary>
+        public int GetScoreRows(List<ScoreEntry> results)
+        {
+            results.Clear();
+            if (!_isSpawned)
+                return 0;
+
+            var scores = Scores;
+            for (var i = 0; i < scores.Length; i++)
+            {
+                if (scores[i].Player != PlayerRef.None)
+                    results.Add(scores[i]);
+            }
+
+            return results.Count;
+        }
+
+        /// <summary>Authority only (does nothing elsewhere, no RPC needed): adds <paramref name="points"/> to a player while the match runs.</summary>
+        public void Award(PlayerRef player, int points) => AwardInternal(player, points, "manual");
+
+        /// <summary>Authority only: awards the points configured for <paramref name="reason"/> to one player.</summary>
+        public void Award(PlayerRef player, ScoreReason reason)
+        {
+            if (!_isSpawned || !HasStateAuthority || CurrentPhase != MatchPhase.Playing)
+                return;
+
+            if (reason == ScoreReason.Hide)
+                HiddenCount++;
+
+            AwardInternal(player, PointsFor(reason), ReasonName(reason), reason == ScoreReason.FillBucket);
+        }
+
+        /// <summary>Authority only: every gnome (everybody but the camper) gets the points configured for <paramref name="reason"/>.</summary>
+        public void AwardGnomes(ScoreReason reason)
+        {
+            if (!_isSpawned || !HasStateAuthority || CurrentPhase != MatchPhase.Playing)
+                return;
+
+            if (reason == ScoreReason.BurntSausage)
+            {
+                if (BurnPaid)
+                    return;
+
+                BurnPaid = true;
+            }
+
+            var points = PointsFor(reason);
+            var reasonName = ReasonName(reason);
+            foreach (var player in Runner.ActivePlayers)
+            {
+                if (player != CurrentCamper)
+                    AwardInternal(player, points, reasonName);
+            }
+        }
+
+        /// <summary>Authority only: remembers when the fire was first lit this match (later lights are ignored).</summary>
+        public void NoteFireLit()
+        {
+            if (!_isSpawned || !HasStateAuthority || CurrentPhase != MatchPhase.Playing || FireSeconds >= 0f)
+                return;
+
+            FireSeconds = Mathf.Max(0f, _matchDuration - TimeRemaining);
+        }
+
+        private int PointsFor(ScoreReason reason) => reason switch
+        {
+            ScoreReason.Douse => _pointsDouse,
+            ScoreReason.FillBucket => _pointsFill,
+            ScoreReason.Hide => _pointsHide,
+            ScoreReason.Steal => _pointsSteal,
+            _ => _pointsBurntSausage,
+        };
+
+        private static string ReasonName(ScoreReason reason) => reason switch
+        {
+            ScoreReason.Douse => "douse",
+            ScoreReason.FillBucket => "fill_bucket",
+            ScoreReason.Hide => "hide",
+            ScoreReason.Steal => "steal",
+            _ => "burnt_sausage",
+        };
+
+        private void AwardInternal(PlayerRef player, int points, string reason, bool isFill = false)
+        {
+            if (!_isSpawned || !HasStateAuthority || CurrentPhase != MatchPhase.Playing || player == PlayerRef.None || points == 0)
+                return;
+
+            var scores = Scores;
+            var free = -1;
+            for (var i = 0; i < scores.Length; i++)
+            {
+                var row = scores[i];
+                if (row.Player == player)
+                {
+                    if (isFill)
+                    {
+                        if (row.Fills >= _maxFillAwards)
+                            return;
+
+                        row.Fills++;
+                    }
+
+                    row.Points = (short)Mathf.Clamp(row.Points + points, short.MinValue, short.MaxValue);
+                    scores.Set(i, row);
+                    LogScore(player, points, reason);
+                    return;
+                }
+
+                if (free < 0 && row.Player == PlayerRef.None)
+                    free = i;
+            }
+
+            if (free < 0 || (isFill && _maxFillAwards < 1))
+                return;
+
+            scores.Set(free, new ScoreEntry { Player = player, Points = (short)Mathf.Clamp(points, short.MinValue, short.MaxValue), Fills = (byte)(isFill ? 1 : 0) });
+            LogScore(player, points, reason);
+        }
+
+        private void LogScore(PlayerRef player, int points, string reason)
+        {
+            if (Telemetry.Enabled) Telemetry.Begin("score").Int("scorer", player.PlayerId).Int("points", points).Str("reason", reason).Send();
+        }
+
+        // Authority only: zeroes the scoreboard and stats, then gives every gnome an empty row so the ranking lists them all.
+        private void ResetScores()
+        {
+            var scores = Scores;
+            for (var i = 0; i < scores.Length; i++)
+                scores.Set(i, default);
+
+            FireSeconds = -1f;
+            HiddenCount = 0;
+            BurnPaid = false;
+            var row = 0;
+            foreach (var player in Runner.ActivePlayers)
+            {
+                if (player == CurrentCamper || row >= scores.Length)
+                    continue;
+
+                scores.Set(row++, new ScoreEntry { Player = player });
+            }
+        }
+
         public bool AutoStart => _autoStart;
 
         public int PlayerCount
@@ -167,10 +381,8 @@ namespace BetterTogether.Match
             if (!_isSpawned)
                 return;
 
-            if (HasStateAuthority)
-                DoStartMatch();
-            else
-                RPC_StartMatch();
+            // Always through the RPC (also on the authority) so [Networked] state is written from an RPC, never from Update.
+            RPC_StartMatch();
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -209,6 +421,7 @@ namespace BetterTogether.Match
         {
             ResetWorld();
             CurrentCamper = ChooseCamper();
+            ResetScores();
             CurrentResult = MatchResult.None;
             CurrentPhase = MatchPhase.Countdown;
             PhaseTimer = TickTimer.CreateFromSeconds(Runner, _countdown);

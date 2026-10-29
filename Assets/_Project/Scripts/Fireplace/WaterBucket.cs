@@ -93,6 +93,7 @@ namespace BetterTogether.Fireplace
 
             Full = true;
             if (Telemetry.Enabled) Telemetry.Begin("bucket_fill", who).Send();
+            if (MatchManager.Instance != null) MatchManager.Instance.Award(who.Object.StateAuthority, MatchManager.ScoreReason.FillBucket);
         }
 
         /// <summary>
