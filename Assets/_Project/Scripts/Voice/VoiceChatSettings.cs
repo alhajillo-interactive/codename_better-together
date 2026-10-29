@@ -42,10 +42,37 @@ namespace BetterTogether.Voice
         [Tooltip("Silent beyond this radius.")]
         [SerializeField] private float _maxDistance = 30f;
 
+        public const string PushToTalkPrefsKey = "gm_ptt";
+
+        // -2 = not read yet, -1 = no saved choice, 0/1 = saved choice. Static: one local player per machine.
+        private static int _pushToTalkOverride = -2;
+
+        private static int Override
+        {
+            get
+            {
+                if (_pushToTalkOverride == -2)
+                    _pushToTalkOverride = PlayerPrefs.HasKey(PushToTalkPrefsKey) ? PlayerPrefs.GetInt(PushToTalkPrefsKey) : -1;
+                return _pushToTalkOverride;
+            }
+        }
+
+        // Statics survive between Play sessions when domain reload is off.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics() => _pushToTalkOverride = -2;
+
+        /// <summary>Saves the player's microphone mode (true = push to talk) and applies it at once.</summary>
+        public void SetPushToTalk(bool value)
+        {
+            _pushToTalkOverride = value ? 1 : 0;
+            PlayerPrefs.SetInt(PushToTalkPrefsKey, _pushToTalkOverride);
+        }
+
         public float MicGain => _micGain;
         public float VoiceDetectionThreshold => _voiceDetectionThreshold;
         public int VoiceDetectionDelayMs => _voiceDetectionDelayMs;
-        public bool PushToTalk => _pushToTalk;
+        /// <summary>Player setting «gm_ptt» (set by the settings panel) wins over the asset default. Cached: read every frame.</summary>
+        public bool PushToTalk => (Override >= 0 ? Override == 1 : _pushToTalk);
         public Key PushToTalkKey => _pushToTalkKey;
 
         public void ApplyToVoice(AudioSource source) => Apply(source, _voiceVolume);

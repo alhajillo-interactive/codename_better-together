@@ -39,6 +39,30 @@ namespace BetterTogether.Player
         /// <summary>Multiplies the mouse sensitivity, e.g. lowered while the camper focuses.</summary>
         public float SensitivityScale { get; set; } = 1f;
 
+        public const string SensitivityPrefsKey = "gm_sens";
+
+        // -1 = not read yet. Player setting from the settings panel, multiplies the sensitivity above; 1 = unchanged.
+        private static float _sensitivityMultiplier = -1f;
+
+        /// <summary>Player mouse sensitivity multiplier (saved in PlayerPrefs «gm_sens»), 1 by default.</summary>
+        public static float SensitivityMultiplier
+        {
+            get
+            {
+                if (_sensitivityMultiplier < 0f)
+                    _sensitivityMultiplier = Mathf.Clamp(PlayerPrefs.GetFloat(SensitivityPrefsKey, 1f), 0.1f, 5f);
+                return _sensitivityMultiplier;
+            }
+            set
+            {
+                _sensitivityMultiplier = Mathf.Clamp(value, 0.1f, 5f);
+                PlayerPrefs.SetFloat(SensitivityPrefsKey, _sensitivityMultiplier);
+            }
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics() => _sensitivityMultiplier = -1f;
+
         /// <summary>While true the cursor stays unlocked and mouse look is paused, e.g. while a debug panel is open.</summary>
         public static bool CursorFree { get; set; }
 
@@ -122,7 +146,7 @@ namespace BetterTogether.Player
             _look ??= InputSystem.actions.FindAction("Player/Look");
             var delta = _look.ReadValue<Vector2>();
 
-            var sensitivity = _mouseSensitivity * SensitivityScale;
+            var sensitivity = _mouseSensitivity * SensitivityScale * SensitivityMultiplier;
             Yaw += delta.x * sensitivity;
             _pitch = Mathf.Clamp(_pitch - delta.y * sensitivity, -_maxPitch, _maxPitch);
         }
