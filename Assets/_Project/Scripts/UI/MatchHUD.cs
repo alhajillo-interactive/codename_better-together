@@ -117,8 +117,25 @@ namespace BetterTogether.UI
         private int _lastWaitingKey = -1;
         private int _lastClockSecond = -1;
 
+        /// <summary>The HUD of this client, if one is in the scene.</summary>
+        public static MatchHUD Instance { get; private set; }
+
+        /// <summary>Shows a message in the announcer of this client only. Safe to call without a HUD.</summary>
+        public static void AnnounceLocal(string text, Color color)
+        {
+            if (Instance != null)
+                Instance.Announce(text, color);
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this)
+                Instance = null;
+        }
+
         private void Awake()
         {
+            Instance = this;
             _clockPunch = UIPunch.Of(_clock);
             _announcerPunch = UIPunch.Of(_announcer);
             _titlePunch = UIPunch.Of(_endTitle);

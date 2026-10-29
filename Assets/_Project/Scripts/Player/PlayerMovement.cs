@@ -64,6 +64,7 @@ namespace BetterTogether.Player
         private float _verticalVelocity;
         private bool _jumpQueued;
         private bool _isRiding;
+        private bool _isCaptured;
         private bool _isSpawned;
         private InputAction _crouch;
         private GnomeStack _stack;
@@ -269,6 +270,27 @@ namespace BetterTogether.Player
         }
 
         /// <summary>
+        /// Set by <see cref="GnomeCapture"/> on the owner while this gnome is carried by the camper or locked in the cage:
+        /// the body is placed by that component, so there is no walking, jumping or physics at all.
+        /// </summary>
+        public bool IsCaptured
+        {
+            get => _isCaptured;
+            set
+            {
+                if (value && !_isCaptured)
+                {
+                    _knockback = Vector3.zero;
+                    _verticalVelocity = 0f;
+                    _jumpQueued = false;
+                    _stunTimer = 0f;
+                }
+
+                _isCaptured = value;
+            }
+        }
+
+        /// <summary>
         /// Launches the player. Only has effect on the state authority, which is the one simulating movement.
         /// </summary>
         public void ApplyKnockback(Vector3 velocity, float stunDuration)
@@ -319,7 +341,7 @@ namespace BetterTogether.Player
         {
             // FixedUpdateNetwork may not run every rendered frame, so buffer the press.
             // _jump is only assigned on the state authority (see Spawned).
-            if (_jump != null && _jump.WasPressedThisFrame() && !IsRiding)
+            if (_jump != null && _jump.WasPressedThisFrame() && !IsRiding && !IsCaptured)
                 _jumpQueued = true;
         }
 
@@ -339,6 +361,12 @@ namespace BetterTogether.Player
         {
             if (!HasStateAuthority)
                 return;
+
+            if (IsCaptured)
+            {
+                CapturedTick();
+                return;
+            }
 
             if (IsRiding)
             {
@@ -383,6 +411,15 @@ namespace BetterTogether.Player
             AnimationJump = !stunned && (jumped || !_controller.isGrounded);
             AnimationDancing = _petrifiable != null && _dance != null && _dance.IsPressed() && !stunned && !locked &&
                 _controller.isGrounded && move.sqrMagnitude < 0.01f && _knockback.sqrMagnitude < 0.01f;
+        }
+
+        // The body is placed by GnomeCapture; only the animation state is cleared.
+        private void CapturedTick()
+        {
+            _jumpQueued = false;
+            AnimationMovement = 0f;
+            AnimationJump = false;
+            AnimationDancing = false;
         }
 
         // The controller is disabled while riding and the mount carries the body; only the turning and the timers go on.

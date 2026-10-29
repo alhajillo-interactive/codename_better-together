@@ -44,6 +44,8 @@ namespace BetterTogether.Match
         [SerializeField] private int _pointsFill = 1;
         [Tooltip("Points for the gnome that hides an object.")]
         [SerializeField] private int _pointsHide = 2;
+        [Tooltip("Points for a gnome that frees a teammate from the camper's cage.")]
+        [SerializeField] private int _pointsFreeTeammate = 2;
         [Tooltip("Points for a gnome that takes an object the camper was last holding.")]
         [SerializeField] private int _pointsSteal = 1;
         [Tooltip("Most bucket fills per player and match that give points (stops fill-spill-fill farming).")]
@@ -90,6 +92,7 @@ namespace BetterTogether.Match
             Hide,
             Steal,
             BurntSausage,
+            FreeTeammate,
         }
 
         /// <summary>Raised on every client when a match starts (the phase becomes Playing).</summary>
@@ -295,6 +298,7 @@ namespace BetterTogether.Match
             ScoreReason.FillBucket => _pointsFill,
             ScoreReason.Hide => _pointsHide,
             ScoreReason.Steal => _pointsSteal,
+            ScoreReason.FreeTeammate => _pointsFreeTeammate,
             _ => _pointsBurntSausage,
         };
 
@@ -304,6 +308,7 @@ namespace BetterTogether.Match
             ScoreReason.FillBucket => "fill_bucket",
             ScoreReason.Hide => "hide",
             ScoreReason.Steal => "steal",
+            ScoreReason.FreeTeammate => "free_teammate",
             _ => "burnt_sausage",
         };
 

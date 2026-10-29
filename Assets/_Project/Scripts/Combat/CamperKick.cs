@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BetterTogether.Diagnostics;
+using BetterTogether.Interaction;
 using BetterTogether.Player;
 using Fusion;
 using Unity.Cinemachine;
@@ -196,6 +197,9 @@ namespace BetterTogether.Combat
             {
                 var kickable = _overlap[i].GetComponentInParent<Kickable>();
                 if (kickable == null || !kickable.CanBeKicked || kickable.transform == transform || _targets.Contains(kickable))
+                    continue;
+
+                if (kickable.TryGetComponent<GnomeCapture>(out var held) && held.IsCaptured)
                     continue;
 
                 var toTarget = Flat(kickable.transform.position - origin);

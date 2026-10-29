@@ -105,8 +105,14 @@ namespace BetterTogether.Interaction
             return carried != null ? $"Esconder {carried.DisplayName} en {_displayName}" : $"Esconder en {_displayName}";
         }
 
-        public bool CanInteract(PlayerInteractor interactor) =>
-            interactor.Role == PlayerRole.Camper ? CanSearch(interactor) : CanHide(interactor);
+        public bool CanInteract(PlayerInteractor interactor)
+        {
+            // A camper carrying a gnome has its hands full.
+            if (interactor.TryGetComponent<GnomeCarrier>(out var gnomeCarrier) && gnomeCarrier.IsCarrying)
+                return false;
+
+            return interactor.Role == PlayerRole.Camper ? CanSearch(interactor) : CanHide(interactor);
+        }
 
         public float GetHoldTime(PlayerInteractor interactor) => interactor.Role == PlayerRole.Camper ? _searchTime : 0f;
 

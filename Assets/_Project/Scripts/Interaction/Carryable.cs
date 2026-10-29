@@ -444,6 +444,10 @@ namespace BetterTogether.Interaction
             if (!_isSpawned || !MatchManager.AllowsInteraction)
                 return false;
 
+            // A camper carrying a gnome has its hands full.
+            if (interactor.TryGetComponent<GnomeCarrier>(out var gnomeCarrier) && gnomeCarrier.IsCarrying)
+                return false;
+
             if (Inert || FindHeldBy(interactor) != null)
                 return false;
 
