@@ -105,6 +105,7 @@ namespace BetterTogether.UI
         private float _prevRemaining = -1f;
         private bool _hasFireState;
         private bool _prevLit;
+        private bool _prevComeback;
         private bool _prevDoused;
         private float _nextDouseWarning;
         private int _titleVariant = -1;
@@ -501,6 +502,15 @@ namespace BetterTogether.UI
             }
 
             _prevDoused = doused;
+            // Derived from the replicated comeback timer, so a late joiner (first frame seen) gets no announcement.
+            var comeback = fire.ComebackActive;
+            if (_hasFireState && playing && hasRole && comeback && !_prevComeback)
+            {
+                Announce(camper ? "¡Segundo aire! Los fósforos vuelven y tu mirada se amplía" : "¡El campista se recupera!",
+                    camper ? new Color(0.5f, 1f, 0.6f) : _urgentColor);
+            }
+
+            _prevComeback = comeback;
             _prevLit = lit;
             _hasFireState = true;
         }

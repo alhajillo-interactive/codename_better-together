@@ -71,6 +71,16 @@ namespace BetterTogether.Fireplace
         [SerializeField, Min(0f)] private float _litGraceTime = 4f;
         [Tooltip("Seconds after a master change during which the new authority does not snap loose logs into slots, so a log that was just ejected is not put back in by the new master (the ejection is local to the old authority).")]
         [SerializeField, Min(0f)] private float _snapGraceAfterMigration = 3f;
+
+        [Header("Comeback")]
+        [Tooltip("From this many put-out fires on (inclusive), each new one gives the camper a comeback: matches back at their feet and a wider gaze.")]
+        [SerializeField, Min(1)] private int _comebackFromExtinguish = 2;
+        [Tooltip("Seconds the camper's gaze cone stays widened after a comeback.")]
+        [SerializeField, Min(0f)] private float _comebackGazeSeconds = 10f;
+        [Tooltip("Metres in front of the camper where the matches are set down.")]
+        [SerializeField, Min(0f)] private float _comebackMatchesDistance = 1f;
+        [Tooltip("Layers the matches can rest on when they are set down (ground and props).")]
+        [SerializeField] private LayerMask _comebackGroundMask = ~0;
         [Tooltip("Speed (m/s) at which a log jumps out of the fireplace when the fire is put out.")]
         [SerializeField, Min(0f)] private float _logEjectSpeed = 3f;
         [Tooltip("Angle above the ground (degrees) of the jump of that log.")]
@@ -192,6 +202,9 @@ namespace BetterTogether.Fireplace
 
         [Networked] private TickTimer LitGrace { get; set; }
 
+        // Written only by the master when a comeback starts; the camper's gaze and the HUD read it replicated.
+        [Networked] private TickTimer ComebackTimer { get; set; }
+
         // A pour is replicated as a timer plus who pours what; the progress is derived from the timer (see DouseFraction).
         // Pourer and PourBucket are ids, so a new master can tell whether the pour is still valid.
         [Networked, OnChangedRender(nameof(OnPourChanged))]
@@ -207,6 +220,9 @@ namespace BetterTogether.Fireplace
         public int Extinguished => _isSpawned ? ExtinguishCount : 0;
 
         public int RequiredWood => _requiredWood;
+        /// <summary>Whether the camper's comeback bonus (wider gaze) is running.</summary>
+        public bool ComebackActive => _isSpawned && Runner != null && !ComebackTimer.ExpiredOrNotRunning(Runner);
+
         public int WoodCount => _isSpawned ? LogsInside : 0;
         public bool HasEnoughWood => _isSpawned && LogsInside >= _requiredWood;
 
@@ -311,6 +327,7 @@ namespace BetterTogether.Fireplace
             IsLit = false;
             ExtinguishCount = 0;
             LitGrace = default;
+            ComebackTimer = default;
             ClearPour();
             _ejectedLog = null;
             _ejectPending = false;
@@ -563,6 +580,47 @@ namespace BetterTogether.Fireplace
             LitGrace = default;
             ExtinguishCount++;
             EjectTopLog();
+            if (ExtinguishCount >= _comebackFromExtinguish)
+                StartComeback();
+        }
+
+        // Authority only: the camper gets a second wind. The matches are set down in front of the camper (whoever carried
+        // them lets go) and the gaze bonus timer starts. If there is no camper or no matches (they left), only what exists is applied.
+        private void StartComeback()
+        {
+            ComebackTimer = TickTimer.CreateFromSeconds(Runner, _comebackGazeSeconds);
+            if (Telemetry.Enabled) Telemetry.Begin("comeback").Int("count", ExtinguishCount).Send();
+
+            CamperGaze camper = null;
+            foreach (var gaze in CamperGaze.All)
+            {
+                if (gaze != null && gaze.Object != null && gaze.Object.IsValid)
+                {
+                    camper = gaze;
+                    break;
+                }
+            }
+
+            if (camper == null)
+                return;
+
+            var forward = Vector3.ProjectOnPlane(camper.transform.forward, Vector3.up);
+            forward = forward.sqrMagnitude < 0.0001f ? Vector3.forward : forward.normalized;
+            var point = camper.transform.position + forward * _comebackMatchesDistance;
+            if (Physics.Raycast(point + Vector3.up * 2f, Vector3.down, out var hit, 6f, _comebackGroundMask, QueryTriggerInteraction.Ignore))
+                point = hit.point;
+
+            foreach (var matches in Matches.All)
+            {
+                if (matches == null || !matches.TryGetComponent<Carryable>(out var carryable) || !carryable.HasStateAuthority)
+                    continue;
+
+                // Someone is carrying them: only a gnome's grip is broken; a camper keeps hers.
+                if (carryable.IsHeld && !carryable.IsHeldByGnomes)
+                    continue;
+
+                carryable.PlaceAt(point + Vector3.up * 0.1f, Quaternion.LookRotation(forward, Vector3.up));
+            }
         }
 
         private void ClearPour()
