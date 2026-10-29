@@ -23,3 +23,8 @@ C2.1–C2.4 aprobadas por Sonnet, integradas, herramientas ejecutadas por CLI y 
 **Sonidos provisionales para audio (Alejandro):** cubeta llenar/vaciar, vertido, apagado y siseo de vapor (todos con `cascada.wav`); siseo de salchicha (`fogata/fuego_loop.wav`), «lista» (`SFX_FireReady`), alarma (`SFX_Watched`), quemada (`SFX_Petrify`); pop al tomar (`SFX_LogHandOff`).
 
 **Para confirmar en V2:** el fuego «crece con los leños» vía brasas (no tamaño de llama); bob y FOV al correr con ambos roles (mareo del gnomo); indicador de patada y estrellitas; tiempos de la salchicha audibles.
+
+## Estado del segundo lote (29 oct 2026)
+C2.5 petrificación (Volume local en el dueño, barrido de piedra pies→cabeza, polvo y fragmentos), C2.6 día/noche (noche en los últimos 90 s, atardecer 60 s antes, avisos a 30 s y 10 s, niebla y Volume de noche, pista nocturna opcional en `MatchMusic._playingNight`) y C2.7 siluetas (Renderer Features «Mask» + «Ink» sobre la capa `Silhouette` = 16; el gnomo ya no duplica 7 mallas; captura antes/después idéntica; el campista sigue sin contorno) — auditadas por Sonnet, integradas, montadas por CLI, test en verde.
+
+Pendiente para audio: pista de noche (`_playingNight`). Para V2: tinte/Volume de petrificado, avisos de noche a 2:00 y 1:40 del final en partida de 10 min, comparar FPS con `PerfProbe` antes/después de C2.7.
