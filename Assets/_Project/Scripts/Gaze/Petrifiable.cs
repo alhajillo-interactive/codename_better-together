@@ -71,6 +71,7 @@ namespace BetterTogether.Gaze
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
         private PlayerMovement _movement;
+        private GnomeStack _stack;
         private InputAction _interact;
         private Renderer[] _renderers;
         private Color[] _originalColors;
@@ -103,6 +104,9 @@ namespace BetterTogether.Gaze
         public bool IsStone => _isSpawned && IsPetrified;
 
         public bool IsAvailable => _isSpawned;
+
+        // Stone itself, or riding on a tower whose base (or anyone below) is stone: held still and tinted like stone.
+        private bool HoldsStill => (bool)IsPetrified || (_stack != null && _stack.IsTowerFrozen);
 
         /// <summary>True while the camper cannot lock this player (just broke free or was kicked free).</summary>
         public bool IsGazeImmune => _isSpawned && !GazeImmunity.ExpiredOrNotRunning(Runner);
@@ -165,6 +169,7 @@ namespace BetterTogether.Gaze
         private void Awake()
         {
             _movement = GetComponent<PlayerMovement>();
+            _stack = GetComponent<GnomeStack>();
             _block = new MaterialPropertyBlock();
             _renderers = _visual != null ? _visual.GetComponentsInChildren<Renderer>() : new Renderer[0];
             _originalColors = new Color[_renderers.Length];
@@ -254,7 +259,7 @@ namespace BetterTogether.Gaze
                 _pressSfx.Play();
             }
 
-            _movement.IsFrozen = IsPetrified;
+            _movement.IsFrozen = HoldsStill;
             IsWatched = locked && !IsPetrified;
             WarningProgress = ComputeWarning(locker, IsGazeImmune);
         }
@@ -282,7 +287,7 @@ namespace BetterTogether.Gaze
             if (IsPetrified)
                 UpdateBreaking(presses);
 
-            _movement.IsFrozen = IsPetrified;
+            _movement.IsFrozen = HoldsStill;
         }
 
         private void BeginFreeze()
@@ -333,7 +338,7 @@ namespace BetterTogether.Gaze
             IsPetrified = false;
             BreakAnchor = 0f;
             _pendingPresses = 0;
-            _movement.IsFrozen = false;
+            _movement.IsFrozen = _stack != null && _stack.IsTowerFrozen;
         }
 
         private void Hop()
@@ -371,7 +376,7 @@ namespace BetterTogether.Gaze
                 _petrifySfx.PlayAt(transform.position);
             _lastPetrified = petrified;
 
-            var target = petrified ? 1f : 0f;
+            var target = (bool)petrified || (_stack != null && _stack.IsTowerFrozen) ? 1f : 0f;
             if (Mathf.Approximately(_stoneAmount, target))
                 return;
 
