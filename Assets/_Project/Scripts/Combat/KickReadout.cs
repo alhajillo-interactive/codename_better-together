@@ -43,6 +43,13 @@ namespace BetterTogether.Combat
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 5;
 
+            // Same scaler as the rest of the HUD (1920x1080, match 0.5) so the ring keeps its proportion on any monitor.
+            var scaler = canvasObject.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            scaler.matchWidthOrHeight = 0.5f;
+
             var ringObject = new GameObject("Ring", typeof(RectTransform), typeof(Image));
             ringObject.transform.SetParent(canvasObject.transform, false);
             _rect = (RectTransform)ringObject.transform;
