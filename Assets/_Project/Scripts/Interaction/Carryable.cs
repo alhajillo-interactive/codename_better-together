@@ -124,6 +124,9 @@ namespace BetterTogether.Interaction
         private enum PredictionKind : byte { None, Grab, Release, Place }
 
         private Collider[] _colliders;
+        // Heavy-item strain tug (local drawing only): a collider-free visual child nudged by the straining holder.
+        private Transform _strainVisual;
+        private Vector3 _strainRestLocal;
         private Rigidbody _body;
         private NetworkTransform _networkTransform;
         private Vector3 _startPosition;
@@ -266,6 +269,55 @@ namespace BetterTogether.Interaction
             return true;
         }
 
+        /// <summary>
+        /// True while <paramref name="who"/> is the only holder of an item that needs two gnomes: that gnome is anchored to it
+        /// (replicated state only, false before Spawned).
+        /// </summary>
+        public bool IsAnchoringSolo(PlayerInteractor who) => _isSpawned && HolderCount == 1 && !IsMoving && IsHeldBy(who);
+
+        /// <summary>
+        /// True while <paramref name="who"/> carries this item in a pair as the one who turns (the second holder);
+        /// <paramref name="leader"/> is then the first holder, who moves. Replicated state only.
+        /// </summary>
+        public bool TryGetPairLeaderFor(PlayerInteractor who, out PlayerInteractor leader)
+        {
+            leader = null;
+            if (who == null || !IsPairCarry || Holder(1) != who)
+                return false;
+
+            leader = Holder(0);
+            return leader != null;
+        }
+
+        /// <summary>True while <paramref name="who"/> is the first holder of a pair carry, the one who moves.</summary>
+        public bool IsPairLeader(PlayerInteractor who) => who != null && IsPairCarry && Holder(0) == who;
+
+        /// <summary>
+        /// Local drawing only: shifts the item's visual by <paramref name="worldOffset"/> (zero restores it). Used by the lone holder
+        /// of a heavy item to show it straining. Does nothing if the prefab has no collider-free visual child.
+        /// </summary>
+        public void SetStrainOffset(Vector3 worldOffset)
+        {
+            if (_strainVisual == null)
+                return;
+
+            _strainVisual.localPosition = _strainRestLocal + _strainVisual.parent.InverseTransformVector(worldOffset);
+        }
+
+        // Awake: the first direct child with renderers and no collider; moving it does not touch physics or NetworkTransform.
+        private void FindStrainVisual()
+        {
+            foreach (Transform child in transform)
+            {
+                if (child.GetComponentInChildren<Renderer>() != null && child.GetComponentInChildren<Collider>() == null)
+                {
+                    _strainVisual = child;
+                    _strainRestLocal = child.localPosition;
+                    return;
+                }
+            }
+        }
+
         /// <summary>Live holders, 0 to 2.</summary>
         public int HolderCount => !_isSpawned ? 0 : (Valid(HolderA) != null ? 1 : 0) + (Valid(HolderB) != null ? 1 : 0);
         private bool HeldByGnomes => HolderCount > 0 && Holder(0).Role == PlayerRole.Gnome;
@@ -315,6 +367,7 @@ namespace BetterTogether.Interaction
             _colliders = GetComponentsInChildren<Collider>();
             _body = GetComponent<Rigidbody>();
             TryGetComponent(out _tension);
+            FindStrainVisual();
             _networkTransform = GetComponent<NetworkTransform>();
             _startPosition = transform.position;
             _startRotation = transform.rotation;
@@ -651,8 +704,18 @@ namespace BetterTogether.Interaction
         }
 
         /// <summary>Hint for a holder that cannot move the item yet, or null.</summary>
-        public string StatusFor(PlayerInteractor who) =>
-            IsHeldBy(who) && !IsMoving ? "Esperando otro duende..." : null;
+        public string StatusFor(PlayerInteractor who)
+        {
+            if (!IsHeldBy(who))
+                return null;
+            if (!IsMoving)
+                return who.Movement != null && who.Movement.RecentlyStrained
+                    ? "Pesa demasiado: necesitas a otro gnomo"
+                    : "Esperando otro duende...";
+            if (IsPairCarry)
+                return Holder(0) == who ? "Tú mueves" : "Tú giras: A/D";
+            return null;
+        }
 
         /// <summary>
         /// Whether <paramref name="from"/> may pass this item to <paramref name="to"/>, a gnome right above or below it in a tower.

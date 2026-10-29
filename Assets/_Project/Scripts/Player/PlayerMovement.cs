@@ -45,6 +45,25 @@ namespace BetterTogether.Player
         [Header("Sound")]
         [Tooltip("Swing of the camper's kick, heard by everyone even when it misses.")]
         [SerializeField] private SoundCue _kickSwingSfx;
+        [Header("Heavy carry (items that need two gnomes)")]
+        [Tooltip("Pair carry, gnome who turns: degrees per second the gnome orbits the leader while A/D is held.")]
+        [SerializeField, Min(1f)] private float _pairTurnSpeed = 90f;
+        [Tooltip("Pair carry, gnome who turns: fraction of the item's max gnome span kept as the orbit radius, so the pair stays clear of the drop distance.")]
+        [SerializeField, Range(0.3f, 1f)] private float _pairSpanLimit = 0.9f;
+        [Tooltip("Pair carry, gnome who turns: top speed (m/s) used to reach the orbit point.")]
+        [SerializeField, Min(0.1f)] private float _pairTurnMaxSpeed = 3.5f;
+        [Tooltip("Lone gnome holding a heavy item: metres the item's visual is tugged towards the pushed direction (local drawing only).")]
+        [SerializeField, Min(0f)] private float _strainPull = 0.08f;
+        [Tooltip("Lone gnome holding a heavy item: tremor amplitude in metres while straining.")]
+        [SerializeField, Min(0f)] private float _strainShake = 0.015f;
+        [Tooltip("Lone gnome holding a heavy item: tremor frequency in Hz.")]
+        [SerializeField, Min(0.1f)] private float _strainShakeHz = 14f;
+        [Tooltip("Heard by the straining gnome at the item. May be empty (silence).")]
+        [SerializeField] private SoundCue _strainSfx;
+        [Tooltip("Minimum seconds between two strain sounds.")]
+        [SerializeField, Min(0.1f)] private float _strainSfxInterval = 0.7f;
+        [Tooltip("Seconds the too-heavy hint stays on screen after the last push.")]
+        [SerializeField, Min(0f)] private float _strainHintSeconds = 3f;
         [Header("Knockback")]
         [Tooltip("How fast knockback slows down while airborne (m/s per second).")]
         [SerializeField] private float _knockbackAirDrag = 1.5f;
@@ -76,6 +95,23 @@ namespace BetterTogether.Player
         private float _crouchStartTime;
         private readonly Collider[] _standUpHits = new Collider[8];
         private int _standUpPlayersMask;
+
+        // Heavy carry, owner only. Never networked: the item pose is derived from the replicated positions of the carriers.
+        private enum HeavyMode : byte { None, Anchored, Turn }
+        private HeavyMode _heavyMode;
+        private Vector3 _heavyVelocity;
+        private bool _turnReady;
+        private float _turnAngle;
+        private float _turnSpan;
+        private bool _leading;
+        private bool _straining;
+        private Vector3 _strainDirection;
+        private float _strainSeconds;
+        private float _lastStrainTime = -100f;
+        private Carryable _strainItem;
+        private float _strainBlend;
+        private float _nextStrainSfx;
+        private const float TurnResyncDistance = 0.25f;
 
         private static readonly int MovementParameter = Animator.StringToHash("Movement");
         private static readonly int JumpParameter = Animator.StringToHash("IsJump");
@@ -387,6 +423,7 @@ namespace BetterTogether.Player
             var move = stunned || locked ? Vector2.zero : _move.ReadValue<Vector2>();
             var direction = Vector3.ClampMagnitude(Quaternion.Euler(0f, yaw, 0f) * new Vector3(move.x, 0f, move.y), 1f);
             TickCrouch(stunned || locked);
+            TickHeavyCarry(move, yaw, stunned || locked, dt);
             var crouching = Crouching;
             var sprinting = !locked && !crouching && _sprint.IsPressed();
             var speed = (sprinting ? _sprintSpeed : _walkSpeed) * SpeedMultiplier * LoadMultiplier * PairCarryMultiplier * (crouching ? CrouchSpeed : 1f);
@@ -399,7 +436,7 @@ namespace BetterTogether.Player
             _knockback = Vector3.MoveTowards(_knockback, Vector3.zero, (grounded ? _knockbackGroundDrag : _knockbackAirDrag) * dt);
 
             _verticalVelocity += _gravity * dt;
-            _controller.Move((direction * speed + _knockback + Vector3.up * _verticalVelocity) * dt);
+            _controller.Move((PlanarVelocity(direction * speed) + _knockback + Vector3.up * _verticalVelocity) * dt);
 
             transform.rotation = Quaternion.Euler(0f, yaw, 0f);
 
@@ -411,6 +448,136 @@ namespace BetterTogether.Player
             AnimationJump = !stunned && (jumped || !_controller.isGrounded);
             AnimationDancing = _petrifiable != null && _dance != null && _dance.IsPressed() && !stunned && !locked &&
                 _controller.isGrounded && move.sqrMagnitude < 0.01f && _knockback.sqrMagnitude < 0.01f;
+        }
+
+        /// <summary>Owner only: true for a few seconds after pushing against a heavy item held alone (drives the hint).</summary>
+        public bool RecentlyStrained => Time.time - _lastStrainTime < _strainHintSeconds;
+
+        // Owner only: horizontal velocity actually used. Anchored to a heavy item = none; the gnome who turns follows its orbit point.
+        private Vector3 PlanarVelocity(Vector3 walking) => _heavyMode switch
+        {
+            HeavyMode.Anchored => Vector3.zero,
+            HeavyMode.Turn => _heavyVelocity,
+            _ => walking,
+        };
+
+        // Owner only, in FixedUpdateNetwork. Heavy items (two gnomes needed):
+        // - alone: anchored, the input only strains (no displacement);
+        // - pair: the first holder moves with WASD as usual; the second orbits the first with A/D at a fixed span, reading the
+        //   leader's replicated position. Decisions use only replicated state of the other peer; nothing here is networked.
+        private void TickHeavyCarry(Vector2 move, float yaw, bool blocked, float dt)
+        {
+            var previous = _heavyMode;
+            _heavyMode = HeavyMode.None;
+            _heavyVelocity = Vector3.zero;
+            _straining = false;
+
+            var item = _interactor != null ? Carryable.FindHeldBy(_interactor) : null;
+            PlayerInteractor leader = null;
+            if (item != null && item.IsAnchoringSolo(_interactor))
+                _heavyMode = HeavyMode.Anchored;
+            else if (item != null && item.TryGetPairLeaderFor(_interactor, out leader))
+                _heavyMode = HeavyMode.Turn;
+
+            var leading = item != null && item.IsPairLeader(_interactor);
+            if (leading && !_leading && Telemetry.Enabled)
+                Telemetry.Begin("pair_carry_start").Str("role", "lead").Str("object", item.DisplayName).Send();
+            _leading = leading;
+
+            if (previous != _heavyMode)
+                OnHeavyModeChanged(previous, _heavyMode, item);
+
+            if (_heavyMode == HeavyMode.Anchored)
+            {
+                _strainItem = item;
+                if (!blocked && move.sqrMagnitude > 0.04f)
+                {
+                    _straining = true;
+                    _strainDirection = Quaternion.Euler(0f, yaw, 0f) * new Vector3(move.x, 0f, move.y);
+                    _strainSeconds += dt;
+                    _lastStrainTime = Time.time;
+                }
+            }
+            else if (_heavyMode == HeavyMode.Turn)
+            {
+                TickTurn(item, leader, move, blocked, dt);
+            }
+        }
+
+        private void OnHeavyModeChanged(HeavyMode from, HeavyMode to, Carryable item)
+        {
+            _turnReady = false;
+            if (from == HeavyMode.Anchored && _strainSeconds > 0f)
+            {
+                if (Telemetry.Enabled) Telemetry.Begin("carry_strain").Float("seconds", _strainSeconds).Send();
+                _strainSeconds = 0f;
+            }
+
+            if (to == HeavyMode.Turn && Telemetry.Enabled)
+                Telemetry.Begin("pair_carry_start").Str("role", "turn").Str("object", item.DisplayName).Send();
+        }
+
+        // The gnome who turns: A/D moves an angle around the leader; the body walks to that point (never teleports).
+        private void TickTurn(Carryable item, PlayerInteractor leader, Vector2 move, bool blocked, float dt)
+        {
+            // Stunned, frozen or match-locked: stay put, and take the orbit again from where we stand when released.
+            if (blocked)
+            {
+                _turnReady = false;
+                return;
+            }
+
+            var leaderPosition = leader.transform.position;
+            var offset = transform.position - leaderPosition;
+            offset.y = 0f;
+            var actualAngle = offset.sqrMagnitude > 1e-4f ? Mathf.Atan2(offset.x, offset.z) * Mathf.Rad2Deg : transform.eulerAngles.y;
+            if (!_turnReady)
+            {
+                _turnReady = true;
+                _turnSpan = Mathf.Min(offset.magnitude, item.MaxGnomeSpan * _pairSpanLimit);
+                _turnAngle = actualAngle;
+            }
+            else if (Mathf.Abs(Mathf.DeltaAngle(_turnAngle, actualAngle)) * Mathf.Deg2Rad * _turnSpan > TurnResyncDistance)
+            {
+                // A wall (or the leader's pace) kept us from the orbit point: continue from where we really are.
+                _turnAngle = actualAngle;
+            }
+
+            _turnAngle += move.x * _pairTurnSpeed * dt;
+            var radians = _turnAngle * Mathf.Deg2Rad;
+            var target = leaderPosition + new Vector3(Mathf.Sin(radians), 0f, Mathf.Cos(radians)) * _turnSpan;
+            var toTarget = target - transform.position;
+            toTarget.y = 0f;
+            _heavyVelocity = dt > 0f ? Vector3.ClampMagnitude(toTarget / dt, _pairTurnMaxSpeed) : Vector3.zero;
+        }
+
+        // Render, owner only: the lone holder's item tugs towards the pushed direction with a tremor, and grunts now and then.
+        private void PresentHeavyCarry()
+        {
+            if (!HasStateAuthority)
+                return;
+
+            var target = _heavyMode == HeavyMode.Anchored && _straining && !IsRiding && !IsCaptured ? 1f : 0f;
+            _strainBlend = Mathf.MoveTowards(_strainBlend, target, Time.deltaTime * 6f);
+            if (_strainItem == null)
+                return;
+
+            if (_strainBlend <= 0f)
+            {
+                _strainItem.SetStrainOffset(Vector3.zero);
+                _strainItem = null;
+                return;
+            }
+
+            var phase = Time.time * _strainShakeHz * 2f * Mathf.PI;
+            var shake = new Vector3(Mathf.Sin(phase), Mathf.Sin(phase * 1.3f) * 0.5f, Mathf.Cos(phase * 0.9f)) * _strainShake;
+            _strainItem.SetStrainOffset((_strainDirection * _strainPull + shake) * _strainBlend);
+
+            if (target > 0f && Time.time >= _nextStrainSfx)
+            {
+                _nextStrainSfx = Time.time + _strainSfxInterval;
+                _strainSfx.PlayAt(_strainItem.transform.position);
+            }
         }
 
         // The body is placed by GnomeCapture; only the animation state is cleared.
@@ -456,6 +623,7 @@ namespace BetterTogether.Player
                 return;
 
             ApplyCrouchShape(Crouching);
+            PresentHeavyCarry();
 
             if (!CanAnimate)
                 return;
