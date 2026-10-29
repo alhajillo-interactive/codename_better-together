@@ -120,6 +120,37 @@ namespace BetterTogether.Match
         /// <summary>The player chosen as the camper for the current match; <see cref="PlayerRef.None"/> before the first countdown.</summary>
         public PlayerRef Camper => _isSpawned ? CurrentCamper : PlayerRef.None;
 
+        /// <summary>True when each rematch hands the camper role to the next player instead of picking at random.</summary>
+        public bool RotatesCamper => _rotateCamper;
+
+        /// <summary>
+        /// Who <see cref="ChooseCamper"/> will pick at the next start, derived from the replicated camper and the active
+        /// players with the same rule (next higher PlayerId, wrapping). <see cref="PlayerRef.None"/> when the choice is
+        /// random (rotation off or no previous camper). Allocation free, but meant for UI refreshes, not every frame.
+        /// </summary>
+        public PlayerRef PredictedNextCamper
+        {
+            get
+            {
+                var previous = Camper;
+                if (!_isSpawned || !_rotateCamper || previous == PlayerRef.None)
+                    return PlayerRef.None;
+
+                var lowest = PlayerRef.None;
+                var next = PlayerRef.None;
+                foreach (var player in Runner.ActivePlayers)
+                {
+                    if (lowest == PlayerRef.None || player.PlayerId < lowest.PlayerId)
+                        lowest = player;
+
+                    if (player.PlayerId > previous.PlayerId && (next == PlayerRef.None || player.PlayerId < next.PlayerId))
+                        next = player;
+                }
+
+                return next != PlayerRef.None ? next : lowest;
+            }
+        }
+
         public MatchResult Result => _isSpawned ? CurrentResult : MatchResult.None;
 
         /// <summary>Seconds left in the countdown or the end screen, otherwise 0.</summary>
@@ -419,6 +450,18 @@ namespace BetterTogether.Match
 
         private void BeginCountdown()
         {
+            if (Telemetry.Enabled)
+            {
+                var ready = 0;
+                foreach (var character in PlayerCharacter.All)
+                {
+                    if (character.IsReady)
+                        ready++;
+                }
+
+                Telemetry.Begin("lobby_ready").Int("players", PlayerCount).Int("ready", ready).Send();
+            }
+
             ResetWorld();
             CurrentCamper = ChooseCamper();
             ResetScores();
