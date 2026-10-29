@@ -2,6 +2,7 @@ using BetterTogether.Audio;
 using BetterTogether.Combat;
 using BetterTogether.Diagnostics;
 using BetterTogether.Gaze;
+using BetterTogether.Interaction;
 using BetterTogether.Match;
 using Fusion;
 using UnityEngine;
@@ -21,6 +22,8 @@ namespace BetterTogether.Player
         [SerializeField] private float _sprintSpeed = 3.5f;
         [SerializeField] private float _jumpHeight = 0.5f;
         [SerializeField] private float _gravity = -20f;
+        [Tooltip("Speed multiplier while this player and another gnome carry a heavy item together.")]
+        [SerializeField, Range(0.1f, 1f)] private float _pairCarrySpeedMultiplier = 0.7f;
         [Header("Crouch")]
         [Tooltip("Camper: CharacterController height while crouched (m, world units).")]
         [SerializeField, Min(0.1f)] private float _camperCrouchHeight = 1f;
@@ -87,6 +90,8 @@ namespace BetterTogether.Player
         // Written only by the owner in FixedUpdateNetwork; everyone reads it through IsCrouching.
         [Networked] private NetworkBool Crouching { get; set; }
 
+        private PlayerInteractor _interactor;
+
         private void Awake()
         {
             _controller = GetComponent<CharacterController>();
@@ -94,6 +99,7 @@ namespace BetterTogether.Player
             _kickable = GetComponent<Kickable>();
             _petrifiable = GetComponent<Petrifiable>();
             TryGetComponent(out _stack);
+            TryGetComponent(out _interactor);
             _standHeight = _controller.height;
             _standRadius = _controller.radius;
             _standCenter = _controller.center;
@@ -317,6 +323,18 @@ namespace BetterTogether.Player
                 _jumpQueued = true;
         }
 
+        // Owner only: slowed while carrying an item together with another gnome (replicated holder state, no allocation).
+        private float PairCarryMultiplier
+        {
+            get
+            {
+                if (_interactor == null)
+                    return 1f;
+                var held = Carryable.FindHeldBy(_interactor);
+                return held != null && held.IsPairCarry ? _pairCarrySpeedMultiplier : 1f;
+            }
+        }
+
         public override void FixedUpdateNetwork()
         {
             if (!HasStateAuthority)
@@ -343,7 +361,7 @@ namespace BetterTogether.Player
             TickCrouch(stunned || locked);
             var crouching = Crouching;
             var sprinting = !locked && !crouching && _sprint.IsPressed();
-            var speed = (sprinting ? _sprintSpeed : _walkSpeed) * SpeedMultiplier * LoadMultiplier * (crouching ? CrouchSpeed : 1f);
+            var speed = (sprinting ? _sprintSpeed : _walkSpeed) * SpeedMultiplier * LoadMultiplier * PairCarryMultiplier * (crouching ? CrouchSpeed : 1f);
 
             var jumped = _jumpQueued && grounded && !stunned && !locked && !crouching;
             if (jumped)
