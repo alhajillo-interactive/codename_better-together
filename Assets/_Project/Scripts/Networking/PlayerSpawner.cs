@@ -1,4 +1,6 @@
+using BetterTogether.Diagnostics;
 using BetterTogether.Interaction;
+using BetterTogether.Match;
 using BetterTogether.Player;
 using Fusion;
 using UnityEngine;
@@ -15,6 +17,10 @@ namespace BetterTogether.Networking
         [SerializeField] private NetworkObject _camperPrefab;
         [Tooltip("Children of this object. The player with PlayerId n starts at index n (wrapping around).")]
         [SerializeField] private Transform[] _spawnPoints;
+        [Tooltip("Where the camper starts a match (next to the fireplace). Empty: falls back to the generic spawn points.")]
+        [SerializeField] private Transform _camperSpawn;
+        [Tooltip("Where gnomes start a match, ideally 12 m or more from the camper. The gnome at position i (gnomes sorted by PlayerId) uses index i. Empty array or entry: falls back to the generic spawn points.")]
+        [SerializeField] private Transform[] _gnomeSpawns;
         [Tooltip("When there are more players than spawn points, each extra round is moved this far to the side of the point (m).")]
         [SerializeField, Min(0f)] private float _overflowSpacing = 0.9f;
 
@@ -60,12 +66,58 @@ namespace BetterTogether.Networking
         }
 
         /// <summary>
+        /// Match start pose: camper at <c>_camperSpawn</c>, gnomes at <c>_gnomeSpawns[i]</c> with i = rank among the
+        /// gnomes by PlayerId (deterministic on every peer, no networked state). Falls back to <see cref="GetSpawnPose"/>.
+        /// </summary>
+        public (Vector3 position, Quaternion rotation) GetMatchSpawnPose(PlayerRef player, PlayerRole role)
+        {
+            var camper = MatchManager.Instance != null ? MatchManager.Instance.Camper : PlayerRef.None;
+            var index = -1;
+            Transform point = null;
+            var pose = (position: Vector3.zero, rotation: Quaternion.identity);
+
+            if (role == PlayerRole.Camper)
+            {
+                point = _camperSpawn;
+                if (point != null)
+                    pose = (point.position, point.rotation);
+            }
+            else if (_gnomeSpawns is { Length: > 0 })
+            {
+                index = 0;
+                foreach (var other in Runner.ActivePlayers)
+                    if (other != camper && other.PlayerId < player.PlayerId)
+                        index++;
+
+                var round = index / _gnomeSpawns.Length;
+                point = _gnomeSpawns[index % _gnomeSpawns.Length];
+                if (point != null)
+                {
+                    // Extra gnomes reuse the points, shifted sideways like GetSpawnPose does.
+                    var side = round % 2 == 0 ? 1f : -1f;
+                    pose = (point.position + point.right * (side * ((round + 1) / 2) * _overflowSpacing), point.rotation);
+                }
+            }
+
+            if (point == null)
+                pose = GetSpawnPose(player);
+
+            if (Telemetry.Enabled)
+            {
+                var distance = _camperSpawn != null ? Vector3.Distance(pose.position, _camperSpawn.position) : -1f;
+                Telemetry.Begin("spawn").Str("role", role.ToString()).Int("index", index).Float("distance", distance).Send();
+            }
+
+            return pose;
+        }
+
+        /// <summary>
         /// Puts the local player at its spawn point as <paramref name="role"/>. Respawns only when the role differs;
         /// otherwise just teleports the current character.
         /// </summary>
         public void RespawnLocal(PlayerRole role)
         {
-            var (position, rotation) = GetSpawnPose(Runner.LocalPlayer);
+            var (position, rotation) = GetMatchSpawnPose(Runner.LocalPlayer, role);
             var current = PlayerCharacter.Local;
             if (current != null && current.Role == role)
             {
