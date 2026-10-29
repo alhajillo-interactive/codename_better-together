@@ -15,7 +15,7 @@ GameObject:
   - component: {fileID: 2980815583348175896}
   - component: {fileID: 7314829560183746253}
   - component: {fileID: 6120458837193254071}
-  m_Layer: 0
+  m_Layer: 10
   m_Name: Sausage
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -218,7 +218,7 @@ GameObject:
   - component: {fileID: 4737430231874366731}
   - component: {fileID: 7361582708681199920}
   - component: {fileID: 8939602102410357620}
-  m_Layer: 0
+  m_Layer: 10
   m_Name: Mesh
   m_TagString: Untagged
   m_Icon: {fileID: 0}

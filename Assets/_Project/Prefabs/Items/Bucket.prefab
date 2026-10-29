@@ -15,7 +15,7 @@ GameObject:
   - component: {fileID: 6672794288001521450}
   - component: {fileID: 7314829560183746252}
   - component: {fileID: 5825171743354106088}
-  m_Layer: 0
+  m_Layer: 10
   m_Name: Bucket
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -213,7 +213,7 @@ GameObject:
   - component: {fileID: 8536523325978507370}
   - component: {fileID: 8118603324305277281}
   - component: {fileID: 6426429818672184120}
-  m_Layer: 0
+  m_Layer: 10
   m_Name: Water
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -355,6 +355,10 @@ PrefabInstance:
     - target: {fileID: 919132149155446097, guid: 944617767bcd8164b8cfeb4fcca2b40d, type: 3}
       propertyPath: m_Name
       value: Model
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 944617767bcd8164b8cfeb4fcca2b40d, type: 3}
+      propertyPath: m_Layer
+      value: 10
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

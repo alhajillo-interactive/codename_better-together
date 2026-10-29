@@ -1967,7 +1967,7 @@ GameObject:
   - component: {fileID: 8800000000000000002}
   - component: {fileID: 8800000000000000003}
   - component: {fileID: 8800000000000000099}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: Gnome
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2242,7 +2242,18 @@ MonoBehaviour:
   _aimRadius: 0.06
   _interactionMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 3584
+  _eye: {fileID: 0}
+  _holdDistanceFactor: 0.45
+  _holdDropFactor: 0.18
+  _minHoldDistance: 0.12
+  _minHoldPitch: -45
+  _maxHoldPitch: 55
+  _holdObstacleMask:
+    serializedVersion: 2
+    m_Bits: 6144
+  _holdSharpness: 18
+  _swayAmplitude: 0.015
 --- !u!114 &7805739811996808192
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2427,7 +2438,7 @@ MonoBehaviour:
   _bodyHeight: 0.6
   _aimMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 6656
   _remountCooldown: 0.4
   _climbTime: 0.12
   _dismountForward: 1.5

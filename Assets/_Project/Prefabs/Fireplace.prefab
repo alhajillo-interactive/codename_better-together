@@ -238,7 +238,7 @@ GameObject:
   - component: {fileID: 5169493928205125692}
   - component: {fileID: 3595480382348851240}
   - component: {fileID: 37296725320174696}
-  m_Layer: 0
+  m_Layer: 11
   m_Name: Fireplace
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -291,7 +291,7 @@ MonoBehaviour:
   _fire: {fileID: 1058315466805192064}
   _logsLayer:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 1024
   _areaRadius: 1.5
   _restSpeed: 0.25
   _settleTime: 0.4
@@ -354,7 +354,7 @@ GameObject:
   - component: {fileID: 7100000000000000102}
   - component: {fileID: 7100000000000000103}
   - component: {fileID: 7100000000000000104}
-  m_Layer: 0
+  m_Layer: 11
   m_Name: Grill
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -454,7 +454,7 @@ GameObject:
   - component: {fileID: 2484236593471075931}
   - component: {fileID: 5223977887498335073}
   - component: {fileID: 1585467037823710507}
-  m_Layer: 0
+  m_Layer: 11
   m_Name: Plane
   m_TagString: Untagged
   m_Icon: {fileID: 0}

@@ -15,14 +15,14 @@ TagManager:
   - UI
   - 
   - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
-  - 
+  - Player
+  - Gnome
+  - Item
+  - Environment
+  - Occluder
+  - Trigger
+  - GnomeOnly
+  - NoCollision
   - 
   - 
   - 
