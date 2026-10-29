@@ -47,10 +47,12 @@ namespace BetterTogether.Player
         [Header("Dismount")]
         [Tooltip("Forward speed of the hop when getting off.")]
         [SerializeField] private float _dismountForward = 1.5f;
-        [Tooltip("Upward speed of the hop when getting off.")]
+        [Tooltip("Upward speed of the push when the tower topples.")]
         [SerializeField] private float _dismountUp = 3f;
         [Tooltip("Seconds without control after the hop.")]
         [SerializeField, Min(0f)] private float _dismountStun = 0.1f;
+        [Tooltip("Jump height (m) when getting off voluntarily with the jump key; higher than a normal jump. Toppling keeps Dismount Up.")]
+        [SerializeField, Min(0f)] private float _towerJumpHeight = 0.9f;
 
         [Header("Passing items")]
         [Tooltip("Seconds after passing an item before this gnome can pass another one.")]
@@ -619,7 +621,7 @@ namespace BetterTogether.Player
             forward = forward.sqrMagnitude > 0.0001f ? forward.normalized : transform.forward;
 
             ClearMount();
-            _movement.ApplyKnockback(forward * _dismountForward + Vector3.up * _dismountUp, _dismountStun);
+            _movement.ApplyKnockback(forward * _dismountForward + Vector3.up * _movement.JumpSpeedForHeight(_towerJumpHeight), _dismountStun);
         }
 
         private void SetMount(GnomeStack mount)

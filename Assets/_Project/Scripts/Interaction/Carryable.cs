@@ -40,6 +40,8 @@ namespace BetterTogether.Interaction
         [SerializeField, Range(1, 2)] private int _gnomesRequired = 1;
         [Tooltip("Two gnomes farther apart than this drop the item.")]
         [SerializeField] private float _maxGnomeSpan = 1.6f;
+        [Tooltip("Extra span (m) the authority tolerates before dropping a pair carry: the turner follows the leader's delayed proxy, so latency stretches the span it sees.")]
+        [SerializeField, Min(0f)] private float _pairDropSlack = 0.3f;
         [Tooltip("A lone gnome waiting for help that gets farther than this from the item lets go.")]
         [SerializeField] private float _maxSoloGrabDistance = 1.2f;
 
@@ -1008,7 +1010,7 @@ namespace BetterTogether.Interaction
                 LastHeldByCamper = Holder(0).Role == PlayerRole.Camper;
             }
 
-            if (HolderCount == 2 && HorizontalDistance(Holder(0).transform.position, Holder(1).transform.position) > _maxGnomeSpan)
+            if (HolderCount == 2 && HorizontalDistance(Holder(0).transform.position, Holder(1).transform.position) > _maxGnomeSpan + _pairDropSlack)
             {
                 NotePairReason(DropReason.Distance);
                 if (Telemetry.Enabled) LogDropAll(DropReason.Distance);
