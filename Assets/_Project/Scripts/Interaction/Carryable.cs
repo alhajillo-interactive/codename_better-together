@@ -161,6 +161,13 @@ namespace BetterTogether.Interaction
         private float _swayPhase;
         private DropContext _lastDrop;
         private bool _wasSoloMoving;
+
+        // Authority only: telemetry and lost-holder bookkeeping for two gnomes carrying together.
+        private bool _wasPairMoving;
+        private float _pairStartTime;
+        private bool _hasPairReason;
+        private DropReason _pairReason;
+        private CarryTension _tension;
         private bool _releaseHandled;
 
         // Local prediction (not networked). _predictedHolder is the local interactor that asked, for every kind.
@@ -236,6 +243,30 @@ namespace BetterTogether.Interaction
         public bool Inert { get; set; }
 
         /// <summary>Live holders, 0 to 2.</summary>
+        /// <summary>True while two gnomes are carrying the item together.</summary>
+        public bool IsPairCarry => IsMoving && HolderCount == 2;
+
+        /// <summary>The span at which two carriers drop the item.</summary>
+        public float MaxGnomeSpan => _maxGnomeSpan;
+
+        /// <summary>
+        /// Both carriers of a pair carry (replicated state only) and how close they are to dropping it:
+        /// 0 = standing together, 1 = at <see cref="MaxGnomeSpan"/>. Same measure the authority uses to drop the item.
+        /// </summary>
+        public bool TryGetPair(out PlayerInteractor first, out PlayerInteractor second, out float spanRatio)
+        {
+            first = null;
+            second = null;
+            spanRatio = 0f;
+            if (!IsPairCarry)
+                return false;
+
+            first = Holder(0);
+            second = Holder(1);
+            spanRatio = HorizontalDistance(first.transform.position, second.transform.position) / Mathf.Max(0.01f, _maxGnomeSpan);
+            return true;
+        }
+
         public int HolderCount => !_isSpawned ? 0 : (Valid(HolderA) != null ? 1 : 0) + (Valid(HolderB) != null ? 1 : 0);
         private bool HeldByGnomes => HolderCount > 0 && Holder(0).Role == PlayerRole.Gnome;
 
@@ -283,6 +314,7 @@ namespace BetterTogether.Interaction
         {
             _colliders = GetComponentsInChildren<Collider>();
             _body = GetComponent<Rigidbody>();
+            TryGetComponent(out _tension);
             _networkTransform = GetComponent<NetworkTransform>();
             _startPosition = transform.position;
             _startRotation = transform.rotation;
@@ -706,6 +738,7 @@ namespace BetterTogether.Interaction
             else if (hasDropPoint && IsMoving)
                 transform.position = new Vector3(dropPoint.x, transform.position.y, dropPoint.z);
 
+            NotePairReason(reason);
             if (HolderA == who)
                 HolderA = null;
             else
@@ -718,6 +751,7 @@ namespace BetterTogether.Interaction
         // Telemetry only. Authority: one drop row per current holder, before they let go.
         private void LogDropAll(DropReason reason)
         {
+            NotePairReason(reason);
             var count = HolderCount;
             for (var i = 0; i < count; i++)
                 Telemetry.Begin("drop", Holder(i)).Str("object", _displayName).Int("holders", 0).Str("reason", ReasonName(reason)).Send();
@@ -901,6 +935,7 @@ namespace BetterTogether.Interaction
 
             if (HolderCount == 2 && HorizontalDistance(Holder(0).transform.position, Holder(1).transform.position) > _maxGnomeSpan)
             {
+                NotePairReason(DropReason.Distance);
                 if (Telemetry.Enabled) LogDropAll(DropReason.Distance);
                 HolderA = null;
                 HolderB = null;
@@ -913,6 +948,11 @@ namespace BetterTogether.Interaction
 
             // A lone carrier vanished without a release call (it disconnected): settle the item like a normal release.
             if (_wasSoloMoving && HolderCount == 0 && !_releaseHandled && !IsPinned && !Inert)
+                SettleAfterLostHolder();
+
+            // One of two carriers vanished without a release call (it disconnected): settle the item where it is, outside
+            // the remaining holder's capsule and out of geometry, instead of leaving it mid-air or inside a wall.
+            if (_wasPairMoving && HolderCount == 1 && !_releaseHandled && !IsPinned && !Inert)
                 SettleAfterLostHolder();
 
             _releaseHandled = false;
@@ -940,6 +980,36 @@ namespace BetterTogether.Interaction
             // Remember the lone carrier's footprint for the tick it might disappear in.
             _wasSoloMoving = HolderCount == 1 && IsMoving;
             if (_wasSoloMoving)
+                _lastDrop = MakeDropContext(Holder(0));
+
+            UpdatePairTelemetry();
+        }
+
+        private void NotePairReason(DropReason reason)
+        {
+            _hasPairReason = true;
+            _pairReason = reason;
+        }
+
+        // Authority only: one row when two gnomes start carrying together and one when they stop, with how it ended.
+        private void UpdatePairTelemetry()
+        {
+            var pairNow = IsPairCarry;
+            if (pairNow && !_wasPairMoving)
+            {
+                _pairStartTime = Time.time;
+                _hasPairReason = false;
+                if (Telemetry.Enabled) Telemetry.Begin("carry_pair_start").Str("object", _displayName).Send();
+            }
+            else if (!pairNow && _wasPairMoving)
+            {
+                var reason = IsPinned ? "delivered" : _hasPairReason ? ReasonName(_pairReason) : "left";
+                if (Telemetry.Enabled) Telemetry.Begin("carry_pair_end").Str("object", _displayName).Float("seconds", Time.time - _pairStartTime).Str("reason", reason).Send();
+                _hasPairReason = false;
+            }
+
+            _wasPairMoving = pairNow;
+            if (pairNow)
                 _lastDrop = MakeDropContext(Holder(0));
         }
 
@@ -1146,6 +1216,10 @@ namespace BetterTogether.Interaction
 
             if (_blending)
                 BlendPose(ref position, ref rotation);
+
+            // Two carriers: the log wobbles with how differently they move (presentation only, the simulated pose stays raw).
+            if (kind == PoseKind.Held && _tension != null && _prediction == PredictionKind.None && TryGetPair(out var pairA, out var pairB, out _))
+                _tension.ApplySway(pairA, pairB, ref position, ref rotation);
 
             transform.SetPositionAndRotation(position, rotation);
             _drawnPosition = position;
