@@ -49,6 +49,12 @@ namespace BetterTogether.EditorTools
         [MenuItem("GnoMore/Ajustar escalado de UI")]
         public static void Apply()
         {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                Debug.LogWarning($"{LogPrefix} Leave Play Mode first.");
+                return;
+            }
+
             var changed = 0;
             var seen = 0;
 
@@ -86,6 +92,13 @@ namespace BetterTogether.EditorTools
                 }
 
                 var scene = OpenScene(scenePath, out var openedHere);
+                // Saving below would also save the user's own pending edits in an already open scene, so skip it.
+                if (!openedHere && scene.isDirty)
+                {
+                    Debug.LogWarning($"{LogPrefix} {scenePath} has unsaved changes; save it and run again.");
+                    continue;
+                }
+
                 var sceneChanged = false;
                 foreach (var go in scene.GetRootGameObjects())
                 {
@@ -170,6 +183,12 @@ namespace BetterTogether.EditorTools
         [MenuItem("GnoMore/Revisar escalado de UI")]
         public static void Report()
         {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                Debug.LogWarning($"{LogPrefix} Leave Play Mode first.");
+                return;
+            }
+
             // source :: hierarchy path -> list of "resolution (left 12, bottom 5)".
             var findings = new SortedDictionary<string, List<string>>();
             var canvasLines = new List<string>();
