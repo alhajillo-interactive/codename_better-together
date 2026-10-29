@@ -381,7 +381,7 @@ namespace BetterTogether.Match
             if (!_isSpawned)
                 return;
 
-            // Always through the RPC (also on the authority) so [Networked] state is written from an RPC, never from Update.
+            // Through the RPC so non-authority clients can ask; on the authority Fusion invokes it locally, in this same call.
             RPC_StartMatch();
         }
 
