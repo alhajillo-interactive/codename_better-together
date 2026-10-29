@@ -163,6 +163,7 @@ namespace BetterTogether.Player
 
         private PlayerInteractor _interactor;
         private CamperKick _camperKick;
+        private GardenDisguise _disguise;
         private Carryable _heldItem;
 
         private void Awake()
@@ -174,6 +175,7 @@ namespace BetterTogether.Player
             TryGetComponent(out _stack);
             TryGetComponent(out _interactor);
             TryGetComponent(out _camperKick);
+            TryGetComponent(out _disguise);
             _standHeight = _controller.height;
             _standRadius = _controller.radius;
             _standCenter = _controller.center;
@@ -538,7 +540,9 @@ namespace BetterTogether.Player
             _onPlayerLastMove = _onPlayerThisMove;
             _groundLastMove = _groundThisMove;
 
-            transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+            // A garden ornament doesn't turn when its player looks around (the camera orbits in third person meanwhile).
+            if (_disguise == null || !_disguise.IsDisguised)
+                transform.rotation = Quaternion.Euler(0f, yaw, 0f);
 
             // The gnome tree ends at 0.5; the camper tree has walk at 0.5 and sprint at 1.
             var movementScale = _petrifiable != null ? (sprinting ? 0.5f : 0.25f) : (sprinting ? 1f : 0.5f);

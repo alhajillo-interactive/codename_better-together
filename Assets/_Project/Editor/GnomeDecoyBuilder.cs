@@ -148,7 +148,7 @@ namespace BetterTogether.EditorTools
             var placed = new List<Vector3>();
             foreach (var anchor in Anchors)
             {
-                if (!TryFindSpot(anchor, radius, height, ground, blockers, placed, out var spot))
+                if (!TryFindSpot(scene, anchor, radius, height, ground, blockers, placed, out var spot))
                 {
                     Debug.LogWarning($"{LogPrefix} No free spot near ({anchor.x}, {anchor.y}).");
                     continue;
@@ -161,6 +161,7 @@ namespace BetterTogether.EditorTools
                 placed.Add(spot);
             }
 
+            VerifyGrounded(scene, root.transform, ground);
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
             Debug.Log($"{LogPrefix} Placed {placed.Count} decoys in {ScenePath}.");
@@ -168,8 +169,51 @@ namespace BetterTogether.EditorTools
                 EditorSceneManager.CloseScene(scene, true);
         }
 
+        private static readonly RaycastHit[] Hits = new RaycastHit[16];
+        private static readonly Collider[] Overlaps = new Collider[16];
+
+        // Other open scenes (e.g. MainMenu with its own terrain) share the editor's physics, so only this scene's colliders count.
+        private static bool TryGroundIn(UnityEngine.SceneManagement.Scene scene, float x, float z, int ground, out RaycastHit best)
+        {
+            best = default;
+            var found = false;
+            var count = Physics.RaycastNonAlloc(new Vector3(x, 20f, z), Vector3.down, Hits, 40f, ground, QueryTriggerInteraction.Ignore);
+            for (var i = 0; i < count; i++)
+            {
+                var hit = Hits[i];
+                if (hit.collider.gameObject.scene != scene || hit.collider.GetComponentInParent<GardenGnomeDecoy>() != null)
+                    continue;
+                if (!found || hit.point.y > best.point.y)
+                {
+                    best = hit;
+                    found = true;
+                }
+            }
+
+            return found;
+        }
+
+        // Every decoy must stand on this scene's ground: logs the gap and snaps any that is off by more than 1 cm.
+        private static void VerifyGrounded(UnityEngine.SceneManagement.Scene scene, Transform root, int ground)
+        {
+            foreach (Transform decoy in root)
+            {
+                var p = decoy.position;
+                if (!TryGroundIn(scene, p.x, p.z, ground, out var hit))
+                {
+                    Debug.LogWarning($"{LogPrefix} {decoy.name} at {p} has no ground below it.", decoy);
+                    continue;
+                }
+
+                var gap = p.y - hit.point.y;
+                if (Mathf.Abs(gap) > 0.01f)
+                    decoy.position = new Vector3(p.x, hit.point.y, p.z);
+                Debug.Log($"{LogPrefix} {decoy.name} at ({p.x:0.00}, {p.z:0.00}): gap to {hit.collider.name} {gap:+0.000;-0.000} m{(Mathf.Abs(gap) > 0.01f ? " (snapped)" : "")}.");
+            }
+        }
+
         // Rings around the anchor: the first grounded spot where a gnome-sized capsule touches nothing.
-        private static bool TryFindSpot(Vector2 anchor, float radius, float height, int ground, int blockers, List<Vector3> placed, out Vector3 spot)
+        private static bool TryFindSpot(UnityEngine.SceneManagement.Scene scene, Vector2 anchor, float radius, float height, int ground, int blockers, List<Vector3> placed, out Vector3 spot)
         {
             for (var ring = 1; ring <= 3; ring++)
             {
@@ -179,7 +223,7 @@ namespace BetterTogether.EditorTools
                     var angle = i * Mathf.PI * 2f / SearchSteps;
                     var x = anchor.x + Mathf.Cos(angle) * distance;
                     var z = anchor.y + Mathf.Sin(angle) * distance;
-                    if (!Physics.Raycast(new Vector3(x, 20f, z), Vector3.down, out var hit, 40f, ground, QueryTriggerInteraction.Ignore))
+                    if (!TryGroundIn(scene, x, z, ground, out var hit))
                         continue;
                     // Only bare ground: not the top of a mushroom, rock or log (the terrain, when the level has one).
                     if (hit.normal.y < 0.85f || (Terrain.activeTerrains.Length > 0 && !(hit.collider is TerrainCollider)))
@@ -188,7 +232,11 @@ namespace BetterTogether.EditorTools
                     var feet = hit.point;
                     var bottom = feet + Vector3.up * (radius + 0.03f);
                     var top = feet + Vector3.up * Mathf.Max(radius + 0.03f, height - radius);
-                    if (Physics.CheckCapsule(bottom, top, radius, blockers, QueryTriggerInteraction.Ignore))
+                    var blocked = false;
+                    var overlaps = Physics.OverlapCapsuleNonAlloc(bottom, top, radius, Overlaps, blockers, QueryTriggerInteraction.Ignore);
+                    for (var o = 0; o < overlaps; o++)
+                        blocked |= Overlaps[o].gameObject.scene == scene;
+                    if (blocked)
                         continue;
 
                     var tooClose = false;

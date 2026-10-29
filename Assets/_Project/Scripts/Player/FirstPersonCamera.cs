@@ -21,6 +21,18 @@ namespace BetterTogether.Player
         [Tooltip("Seconds the eye takes to move between standing and crouched height.")]
         [SerializeField, Min(0.01f)] private float _crouchEyeSmoothTime = 0.15f;
 
+        [Header("Third person (garden-gnome disguise)")]
+        [Tooltip("Distance (m) behind the eye while the local gnome is disguised as an ornament, so it sees itself and around.")]
+        [SerializeField, Min(0f)] private float _thirdPersonDistance = 1.1f;
+        [Tooltip("Height (m) added above the eye in third person.")]
+        [SerializeField] private float _thirdPersonHeight = 0.25f;
+        [Tooltip("Seconds to move between first and third person.")]
+        [SerializeField, Min(0.01f)] private float _thirdPersonBlendTime = 0.25f;
+        [Tooltip("Radius (m) of the camera's collision probe, so it never ends inside walls or scenery.")]
+        [SerializeField, Min(0.01f)] private float _thirdPersonProbeRadius = 0.08f;
+        [Tooltip("What the third-person camera collides with.")]
+        [SerializeField] private LayerMask _thirdPersonBlockers;
+
         private Transform _target;
         private InputAction _look;
         private float _pitch;
@@ -29,6 +41,9 @@ namespace BetterTogether.Player
         private float _standingEyeHeight;
         private float _eyeDrop;
         private float _eyeDropVelocity;
+        private GardenDisguise _targetDisguise;
+        private LocalPlayerView _targetView;
+        private float _thirdPerson;
 
         public float Yaw { get; private set; }
         public float Pitch => _pitch;
@@ -90,6 +105,11 @@ namespace BetterTogether.Player
             _standingEyeHeight = _targetMovement != null ? anchor.position.y - _targetMovement.transform.position.y : 0f;
             _eyeDrop = 0f;
             _eyeDropVelocity = 0f;
+            _targetDisguise = anchor.GetComponentInParent<GardenDisguise>();
+            _targetView = anchor.GetComponentInParent<LocalPlayerView>();
+            _thirdPerson = 0f;
+            if (_thirdPersonBlockers.value == 0)
+                _thirdPersonBlockers = LayerMask.GetMask("Environment", "Occluder");
             Yaw = anchor.eulerAngles.y;
             _pitch = 0f;
             SetCursorLocked(true);
@@ -108,6 +128,9 @@ namespace BetterTogether.Player
 
             _target = null;
             _targetMovement = null;
+            _targetDisguise = null;
+            _targetView = null;
+            _thirdPerson = 0f;
             SetCursorLocked(false);
         }
 
@@ -141,7 +164,28 @@ namespace BetterTogether.Player
                 : 0f;
             _eyeDrop = Mathf.SmoothDamp(_eyeDrop, targetDrop, ref _eyeDropVelocity, _crouchEyeSmoothTime);
 
-            transform.SetPositionAndRotation(_target.position - Vector3.up * _eyeDrop, Quaternion.Euler(_pitch, Yaw, 0f));
+            var eye = _target.position - Vector3.up * _eyeDrop;
+            var rotation = Quaternion.Euler(_pitch, Yaw, 0f);
+            transform.SetPositionAndRotation(ThirdPersonOffset(eye, rotation), rotation);
+        }
+
+        // Orbits behind the eye while the local gnome is a garden ornament, blending in and out; first person otherwise.
+        private Vector3 ThirdPersonOffset(Vector3 eye, Quaternion rotation)
+        {
+            var wanted = _targetDisguise != null && _targetDisguise.IsDisguised ? 1f : 0f;
+            _thirdPerson = Mathf.MoveTowards(_thirdPerson, wanted, Time.deltaTime / _thirdPersonBlendTime);
+            if (_targetView != null)
+                _targetView.SetBodyVisible(_thirdPerson > 0.3f);
+            if (_thirdPerson <= 0f)
+                return eye;
+
+            var t = _thirdPerson * _thirdPerson * (3f - 2f * _thirdPerson);
+            var pivot = eye + Vector3.up * (_thirdPersonHeight * t);
+            var back = rotation * Vector3.back;
+            var distance = _thirdPersonDistance * t;
+            if (Physics.SphereCast(pivot, _thirdPersonProbeRadius, back, out var hit, distance, _thirdPersonBlockers, QueryTriggerInteraction.Ignore))
+                distance = Mathf.Max(0f, hit.distance - 0.02f);
+            return pivot + back * distance;
         }
 
         private void ApplyLook()

@@ -17,6 +17,26 @@ namespace BetterTogether.Player
         /// <summary>Root of the visual model (may be null when the prefab has no model root).</summary>
         public Transform Body => _body;
 
+        private Renderer[] _bodyRenderers;
+        private bool _bodyVisible;
+
+        /// <summary>
+        /// Local player only: shows the own body (e.g. while the camera is in third person) or hides it again (shadows stay).
+        /// </summary>
+        public void SetBodyVisible(bool visible)
+        {
+            if (_bodyRenderers == null || _bodyVisible == visible)
+                return;
+
+            _bodyVisible = visible;
+            var mode = visible ? ShadowCastingMode.On : ShadowCastingMode.ShadowsOnly;
+            foreach (var bodyRenderer in _bodyRenderers)
+            {
+                if (bodyRenderer != null)
+                    bodyRenderer.shadowCastingMode = mode;
+            }
+        }
+
         public override void Spawned()
         {
             if (!HasStateAuthority)
@@ -28,6 +48,7 @@ namespace BetterTogether.Player
                 Debug.LogWarning("[LocalPlayerView] No FirstPersonCamera found in the scene.");
 
             HideBody(_body);
+            _bodyRenderers = _body != null ? _body.GetComponentsInChildren<Renderer>(true) : null;
 
             // The character prefabs can contain alternative meshes. Hide those too so
             // activating a different model never exposes the local body to the camera.
