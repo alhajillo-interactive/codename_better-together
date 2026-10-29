@@ -5,6 +5,7 @@ using UnityEngine;
 
 #if (UNITY_EDITOR || DEVELOPMENT_BUILD) && FUSION_WEAVER
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -31,6 +32,9 @@ namespace BetterTogether.Diagnostics
 
         // Reused for every row, so building a row does not create garbage beyond the final string.
         private static readonly StringBuilder Row = new StringBuilder(256);
+
+        // Keys already claimed by FirstThisMatch in the match file that is open.
+        private static readonly HashSet<string> Claimed = new HashSet<string>();
 
         private static StreamWriter _writer;
         private static string _matchId = "";
@@ -59,6 +63,7 @@ namespace BetterTogether.Diagnostics
             _writer = writer;
             _matchId = matchId;
             _t = 0f;
+            Claimed.Clear();
             Enabled = writer != null;
         }
 
@@ -76,6 +81,9 @@ namespace BetterTogether.Diagnostics
             if (match != null && match.Phase == MatchPhase.Playing)
                 _t = Mathf.Max(0f, match.MatchDuration - match.TimeRemaining);
         }
+
+        /// <summary>True the first time <paramref name="key"/> is claimed in the match file that is open (for once-per-match events).</summary>
+        public static bool FirstThisMatch(string key) => Enabled && Claimed.Add(key);
 
         /// <summary>Starts an event for the local player (position and role of the player on this machine).</summary>
         public static Event Begin(string evt)
@@ -262,6 +270,8 @@ namespace BetterTogether.Diagnostics
         public static bool Enabled => false;
 
         public static float T => 0f;
+
+        public static bool FirstThisMatch(string key) => false;
 
         public static Event Begin(string evt) => default;
 
