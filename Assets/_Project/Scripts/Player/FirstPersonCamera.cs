@@ -67,7 +67,10 @@ namespace BetterTogether.Player
         public static bool CursorFree { get; set; }
 
         /// <summary>True while an IMGUI text field has keyboard focus, so hotkeys must be ignored.</summary>
-        public static bool IsTyping => GUIUtility.keyboardControl != 0;
+        public static bool IsTyping => GUIUtility.keyboardControl != 0 || UiTyping;
+
+        /// <summary>Set by uGUI text fields (survey, settings) while they have focus, so gameplay keys are ignored.</summary>
+        public static bool UiTyping { get; set; }
 
         private void Awake()
         {

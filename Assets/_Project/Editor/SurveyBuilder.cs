@@ -89,13 +89,18 @@ namespace BetterTogether.EditorTools
 
         private static RectTransform EnsureCanvas()
         {
-            var existing = GameObject.Find(CanvasName);
-            GameObject go;
-            if (existing != null)
+            // Finds the canvas even when it is inactive (GameObject.Find skips inactive objects).
+            GameObject go = null;
+            foreach (var candidate in Object.FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
-                go = existing;
+                if (candidate.name == CanvasName && candidate.gameObject.scene.IsValid())
+                {
+                    go = candidate.gameObject;
+                    break;
+                }
             }
-            else
+
+            if (go == null)
             {
                 go = new GameObject(CanvasName, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster)) { layer = UiLayer };
                 var canvas = go.GetComponent<Canvas>();
@@ -114,7 +119,7 @@ namespace BetterTogether.EditorTools
 
         private static void EnsureEventSystem()
         {
-            if (Object.FindFirstObjectByType<EventSystem>() != null)
+            if (Object.FindFirstObjectByType<EventSystem>(FindObjectsInactive.Include) != null)
                 return;
 
             var go = new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));

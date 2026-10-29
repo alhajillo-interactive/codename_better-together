@@ -96,6 +96,8 @@ namespace BetterTogether.UI
             _send.onClick.AddListener(Send);
             _skip.onClick.AddListener(Close);
             _moment.characterLimit = MaxMomentLength;
+            _moment.onSelect.AddListener(_ => FirstPersonCamera.UiTyping = true);
+            _moment.onDeselect.AddListener(_ => FirstPersonCamera.UiTyping = false);
             _panel.SetActive(false);
         }
 
@@ -146,6 +148,7 @@ namespace BetterTogether.UI
             _open = false;
             _panel.SetActive(false);
             _moment.DeactivateInputField();
+            FirstPersonCamera.UiTyping = false;
             FirstPersonCamera.CursorFree = false;
         }
 

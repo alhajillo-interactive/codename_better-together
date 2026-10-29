@@ -352,7 +352,7 @@ namespace BetterTogether.Player
 
             var dt = Runner.DeltaTime;
             var stunned = IsStunned || IsFrozen;
-            var locked = !MatchManager.AllowsMovement;
+            var locked = !MatchManager.AllowsMovement || FirstPersonCamera.IsTyping;
             _stunTimer = Mathf.Max(0f, _stunTimer - dt);
 
             var yaw = FirstPersonCamera.Instance != null && !IsFrozen ? FirstPersonCamera.Instance.Yaw : transform.eulerAngles.y;

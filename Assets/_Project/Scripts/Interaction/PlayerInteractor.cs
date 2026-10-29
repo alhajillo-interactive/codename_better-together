@@ -296,6 +296,13 @@ namespace BetterTogether.Interaction
             if (Focused == null && _holdTarget != null)
                 ResetHold();
 
+            // Typing in a text field: gameplay keys are ignored (like GnomePing).
+            if (FirstPersonCamera.IsTyping)
+            {
+                Focused = null;
+                return;
+            }
+
             // Stunned or frozen (watched by the camper) players can't pick anything up or drop it.
             if (_movement != null && (_movement.IsStunned || _movement.IsFrozen))
             {
