@@ -78,8 +78,8 @@ namespace BetterTogether.UI
         [SerializeField] private TMP_Text _endScores;
         [Tooltip("Font size of the cloned ranking text (only used when End Scores is empty).")]
         [SerializeField] private float _endScoresFontSize = 26f;
-        [Tooltip("How many pixels below the subtitle the cloned ranking text sits (only used when End Scores is empty).")]
-        [SerializeField] private float _endScoresOffset = 110f;
+        [Tooltip("Pixels between the rematch line and the cloned ranking text below it (only used when End Scores is empty).")]
+        [SerializeField] private float _endScoresGap = 12f;
 
         private readonly List<MatchManager.ScoreEntry> _scoreRows = new();
         private readonly System.Text.StringBuilder _scoreText = new();
@@ -139,7 +139,15 @@ namespace BetterTogether.UI
                 _endScores.alignment = TextAlignmentOptions.Top;
                 _endScores.color = Color.white;
                 _endScores.richText = true;
-                _endScores.rectTransform.anchoredPosition -= new Vector2(0f, _endScoresOffset);
+                // Hangs from the bottom edge of the rematch line, derived from its own rect.
+                var rematch = _endRematch.rectTransform;
+                var rect = _endScores.rectTransform;
+                rect.anchorMin = rematch.anchorMin;
+                rect.anchorMax = rematch.anchorMax;
+                rect.sizeDelta = rematch.sizeDelta;
+                rect.pivot = new Vector2(rematch.pivot.x, 1f);
+                rect.anchoredPosition = rematch.anchoredPosition
+                    - new Vector2(0f, rematch.rect.height * rematch.pivot.y + _endScoresGap);
             }
         }
 
@@ -671,6 +679,24 @@ namespace BetterTogether.UI
             }
 
             match.GetScoreRows(_scoreRows);
+
+            // Gnomes still connected without a row (joined late, never scored) appear with 0 points.
+            var all = PlayerCharacter.All;
+            for (var i = 0; i < all.Count; i++)
+            {
+                var character = all[i];
+                if (character == null || character.Object == null || !character.Object.IsValid || character.Role != PlayerRole.Gnome)
+                    continue;
+
+                var owner = character.Object.StateAuthority;
+                var found = false;
+                for (var j = 0; j < _scoreRows.Count && !found; j++)
+                    found = _scoreRows[j].Player == owner;
+
+                if (!found)
+                    _scoreRows.Add(new MatchManager.ScoreEntry { Player = owner });
+            }
+
             for (var i = 1; i < _scoreRows.Count; i++)
             {
                 var row = _scoreRows[i];

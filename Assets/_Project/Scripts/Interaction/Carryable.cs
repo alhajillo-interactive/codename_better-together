@@ -677,7 +677,10 @@ namespace BetterTogether.Interaction
 
             // Taking what the camper held last is a steal (the flag clears once a gnome holds it, so it can't be farmed).
             if (LastHeldByCamper && who.Role == PlayerRole.Gnome && MatchManager.Instance != null)
+            {
                 MatchManager.Instance.Award(who.Object.StateAuthority, MatchManager.ScoreReason.Steal);
+                LastHeldByCamper = false;
+            }
 
             Unpin();
             Compact();

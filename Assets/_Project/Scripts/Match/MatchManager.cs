@@ -46,7 +46,9 @@ namespace BetterTogether.Match
         [SerializeField] private int _pointsHide = 2;
         [Tooltip("Points for a gnome that takes an object the camper was last holding.")]
         [SerializeField] private int _pointsSteal = 1;
-        [Tooltip("Points every gnome gets when the sausage burns.")]
+        [Tooltip("Most bucket fills per player and match that give points (stops fill-spill-fill farming).")]
+        [Min(0)] [SerializeField] private int _maxFillAwards = 3;
+        [Tooltip("Points every gnome gets when the sausage burns (paid once per match).")]
         [SerializeField] private int _pointsBurntSausage = 3;
 
         private MatchPhase _lastPhase = MatchPhase.Waiting;
@@ -67,6 +69,9 @@ namespace BetterTogether.Match
         [Networked] private float FireSeconds { get; set; }
         [Networked] private int HiddenCount { get; set; }
 
+        // The burnt-sausage bonus is paid once per match.
+        [Networked] private NetworkBool BurnPaid { get; set; }
+
         public const int MaxScoreRows = 8;
 
         /// <summary>One scoreboard row, replicated.</summary>
@@ -74,6 +79,7 @@ namespace BetterTogether.Match
         {
             public PlayerRef Player;
             public short Points;
+            public byte Fills;
         }
 
         /// <summary>What earned points; the value of each is a tooltip field on the match manager.</summary>
@@ -217,7 +223,7 @@ namespace BetterTogether.Match
             if (reason == ScoreReason.Hide)
                 HiddenCount++;
 
-            AwardInternal(player, PointsFor(reason), ReasonName(reason));
+            AwardInternal(player, PointsFor(reason), ReasonName(reason), reason == ScoreReason.FillBucket);
         }
 
         /// <summary>Authority only: every gnome (everybody but the camper) gets the points configured for <paramref name="reason"/>.</summary>
@@ -225,6 +231,14 @@ namespace BetterTogether.Match
         {
             if (!_isSpawned || !HasStateAuthority || CurrentPhase != MatchPhase.Playing)
                 return;
+
+            if (reason == ScoreReason.BurntSausage)
+            {
+                if (BurnPaid)
+                    return;
+
+                BurnPaid = true;
+            }
 
             var points = PointsFor(reason);
             var reasonName = ReasonName(reason);
@@ -262,7 +276,7 @@ namespace BetterTogether.Match
             _ => "burnt_sausage",
         };
 
-        private void AwardInternal(PlayerRef player, int points, string reason)
+        private void AwardInternal(PlayerRef player, int points, string reason, bool isFill = false)
         {
             if (!_isSpawned || !HasStateAuthority || CurrentPhase != MatchPhase.Playing || player == PlayerRef.None || points == 0)
                 return;
@@ -274,6 +288,14 @@ namespace BetterTogether.Match
                 var row = scores[i];
                 if (row.Player == player)
                 {
+                    if (isFill)
+                    {
+                        if (row.Fills >= _maxFillAwards)
+                            return;
+
+                        row.Fills++;
+                    }
+
                     row.Points = (short)Mathf.Clamp(row.Points + points, short.MinValue, short.MaxValue);
                     scores.Set(i, row);
                     LogScore(player, points, reason);
@@ -284,10 +306,10 @@ namespace BetterTogether.Match
                     free = i;
             }
 
-            if (free < 0)
+            if (free < 0 || (isFill && _maxFillAwards < 1))
                 return;
 
-            scores.Set(free, new ScoreEntry { Player = player, Points = (short)Mathf.Clamp(points, short.MinValue, short.MaxValue) });
+            scores.Set(free, new ScoreEntry { Player = player, Points = (short)Mathf.Clamp(points, short.MinValue, short.MaxValue), Fills = (byte)(isFill ? 1 : 0) });
             LogScore(player, points, reason);
         }
 
@@ -305,6 +327,7 @@ namespace BetterTogether.Match
 
             FireSeconds = -1f;
             HiddenCount = 0;
+            BurnPaid = false;
             var row = 0;
             foreach (var player in Runner.ActivePlayers)
             {
@@ -358,10 +381,8 @@ namespace BetterTogether.Match
             if (!_isSpawned)
                 return;
 
-            if (HasStateAuthority)
-                DoStartMatch();
-            else
-                RPC_StartMatch();
+            // Always through the RPC (also on the authority) so [Networked] state is written from an RPC, never from Update.
+            RPC_StartMatch();
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
