@@ -47,6 +47,10 @@ namespace BetterTogether.Interaction
         [SerializeField, Range(0f, 120f)] private float _hopSideAngle = 70f;
 
         [Header("Release presentation")]
+        [Tooltip("Seconds a peer keeps the drawn gnome at the camper's drop spot waiting for the replicated pose to arrive.")]
+        [SerializeField, Min(0f)] private float _dropWaitMax = 0.5f;
+        [Tooltip("Metres from the drop spot at which the replicated pose counts as arrived.")]
+        [SerializeField, Min(0.01f)] private float _dropArrivedDistance = 0.3f;
         [Tooltip("Seconds the drawn gnome takes to glide from the camper's hands to its real pose when it stops being carried.")]
         [SerializeField, Min(0f)] private float _releaseBlend = 0.15f;
         [Tooltip("Metres the drawn gnome rises at the middle of that glide.")]
@@ -93,6 +97,13 @@ namespace BetterTogether.Interaction
         private bool _wasCarriedByLocal;
         private bool _blending;
         private bool _blendFresh;
+        private GnomeCarrier _lastCarrierSeen;
+        private bool _blendToDrop;
+        private bool _blendFresh2;
+        private Vector3 _dropPoint;
+        private Quaternion _dropRotation;
+        private Vector3 _blendFromPosition;
+        private Quaternion _blendFromRotation;
         private float _blendStart;
         private Vector3 _blendOffset;
         private Quaternion _blendTurn;
@@ -249,6 +260,7 @@ namespace BetterTogether.Interaction
             var carrier = HasStateAuthority ? _carrier : (IsCarried ? GnomeCarrier.FindCarrying(Object.Id) : null);
             if (carrier != null)
             {
+                _lastCarrierSeen = carrier;
                 _lastAnchorPosition = carrier.AnchorPosition;
                 _lastAnchorRotation = carrier.AnchorRotation;
                 _hasAnchor = true;
@@ -277,17 +289,47 @@ namespace BetterTogether.Interaction
                 _blendTurn = _lastAnchorRotation * Quaternion.Inverse(transform.rotation);
             }
 
-            var k = _releaseBlend > 0f ? (Time.time - _blendStart) / _releaseBlend : 1f;
+            var elapsed = Time.time - _blendStart;
+            var k = _releaseBlend > 0f ? elapsed / _releaseBlend : 1f;
+            var parent = _visual.parent;
+            var naturalPosition = parent != null ? parent.TransformPoint(_visualRestPosition) : _visualRestPosition;
+            var naturalRotation = parent != null ? parent.rotation * _visualRestRotation : _visualRestRotation;
+
+            if (_blendToDrop)
+            {
+                // Put down by the camper: this peer's replicated pose still trails behind, so the drawn body goes to the
+                // camper's drop spot and waits there until the real pose arrives (or a timeout).
+                var toDrop = _dropRotation * Quaternion.Inverse(transform.rotation);
+                var targetPosition = _dropPoint + toDrop * (naturalPosition - transform.position);
+                var targetRotation = toDrop * naturalRotation;
+                if (_blendFresh2)
+                {
+                    _blendFresh2 = false;
+                    _blendFromPosition = naturalPosition + _blendOffset;
+                    _blendFromRotation = _blendTurn * naturalRotation;
+                }
+
+                var arrived = (transform.position - _dropPoint).sqrMagnitude <= _dropArrivedDistance * _dropArrivedDistance;
+                if (k >= 1f && (arrived || elapsed >= _releaseBlend + _dropWaitMax))
+                {
+                    EndBlend();
+                    return;
+                }
+
+                var dropEase = Mathf.Clamp01(k);
+                dropEase = dropEase * dropEase * (3f - 2f * dropEase);
+                var arc = k < 1f ? _releaseArc * Mathf.Sin(Mathf.PI * k) : 0f;
+                _visual.SetPositionAndRotation(Vector3.Lerp(_blendFromPosition, targetPosition, dropEase) + Vector3.up * arc,
+                    Quaternion.Slerp(_blendFromRotation, targetRotation, dropEase));
+                return;
+            }
+
             if (k >= 1f)
             {
                 EndBlend();
                 return;
             }
 
-            var ease = k * k * (3f - 2f * k);
-            var parent = _visual.parent;
-            var naturalPosition = parent != null ? parent.TransformPoint(_visualRestPosition) : _visualRestPosition;
-            var naturalRotation = parent != null ? parent.rotation * _visualRestRotation : _visualRestRotation;
             var position = naturalPosition + _blendOffset * (1f - ease) + Vector3.up * (_releaseArc * Mathf.Sin(Mathf.PI * k));
             _visual.SetPositionAndRotation(position, Quaternion.Slerp(_blendTurn, Quaternion.identity, ease) * naturalRotation);
         }
@@ -301,6 +343,8 @@ namespace BetterTogether.Interaction
             }
 
             _blending = false;
+            _blendToDrop = false;
+            _hasAnchor = false;
         }
 
         private void Transition(CaptureState next, GnomeCarrier carrier, GnomeCage cage)
@@ -376,7 +420,8 @@ namespace BetterTogether.Interaction
         // it falls back to the last carrier pose this peer saw.
         private void PutDown()
         {
-            if (_carrier != null && _carrier.TryGetDrop(Object.Id, out var point, out var yaw))
+            GetBodySize(out var radius, out var height);
+            if (_carrier != null && _carrier.TryGetDrop(Object.Id, out var point, out var yaw) && IsFree(point, radius, height))
             {
                 _movement.Teleport(point, Quaternion.Euler(0f, yaw, 0f));
                 return;
@@ -536,7 +581,18 @@ namespace BetterTogether.Interaction
                 {
                     _blending = true;
                     _blendFresh = true;
+                    _blendFresh2 = true;
+                    _blendToDrop = false;
                     _blendStart = Time.time;
+
+                    // A peer that does not own the gnome follows the camper's drop spot (its own pose arrives late).
+                    if (!HasStateAuthority && IsStoneNow && _lastCarrierSeen != null
+                        && _lastCarrierSeen.TryGetDrop(Object.Id, out var dropPoint, out var dropYaw))
+                    {
+                        _blendToDrop = true;
+                        _dropPoint = dropPoint;
+                        _dropRotation = Quaternion.Euler(0f, dropYaw, 0f);
+                    }
                 }
 
                 // The camper feels it when the gnome slips out of its hands (not when it puts the gnome down itself).

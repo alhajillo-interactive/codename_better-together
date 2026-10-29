@@ -99,8 +99,8 @@ namespace BetterTogether.Gaze
         private bool _isSpawned;
         private bool _lastPetrified;
         private bool _stoneSnapped; // The first Render after spawn sets the tint without a sweep (late joiners).
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
         private GnomeCapture _capture;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
         private float _freezeStartTime; // Owner only, telemetry: when the current freeze began.
 #endif
 
@@ -372,10 +372,11 @@ namespace BetterTogether.Gaze
             ClearStone(hop ? "mash" : "kick");
             GazeImmunity = TickTimer.CreateFromSeconds(Runner, immunitySeconds);
             ReleaseCount++;
-            _releaseSfx.PlayAt(transform.position);
 
             if (hop)
                 Hop();
+
+            _releaseSfx.PlayAt(transform.position); // After the hop, so it plays where the gnome now is.
         }
 
         // Silent release: no immunity, hop, sound or release count (also used between matches).

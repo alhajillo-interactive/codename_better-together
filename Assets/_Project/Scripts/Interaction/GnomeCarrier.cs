@@ -206,6 +206,7 @@ namespace BetterTogether.Interaction
                 if (wanted != null && CanCarry(wanted))
                 {
                     CarriedGnome = pickup;
+                    DropGnome = default;
                     _dropQueued = false;
                     if (Telemetry.Enabled)
                         Telemetry.Begin("gnome_carry").Int("gnome", wanted.Object.StateAuthority.PlayerId).Send();
