@@ -83,6 +83,44 @@ namespace BetterTogether.Fireplace
         [Tooltip("Optional smoke puff played when the fire goes out.")]
         [SerializeField] private ParticleSystem _smokePuff;
 
+        [Header("Feel (built by GnoMore/Construir feel de fogata y cubeta; every field is optional)")]
+        [Tooltip("Looping embers, shown while the fire is out; they pick up with every log placed.")]
+        [SerializeField] private ParticleSystem _embers;
+        [Tooltip("Burst of sparks at the moment the fire is lit.")]
+        [SerializeField] private ParticleSystem _ignitionSpark;
+        [Tooltip("Always-playing steam; its emission follows the pour and it gets a burst when the fire goes out.")]
+        [SerializeField] private ParticleSystem _steam;
+        [Tooltip("Point light that follows the fire states and flickers.")]
+        [SerializeField] private Light _fireLight;
+        [Tooltip("Looping hiss whose volume grows with the pour.")]
+        [SerializeField] private AudioSource _hissLoop;
+        [Tooltip("Seconds the flame takes to grow from a spark to full size when the fire is lit.")]
+        [SerializeField, Min(0.01f)] private float _igniteTime = 0.6f;
+        [Tooltip("Flame scale (fraction of full size) at the instant the fire is lit.")]
+        [SerializeField, Range(0f, 1f)] private float _igniteStartScale = 0.2f;
+        [Tooltip("Embers emitted per second with 0 logs placed (x) and with all logs placed (y).")]
+        [SerializeField] private Vector2 _embersRate = new(3f, 14f);
+        [Tooltip("Scale of the embers emitter with 0 logs (x) and with all logs (y); it widens as the logs go in.")]
+        [SerializeField] private Vector2 _embersScale = new(0.6f, 1.3f);
+        [Tooltip("Light intensity with the fire out and no logs (x), out with all logs (y) and fully lit (z).")]
+        [SerializeField] private Vector3 _lightIntensity = new(0.05f, 0.35f, 3f);
+        [Tooltip("Light range (m) with the fire out and no logs (x), out with all logs (y) and fully lit (z). About 6 m lit so it lights the camp at night.")]
+        [SerializeField] private Vector3 _lightRange = new(1f, 2.5f, 6f);
+        [Tooltip("Fraction of the light intensity and range that the flicker adds or removes.")]
+        [SerializeField, Range(0f, 0.5f)] private float _flickerAmount = 0.15f;
+        [Tooltip("Speed of the flicker noise.")]
+        [SerializeField, Min(0f)] private float _flickerSpeed = 7f;
+        [Tooltip("Fraction of the lit light that is left when the flames are almost gone at the end of the pour.")]
+        [SerializeField, Range(0f, 1f)] private float _douseLightFloor = 0.2f;
+        [Tooltip("Steam particles per second at the end of the pour.")]
+        [SerializeField, Min(0f)] private float _steamMaxRate = 40f;
+        [Tooltip("Steam particles emitted at once when the fire goes out.")]
+        [SerializeField, Min(0)] private int _extinguishSteamBurst = 30;
+        [Tooltip("Volume of the hiss at the end of the pour.")]
+        [SerializeField, Range(0f, 1f)] private float _hissMaxVolume = 0.7f;
+        [Tooltip("Pitch of the hiss at the start (x) and at the end (y) of the pour.")]
+        [SerializeField] private Vector2 _hissPitch = new(0.9f, 1.2f);
+
         [Header("Slots")]
         [Tooltip("Distance from the fireplace centre to the middle of each log.")]
         [SerializeField, Min(0f)] private float _slotRadius = 0.5f;
@@ -136,6 +174,12 @@ namespace BetterTogether.Fireplace
         private float _fireFactor = 1f;
         private Vector3 _fireScale = Vector3.one;
         private bool _isSpawned;
+        // Presentation only: when the fire was last lit on this peer (a late joiner sees it fully grown) and the light smoothing.
+        private float _igniteStart = float.NegativeInfinity;
+        private float _lightLevel;
+        private float _lightReach;
+        private float _flickerSeed;
+        private float _emberLevel = 1f;
 
         [Networked, OnChangedRender(nameof(OnLogsChanged))]
         private int LogsInside { get; set; }
@@ -182,6 +226,20 @@ namespace BetterTogether.Fireplace
         /// <summary>True while a gnome is pouring water on the fire.</summary>
         public bool IsBeingDoused => _isSpawned && IsLit && PourTimer.IsRunning;
 
+        /// <summary>
+        /// True while <paramref name="bucket"/> is the one being poured on the fire; <paramref name="fraction"/> is the
+        /// pour progress, 0 to 1. Derived from replicated state, so every peer sees the same pour.
+        /// </summary>
+        public bool TryGetPour(WaterBucket bucket, out float fraction)
+        {
+            fraction = 0f;
+            if (!IsBeingDoused || bucket == null || PourBucket != bucket)
+                return false;
+
+            fraction = DouseFraction;
+            return true;
+        }
+
         private void Awake()
         {
             _requiredWood = Mathf.Max(1, _requiredWood);
@@ -199,6 +257,15 @@ namespace BetterTogether.Fireplace
             if (_fire != null)
                 _fireScale = _fire.transform.localScale;
 
+            _flickerSeed = UnityEngine.Random.value * 100f;
+            if (_hissLoop != null)
+            {
+                _hissLoop.playOnAwake = false;
+                _hissLoop.loop = true;
+                _hissLoop.volume = 0f;
+                _hissLoop.outputAudioMixerGroup = AudioManager.SfxGroup;
+            }
+
             BuildGhosts();
         }
 
@@ -210,6 +277,9 @@ namespace BetterTogether.Fireplace
             _lastExtinguishCount = ExtinguishCount;
             UpdateLabel();
             UpdateFire();
+            _igniteStart = float.NegativeInfinity; // Late joiners see the fire as it is now, without the ignition.
+            _lightLevel = 0f;
+            _lightReach = 0f;
         }
 
         /// <summary>Called on every peer when the master changes; the new master holds off snapping loose logs for a moment.</summary>
@@ -226,6 +296,8 @@ namespace BetterTogether.Fireplace
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             _isSpawned = false;
+            if (_hissLoop != null)
+                _hissLoop.Stop();
             if (Instance == this)
                 Instance = null;
         }
@@ -707,9 +779,19 @@ namespace BetterTogether.Fireplace
                 return;
 
             if (IsLit)
+            {
                 _lightSfx.PlayAt(transform.position);
-            else if (_smokePuff != null)
-                _smokePuff.Play();
+                _igniteStart = Time.time;
+                if (_ignitionSpark != null)
+                    _ignitionSpark.Play();
+            }
+            else
+            {
+                if (_smokePuff != null)
+                    _smokePuff.Play();
+                if (_steam != null && _extinguishSteamBurst > 0)
+                    _steam.Emit(_extinguishSteamBurst);
+            }
         }
 
         // The pour timer starts (hiss) and stops (the label and flames follow DouseFraction on their own in Render).
@@ -767,7 +849,89 @@ namespace BetterTogether.Fireplace
 
             var target = Mathf.Lerp(1f, DouseFireScale, DouseFraction);
             _fireFactor = Mathf.MoveTowards(_fireFactor, target, FireScaleSmoothing * Time.deltaTime);
-            _fire.transform.localScale = _fireScale * _fireFactor;
+            _fire.transform.localScale = _fireScale * (_fireFactor * Mathf.Lerp(_igniteStartScale, 1f, IgniteProgress));
+        }
+
+        // 0 right when the fire is lit, 1 after the ignition time (ease-out, so the flame jumps and then settles).
+        private float IgniteProgress
+        {
+            get
+            {
+                var t = Mathf.Clamp01((Time.time - _igniteStart) / _igniteTime);
+                return 1f - (1f - t) * (1f - t);
+            }
+        }
+
+        // Light, embers, steam and hiss, all derived from replicated state (lit, logs, pour) and local time.
+        private void UpdateFeel()
+        {
+            bool lit = IsLit;
+            var douse = DouseFraction;
+            var woodFraction = Mathf.Clamp01(LogsInside / (float)_requiredWood);
+
+            UpdateLight(lit, douse, woodFraction);
+
+            if (_embers != null)
+            {
+                var emission = _embers.emission;
+                emission.rateOverTime = lit ? 0f : Mathf.Lerp(_embersRate.x, _embersRate.y, woodFraction);
+                var scale = Mathf.Lerp(_embersScale.x, _embersScale.y, woodFraction);
+                _emberLevel = Mathf.MoveTowards(_emberLevel, scale, 2f * Time.deltaTime);
+                _embers.transform.localScale = Vector3.one * _emberLevel;
+            }
+
+            if (_steam != null)
+            {
+                var emission = _steam.emission;
+                emission.rateOverTime = _steamMaxRate * douse;
+            }
+
+            if (_hissLoop != null)
+                UpdateHiss(douse);
+        }
+
+        private void UpdateLight(bool lit, float douse, float woodFraction)
+        {
+            if (_fireLight == null)
+                return;
+
+            float intensity, reach;
+            if (lit)
+            {
+                var burn = IgniteProgress * Mathf.Lerp(1f, _douseLightFloor, douse);
+                intensity = _lightIntensity.z * burn;
+                reach = _lightRange.z * Mathf.Lerp(0.5f, 1f, burn);
+            }
+            else
+            {
+                intensity = Mathf.Lerp(_lightIntensity.x, _lightIntensity.y, woodFraction);
+                reach = Mathf.Lerp(_lightRange.x, _lightRange.y, woodFraction);
+            }
+
+            _lightLevel = Mathf.MoveTowards(_lightLevel, intensity, 8f * Time.deltaTime * Mathf.Max(1f, _lightIntensity.z));
+            _lightReach = Mathf.MoveTowards(_lightReach, reach, 10f * Time.deltaTime * Mathf.Max(1f, _lightRange.z));
+            var noise = (Mathf.PerlinNoise(_flickerSeed, Time.time * _flickerSpeed) - 0.5f) * 2f;
+            var on = _lightLevel > 0.01f;
+            if (_fireLight.enabled != on)
+                _fireLight.enabled = on;
+            _fireLight.intensity = _lightLevel * (1f + noise * _flickerAmount);
+            _fireLight.range = _lightReach * (1f + noise * _flickerAmount * 0.5f);
+        }
+
+        // The hiss grows with the pour and stops with it; a late joiner mid-pour just hears the current stretch.
+        private void UpdateHiss(float douse)
+        {
+            if (douse > 0.001f)
+            {
+                if (!_hissLoop.isPlaying)
+                    _hissLoop.Play();
+                _hissLoop.volume = _hissMaxVolume * douse;
+                _hissLoop.pitch = Mathf.Lerp(_hissPitch.x, _hissPitch.y, douse);
+            }
+            else if (_hissLoop.isPlaying)
+            {
+                _hissLoop.Stop();
+            }
         }
 
         // Pose of a slot relative to the fireplace: the log leans with its top towards the centre.
@@ -834,6 +998,7 @@ namespace BetterTogether.Fireplace
             UpdateFire();
             RefreshDouseLabel();
             UpdateFireScale();
+            UpdateFeel();
             if (_block == null)
                 return;
 
