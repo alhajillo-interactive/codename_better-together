@@ -10626,6 +10626,7 @@ GameObject:
   - component: {fileID: 8800000000000000099}
   - component: {fileID: 2902491068937995564}
   - component: {fileID: 5551872472618260760}
+  - component: {fileID: 3644464259120405354}
   m_Layer: 9
   m_Name: Gnome
   m_TagString: Untagged
@@ -10713,6 +10714,7 @@ MonoBehaviour:
   - {fileID: 4683119257163552768}
   - {fileID: 8800000000000000003}
   - {fileID: 2902491068937995564}
+  - {fileID: 3644464259120405354}
   - {fileID: 6775593931138393117}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &2317096137556648295
@@ -11185,6 +11187,27 @@ MonoBehaviour:
   _dust: {fileID: 289694638495577238}
   _fragments: {fileID: 1698489399704704287}
   _crackSfx: {fileID: 11400000, guid: 3a7dcf34839041f38a88f4cb35cc37ec, type: 2}
+--- !u!114 &3644464259120405354
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7618880620199038078}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b3f81c6d52a947e0a9d4c71e8f25a063, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Player.GardenDisguise
+  _holdStill: 1
+  _stillSpeed: 0.1
+  _cooldown: 3
+  _visual: {fileID: 0}
+  _ceramicColor: {r: 0.85, g: 0.45, b: 0.35, a: 1}
+  _tintTime: 0.2
+  _freezeDelay: 0.3
+  _popScale: 0.12
+  _popTime: 0.25
 --- !u!1 &8087498446399852310
 GameObject:
   m_ObjectHideFlags: 0
