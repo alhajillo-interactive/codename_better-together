@@ -47,10 +47,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Match.MatchManager
   _minPlayers: 2
+  _allowSoloStart: 0
   _autoStart: 0
+  _rotateCamper: 1
   _countdown: 3
-  _matchDuration: 300
+  _matchDuration: 600
   _endScreen: 6
+  _pointsDouse: 3
+  _pointsFill: 1
+  _pointsHide: 2
+  _pointsSteal: 1
+  _maxFillAwards: 3
+  _pointsBurntSausage: 3
 --- !u!114 &2170243773456703935
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -85,6 +93,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Audio.MatchMusic
   _lobby: {fileID: 11400000, guid: aa5ca2590ff74a23b2f1e8a2812dd470, type: 2}
   _playing: {fileID: 11400000, guid: d15e4ec1fcaa41ceb29a9a8a7d682df8, type: 2}
+  _playingDefend: {fileID: 0}
   _ended: {fileID: 11400000, guid: 85085f4290e44e6e881687d67af15eca, type: 2}
   _winSfx: {fileID: 11400000, guid: 2c821a8f315644f5e2ae20317fb2a7eb, type: 2}
   _loseSfx: {fileID: 11400000, guid: 1cde7082ef8ec4b90a3d80732ed11a66, type: 2}
