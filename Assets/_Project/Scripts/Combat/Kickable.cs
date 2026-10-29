@@ -125,6 +125,13 @@ namespace BetterTogether.Combat
 
         public override void Despawned(NetworkRunner runner, bool hasState) => _isSpawned = false;
 
+        private void OnDisable()
+        {
+            _hitStopUntil = -1f;
+            if (_hitStopAnimator != null)
+                _hitStopAnimator.speed = 1f;
+        }
+
         /// <summary>Called by the kicker's client on its local copy of this player.</summary>
         public void Kick(Vector3 velocity, Vector3 kickerPosition) => RPC_Kick(velocity, kickerPosition);
 

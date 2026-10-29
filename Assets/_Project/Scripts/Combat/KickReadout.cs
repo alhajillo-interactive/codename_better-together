@@ -20,13 +20,20 @@ namespace BetterTogether.Combat
         private CamperKick _kick;
         private Image _ring;
         private RectTransform _rect;
-        private Texture2D _texture;
         private Sprite _sprite;
         private float _amount;
 
         private void Awake() => _kick = GetComponent<CamperKick>();
 
-        private void Start() => Build();
+        /// <summary>Gives the ring sprite (serialized on <see cref="CamperKick"/>) and builds the overlay.</summary>
+        public void Setup(Sprite ringSprite)
+        {
+            if (_ring != null || ringSprite == null)
+                return;
+
+            _sprite = ringSprite;
+            Build();
+        }
 
         private void Build()
         {
@@ -35,24 +42,6 @@ namespace BetterTogether.Combat
             var canvas = canvasObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 5;
-
-            const int resolution = 64;
-            _texture = new Texture2D(resolution, resolution, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
-            var pixels = new Color32[resolution * resolution];
-            var center = (resolution - 1) * 0.5f;
-            for (var y = 0; y < resolution; y++)
-            {
-                for (var x = 0; x < resolution; x++)
-                {
-                    var d = Mathf.Sqrt((x - center) * (x - center) + (y - center) * (y - center)) / center;
-                    var a = Mathf.Clamp01(1f - Mathf.Abs(d - 0.85f) / 0.1f);
-                    pixels[y * resolution + x] = new Color32(255, 255, 255, (byte)(a * 255f));
-                }
-            }
-
-            _texture.SetPixels32(pixels);
-            _texture.Apply();
-            _sprite = Sprite.Create(_texture, new Rect(0, 0, resolution, resolution), new Vector2(0.5f, 0.5f));
 
             var ringObject = new GameObject("Ring", typeof(RectTransform), typeof(Image));
             ringObject.transform.SetParent(canvasObject.transform, false);
@@ -83,12 +72,6 @@ namespace BetterTogether.Combat
             if (ready)
                 size *= 1f + 0.08f * Mathf.Sin(Time.unscaledTime * 18f);
             _rect.sizeDelta = new Vector2(size, size);
-        }
-
-        private void OnDestroy()
-        {
-            if (_sprite != null) Destroy(_sprite);
-            if (_texture != null) Destroy(_texture);
         }
     }
 }
