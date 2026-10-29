@@ -630,6 +630,7 @@ namespace BetterTogether.Player
         {
             SetMount(null);
             _climbing = false;
+            _wasTowerFrozen = false;
             _nextClimbTime = Time.time + _remountCooldown;
             SetRidingBody(false);
         }
