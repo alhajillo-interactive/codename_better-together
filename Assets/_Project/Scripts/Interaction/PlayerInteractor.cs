@@ -290,6 +290,10 @@ namespace BetterTogether.Interaction
             if (Local != this)
                 return;
 
+            // Every early return below clears Focused, which also cancels a hold in progress (a kick stuns, so it restarts it).
+            if (Focused == null && _holdTarget != null)
+                ResetHold();
+
             // Stunned or frozen (watched by the camper) players can't pick anything up or drop it.
             if (_movement != null && (_movement.IsStunned || _movement.IsFrozen))
             {
@@ -316,14 +320,82 @@ namespace BetterTogether.Interaction
 
             UpdateFocus();
 
-            // The action has a Hold interaction; WasPressedThisFrame ignores it.
-            if (_interact == null || !_interact.WasPressedThisFrame())
+            // The action has a Hold interaction; WasPressedThisFrame and IsPressed ignore it.
+            if (_interact == null)
+                return;
+
+            // "Hold E" targets are measured here; a tap on them does nothing (the progress just starts).
+            if (TickHold())
+                return;
+
+            if (!_interact.WasPressedThisFrame())
                 return;
 
             if (Focused != null && Focused.CanInteract(this))
                 Focused.Interact(this);
             else
                 UseCarried(Carried);
+        }
+
+        /// <summary>Local player: how far the current "hold E" is, 0 to 1 (0 when nothing is being held).</summary>
+        public float HoldProgress { get; private set; }
+
+        /// <summary>Local player: <see cref="HoldProgress"/> in steps of 10 % (0 to 100), so the HUD only rewrites text on a step.</summary>
+        public int HoldPercentStep => (int)(HoldProgress * 10f) * 10;
+
+        private IHoldInteractable _holdTarget;
+        private float _holdStart;
+
+        private void ResetHold()
+        {
+            _holdTarget = null;
+            HoldProgress = 0f;
+        }
+
+        // Returns true while the focused interactable is a hold target for this player (the tap path must not run).
+        // The hold starts only on a fresh press while looking at the target, and restarts if the focus changes, the key is
+        // released or the target stops accepting this player.
+        private bool TickHold()
+        {
+            if (Focused is not IHoldInteractable hold || hold.GetHoldTime(this) <= 0f)
+            {
+                ResetHold();
+                return false;
+            }
+
+            if (!Focused.CanInteract(this))
+            {
+                ResetHold();
+                return false;
+            }
+
+            if (_holdTarget != hold)
+            {
+                ResetHold();
+                if (_interact.WasPressedThisFrame())
+                {
+                    _holdTarget = hold;
+                    _holdStart = Time.time;
+                }
+
+                return true;
+            }
+
+            if (!_interact.IsPressed())
+            {
+                ResetHold();
+                return true;
+            }
+
+            var time = hold.GetHoldTime(this);
+            HoldProgress = Mathf.Clamp01((Time.time - _holdStart) / time);
+            if (HoldProgress >= 1f)
+            {
+                ResetHold();
+                hold.OnHoldComplete(this);
+            }
+
+            return true;
         }
 
         // The item's own use first (e.g. fill the bucket), then put the log on the campfire or pour the bucket on it

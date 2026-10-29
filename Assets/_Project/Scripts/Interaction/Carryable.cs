@@ -416,7 +416,9 @@ namespace BetterTogether.Interaction
                 return false;
 
             // Nobody can take a log back out of the campfire once it is placed.
-            if (IsPinned && Runner.TryFindBehaviour(PinOwnerId, out NetworkBehaviour owner) && owner is FireplaceManager)
+            // Spots can forbid taking their items directly (hiding spots give them back only when searched).
+            if (IsPinned && Runner.TryFindBehaviour(PinOwnerId, out NetworkBehaviour owner)
+                && (owner is FireplaceManager || owner is IPinSpot { AllowsTakeFromPin: false }))
                 return false;
 
             return HolderCount == 0

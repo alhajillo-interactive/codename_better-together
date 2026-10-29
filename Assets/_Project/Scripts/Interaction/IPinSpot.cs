@@ -10,5 +10,8 @@ namespace BetterTogether.Interaction
     {
         /// <summary>Where the item pinned in <paramref name="slot"/> is posed; spots with a single place ignore the slot.</summary>
         Transform GetPinPoint(int slot);
+
+        /// <summary>Whether a player can take an item resting here directly with the interact key. False for spots that give items back another way (e.g. hiding spots).</summary>
+        bool AllowsTakeFromPin => true;
     }
 }

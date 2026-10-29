@@ -47,6 +47,7 @@ namespace BetterTogether.UI
         private bool _lastRiding;
         private bool _lastKickReady;
         private bool _lastConfirmed;
+        private int _lastHoldStep = -1;
 
         private bool _valid;
         private float _nextRefresh;
@@ -110,8 +111,10 @@ namespace BetterTogether.UI
             var aimed = stack != null ? stack.Aimed : null;
             var kickReady = CamperKick.Local is { HasTargetInRange: true, IsReady: true };
             var confirmed = local.Carried != null;
+            var holdStep = local.HoldProgress > 0f ? local.HoldPercentStep : -1;
 
-            var changed = !ReferenceEquals(focused, _lastFocused)
+            var changed = holdStep != _lastHoldStep
+                          || !ReferenceEquals(focused, _lastFocused)
                           || carried != _lastCarried
                           || stunned != _lastStunned
                           || riding != _lastRiding
@@ -126,6 +129,7 @@ namespace BetterTogether.UI
             _lastAimed = aimed;
             _lastKickReady = kickReady;
             _lastConfirmed = confirmed;
+            _lastHoldStep = holdStep;
             return changed;
         }
 
@@ -176,7 +180,9 @@ namespace BetterTogether.UI
             }
             else if (local.Focused != null && local.Focused.CanInteract(local))
             {
-                text = "[E] " + local.Focused.GetPrompt(local);
+                text = local.Focused is IHoldInteractable hold && hold.GetHoldTime(local) > 0f
+                    ? HoldText(local, local.Focused.GetPrompt(local))
+                    : "[E] " + local.Focused.GetPrompt(local);
             }
             else if (CamperKick.Local is { HasTargetInRange: true, IsReady: true })
             {
@@ -190,6 +196,10 @@ namespace BetterTogether.UI
 
             return text;
         }
+
+        // "[Mantén E] Registrar arbusto", with the progress in steps of 10 % while the key is held.
+        private static string HoldText(PlayerInteractor local, string prompt) =>
+            local.HoldProgress > 0f ? $"[Mantén E] {prompt}… {local.HoldPercentStep} %" : "[Mantén E] " + prompt;
 
         // What to tell a player with something in the hands: status, passing it on (gnomes in a tower), what E does, getting off.
         private static string BuildCarriedText(PlayerInteractor local, Carryable carried)
