@@ -448,6 +448,10 @@ namespace BetterTogether.Gaze
                 if (candidate == null || !candidate.IsAvailable || candidate.IsGazeImmune || candidate.IsStone)
                     continue;
 
+                // A disguised gnome can't become a new target (decided with the bool its owner replicates).
+                if (candidate.TryGetComponent(out GardenDisguise disguise) && disguise.IsDisguised)
+                    continue;
+
                 if (!candidate.IsVisibleTo(this))
                     continue;
 
