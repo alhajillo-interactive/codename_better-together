@@ -89,6 +89,8 @@ namespace BetterTogether.Combat
 
         // Other clients query these every frame, also before Spawned / after Despawned, when networked state can't be read.
         public bool IsStunned => _isSpawned && !StunTimer.ExpiredOrNotRunning(Runner);
+        /// <summary>True while the local visual hit stop holds the Animator at speed 0.</summary>
+        public bool IsHitStopping => _hitStopUntil >= 0f;
         public bool CanBeKicked => _isSpawned && ProtectedTimer.ExpiredOrNotRunning(Runner);
 
         private void Awake()
