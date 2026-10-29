@@ -12,11 +12,32 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using Assert = NUnit.Framework.Assert;
 
 namespace BetterTogether.Tests
 {
     public class SmokeMultiPeerTests
     {
+        private readonly List<NetworkRunner> _runners = new();
+        private readonly List<Task> _shutdowns = new();
+        private NetworkProjectConfig _config;
+        private NetworkProjectConfig.PeerModes _previousPeerMode;
+        private bool _previousIgnore;
+
+        // Always leave the process clean, whatever happened in the test.
+        [UnityTearDown]
+        public IEnumerator TearDown()
+        {
+            var deadline = Time.realtimeSinceStartup + 10f;
+            foreach (var shutdown in _shutdowns)
+                while (!shutdown.IsCompleted && Time.realtimeSinceStartup < deadline)
+                    yield return null;
+            _shutdowns.Clear();
+            _runners.Clear();
+            if (_config != null)
+                _config.PeerMode = _previousPeerMode;
+            LogAssert.ignoreFailingMessages = _previousIgnore;
+        }
         private const string ScenePath = "Assets/_Project/Scenes/CampBryan.unity";
         private const float StepTimeout = 30f;
         private const float GrabTimeout = 2f;
@@ -35,9 +56,11 @@ namespace BetterTogether.Tests
         public IEnumerator TwoPeers_GrabAndRelease_AgreeAndRestOnGround()
         {
             var config = NetworkProjectConfig.Global;
-            var previousPeerMode = config.PeerMode;
-            var previousIgnore = LogAssert.ignoreFailingMessages;
-            var runners = new List<NetworkRunner>();
+            _config = config;
+            _previousPeerMode = config.PeerMode;
+            _previousIgnore = LogAssert.ignoreFailingMessages;
+            var runners = _runners;
+            runners.Clear();
 
             // Runtime only: the asset on disk is never saved.
             config.PeerMode = NetworkProjectConfig.PeerModes.Multiple;
@@ -134,19 +157,10 @@ namespace BetterTogether.Tests
             }
             finally
             {
-                // Always leave the process clean, whatever happened above.
+                // Shutdown is awaited in TearDown: a finally clause cannot yield.
                 foreach (var runner in runners)
-                {
-                    if (runner == null)
-                        continue;
-                    var shutdown = runner.Shutdown();
-                    var deadline = Time.realtimeSinceStartup + 10f;
-                    while (!shutdown.IsCompleted && Time.realtimeSinceStartup < deadline)
-                        yield return null;
-                }
-
-                config.PeerMode = previousPeerMode;
-                LogAssert.ignoreFailingMessages = previousIgnore;
+                    if (runner != null && _shutdowns.Count < runners.Count)
+                        _shutdowns.Add(runner.Shutdown());
             }
         }
 
