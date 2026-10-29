@@ -2242,7 +2242,7 @@ MonoBehaviour:
   _aimRadius: 0.06
   _interactionMask:
     serializedVersion: 2
-    m_Bits: 3584
+    m_Bits: 3072
   _eye: {fileID: 0}
   _holdDistanceFactor: 0.45
   _holdDropFactor: 0.18
@@ -2251,7 +2251,7 @@ MonoBehaviour:
   _maxHoldPitch: 55
   _holdObstacleMask:
     serializedVersion: 2
-    m_Bits: 6144
+    m_Bits: 7936
   _holdSharpness: 18
   _swayAmplitude: 0.015
 --- !u!114 &7805739811996808192
@@ -2438,7 +2438,7 @@ MonoBehaviour:
   _bodyHeight: 0.6
   _aimMask:
     serializedVersion: 2
-    m_Bits: 6656
+    m_Bits: 6912
   _remountCooldown: 0.4
   _climbTime: 0.12
   _dismountForward: 1.5
