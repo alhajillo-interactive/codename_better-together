@@ -4,6 +4,7 @@ using BetterTogether.Fireplace;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
 using BetterTogether.Player;
+using PrimeTween;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -36,6 +37,11 @@ namespace BetterTogether.UI
             public bool Known;
             public int Key = int.MinValue;
             public float RedUntil;
+            // Optional child "Stamp" of the line text (made by UiThemeApplier): ink check when done, cross when it failed.
+            public Image Stamp;
+            public RectTransform StampRect;
+            public int StampKind; // 0 hidden, 1 check, 2 cross
+            public Tween StampTween;
         }
 
         [Header("Clock")]
@@ -44,19 +50,20 @@ namespace BetterTogether.UI
         [SerializeField] private RectTransform _sun;
         [SerializeField] private Image _sunImage;
         [SerializeField] private TMP_Text _timeLabel;
-        [SerializeField] private Color _sunColor = new(1f, 0.85f, 0.3f);
-        [SerializeField] private Color _moonColor = new(0.7f, 0.8f, 1f);
-        [SerializeField] private Color _urgentColor = new(1f, 0.25f, 0.2f);
+        [SerializeField] private Color _sunColor = new(1f, 0.85f, 0.3f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
+        [SerializeField] private Color _moonColor = new(0.7f, 0.8f, 1f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
+        [SerializeField] private Color _urgentColor = new(1f, 0.25f, 0.2f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
         [SerializeField] private float _urgentSeconds = 10f;
 
         [Header("Objectives")]
         [SerializeField] private TMP_Text _objectivesTitle;
         [SerializeField] private TMP_Text[] _objectiveTexts;
-        [SerializeField] private Color _pendingColor = Color.white;
-        [SerializeField] private Color _doneColor = new(0.45f, 0.9f, 0.45f);
-        [SerializeField] private Color _failColor = new(1f, 0.3f, 0.25f);
-        [Tooltip("Colour of the greyed-out line that previews the next milestone.")]
-        [SerializeField] private Color _mutedColor = new(0.6f, 0.6f, 0.6f);
+        [Tooltip("Seconds a line shows the failure colour and the cross stamp after it stops being done.")]
+        [SerializeField] private float _failSeconds = 0.9f;
+        [Tooltip("Scale the stamp starts at when it drops onto a line (it settles at 1).")]
+        [SerializeField] private float _stampDropScale = 1.4f;
+        [Tooltip("Seconds the stamp takes to drop.")]
+        [SerializeField] private float _stampDropSeconds = 0.18f;
 
         [Header("Announcer")]
         [SerializeField] private TMP_Text _announcer;
@@ -93,6 +100,17 @@ namespace BetterTogether.UI
         private UIPunch _clockPunch;
         private UIPunch _announcerPunch;
         private UIPunch _titlePunch;
+        private ElasticPlate _titlePlate;
+
+        // Toast pill (optional parent "AnnouncerPill" of the announcer text, made by UiThemeApplier).
+        private Image _pill;
+        private CanvasGroup _pillGroup;
+        private ElasticPlate _pillPlate;
+
+        // Parts of the match HUD hidden by the end screen (found by name, hidden with a CanvasGroup so their logic keeps running).
+        private static readonly string[] HiddenOnEnd = { "Objectives", "Clock", "ControlsHint", "Prompt", "StaminaBar", "StoneOverlay" };
+        private CanvasGroup[] _endHidden;
+        private float[] _endHiddenAlpha;
 
         private Announcement _current;
         private bool _hasCurrent;
@@ -120,6 +138,9 @@ namespace BetterTogether.UI
         /// <summary>The HUD of this client, if one is in the scene.</summary>
         public static MatchHUD Instance { get; private set; }
 
+        /// <summary>True while the end screen is up (other HUD parts must not show themselves then).</summary>
+        public bool EndScreenShown => _endShown;
+
         /// <summary>Shows a message in the announcer of this client only. Safe to call without a HUD.</summary>
         public static void AnnounceLocal(string text, Color color)
         {
@@ -137,14 +158,38 @@ namespace BetterTogether.UI
         {
             Instance = this;
             _clockPunch = UIPunch.Of(_clock);
-            _announcerPunch = UIPunch.Of(_announcer);
             _titlePunch = UIPunch.Of(_endTitle);
+            _titlePlate = _objectivesTitle != null ? _objectivesTitle.GetComponentInParent<ElasticPlate>(true) : null;
 
             _lines = new Line[ObjectiveCount];
             for (var i = 0; i < ObjectiveCount; i++)
-                _lines[i] = new Line { Text = _objectiveTexts[i], Punch = UIPunch.Of(_objectiveTexts[i]) };
+            {
+                var line = new Line { Text = _objectiveTexts[i], Punch = UIPunch.Of(_objectiveTexts[i]) };
+                var stamp = _objectiveTexts[i].transform.Find("Stamp");
+                if (stamp != null && stamp.TryGetComponent(out line.Stamp))
+                {
+                    line.StampRect = (RectTransform)stamp;
+                    line.Stamp.raycastTarget = false;
+                    line.Stamp.enabled = false;
+                }
 
-            _announcer.alpha = 0f;
+                _lines[i] = line;
+            }
+
+            var pillParent = _announcer.transform.parent;
+            if (pillParent != null && pillParent.name == "AnnouncerPill" && pillParent.TryGetComponent(out _pill))
+            {
+                _pillGroup = pillParent.GetComponent<CanvasGroup>();
+                _pillPlate = pillParent.GetComponent<ElasticPlate>();
+                _announcerPunch = UIPunch.Of(pillParent);
+                _announcer.color = Theme.cream;
+            }
+            else
+            {
+                _announcerPunch = UIPunch.Of(_announcer);
+            }
+
+            SetAnnouncerAlpha(0f);
             _waiting.gameObject.SetActive(false);
             _endScreen.SetActive(false);
 
@@ -155,7 +200,7 @@ namespace BetterTogether.UI
                 _endScores.fontSize = _endScoresFontSize;
                 _endScores.enableAutoSizing = false;
                 _endScores.alignment = TextAlignmentOptions.Top;
-                _endScores.color = UiTheme.Current != null ? UiTheme.Current.ink : Color.white; // sits on the paper end card
+                _endScores.color = Theme.ink; // sits on the paper end card
                 _endScores.richText = true;
                 // Hangs from the bottom edge of the rematch line, derived from its own rect.
                 var rematch = _endRematch.rectTransform;
@@ -168,6 +213,8 @@ namespace BetterTogether.UI
                     - new Vector2(0f, rematch.rect.height * rematch.pivot.y + _endScoresGap);
             }
         }
+
+        private static UiTheme Theme => UiTheme.Safe;
 
         private void Update()
         {
@@ -232,7 +279,7 @@ namespace BetterTogether.UI
             var seconds = Mathf.Max(0f, ClockSeconds(match, phase));
             var whole = Mathf.CeilToInt(seconds);
             var urgent = seconds <= _urgentSeconds && match != null && phase == MatchPhase.Playing;
-            _timeLabel.color = urgent ? _urgentColor : night ? _moonColor : Color.white;
+            _timeLabel.color = urgent ? _urgentColor : night ? _moonColor : Theme.cream;
 
             if (whole != _lastClockSecond)
             {
@@ -343,6 +390,10 @@ namespace BetterTogether.UI
                 2 => "Hito 1 · Sabotea al campista",
                 _ => "Hito 2 · ¡Ataca la fogata!",
             });
+
+            // The plate grows with the title (and shrinks the font when it hits its maximum width).
+            if (_titlePlate != null)
+                _titlePlate.Refresh();
         }
 
         // A line whose text is a literal; extra tells apart the literals a line can show in one variant.
@@ -375,8 +426,9 @@ namespace BetterTogether.UI
         private bool UpdateLine(int index, bool done, int key, bool playing, bool muted)
         {
             var line = _lines[index];
+            var changed = line.Known && done != line.Done && playing;
 
-            if (line.Known && done != line.Done && playing)
+            if (changed)
             {
                 if (done)
                 {
@@ -385,17 +437,21 @@ namespace BetterTogether.UI
                 else
                 {
                     line.Punch.Shake(10f, 0.4f);
-                    line.RedUntil = Time.unscaledTime + 0.5f;
+                    line.RedUntil = Time.unscaledTime + _failSeconds;
                 }
             }
 
             line.Known = true;
             line.Done = done;
 
+            // The lines sit on paper: pending in ink, finished in the soft ink (plus strikethrough and a stamp), failed in hat red.
             var failing = Time.unscaledTime < line.RedUntil;
-            var color = failing ? _failColor : muted ? _mutedColor : done ? _doneColor : _pendingColor;
+            var theme = Theme;
+            var color = failing ? theme.hatDark : muted || done ? theme.inkSoft : theme.ink;
             if (line.Text.color != color)
                 line.Text.color = color;
+
+            SetStamp(line, failing ? 2 : done && !muted ? 1 : 0, changed);
 
             var fullKey = key * 2 + (done ? 1 : 0);
             if (fullKey == line.Key)
@@ -403,6 +459,32 @@ namespace BetterTogether.UI
 
             line.Key = fullKey;
             return true;
+        }
+
+        // Shows the check or cross stamp of a line (0 hides it). It drops in (scale 1.4 to 1) only on a live change.
+        private void SetStamp(Line line, int kind, bool animate)
+        {
+            if (line.Stamp == null || kind == line.StampKind)
+                return;
+
+            line.StampKind = kind;
+            line.StampTween.Stop();
+            var theme = Theme;
+            var sprite = kind == 2 ? theme.stampFail : theme.stamp;
+            if (kind == 0 || sprite == null)
+            {
+                line.Stamp.enabled = false;
+                return;
+            }
+
+            line.Stamp.sprite = sprite;
+            line.Stamp.enabled = true;
+            line.StampRect.localScale = Vector3.one;
+            if (animate)
+            {
+                line.StampTween = Tween.Scale(line.StampRect, _stampDropScale, 1f, _stampDropSeconds, Ease.OutQuad,
+                    useUnscaledTime: true);
+            }
         }
 
         #endregion
@@ -414,7 +496,7 @@ namespace BetterTogether.UI
             if (phase != _lastPhase)
             {
                 if (_lastPhase == MatchPhase.Countdown && phase == MatchPhase.Playing)
-                    Announce("¡A jugar!", Color.white, true);
+                    Announce("¡A jugar!", Theme.leafDark, true);
 
                 _lastPhase = phase;
                 _lastCountdown = -1;
@@ -428,7 +510,7 @@ namespace BetterTogether.UI
                 return;
 
             _lastCountdown = remaining;
-            Announce(remaining.ToString(), new Color(1f, 0.92f, 0.5f), true, 0.7f);
+            Announce(remaining.ToString(), Theme.ember, true, 0.7f);
         }
 
         private void DetectNight(MatchManager match, bool playing)
@@ -454,9 +536,9 @@ namespace BetterTogether.UI
                 return;
 
             if (previous > 30f && now <= 30f)
-                Announce("Se acerca la noche…", new Color(0.6f, 0.7f, 1f));
+                Announce("Se acerca la noche…", Theme.roleGnome);
             else if (previous > 10f && now <= 10f)
-                Announce("¡10 segundos para la noche!", _urgentColor);
+                Announce("¡10 segundos para la noche!", Theme.hatDark);
         }
 
         private void DetectLastSeconds(MatchManager match, bool playing)
@@ -473,8 +555,8 @@ namespace BetterTogether.UI
 
             if (previous > _urgentSeconds && now <= _urgentSeconds)
             {
-                Announce($"¡{Mathf.CeilToInt(_urgentSeconds)} segundos!", _urgentColor);
-                Flash(new Color(0.2f, 0.3f, 0.8f, 0.15f), 0.4f);
+                Announce($"¡{Mathf.CeilToInt(_urgentSeconds)} segundos!", Theme.hatDark);
+                Flash(new Color(0.2f, 0.3f, 0.8f, 0.15f), 0.4f); // ui-color-ok: full-screen flash, not text
             }
         }
 
@@ -498,15 +580,15 @@ namespace BetterTogether.UI
                 if (lit)
                 {
                     Announce(camper ? "¡Fuego! Defiéndelo mientras se cocina" : "¡FUEGO! Ahora los duendes atacan",
-                        new Color(1f, 0.7f, 0.3f), true, 1.6f);
-                    Flash(new Color(1f, 0.6f, 0.2f, 0.2f), 0.4f);
+                        Theme.ember, true, 1.6f);
+                    Flash(new Color(1f, 0.6f, 0.2f, 0.2f), 0.4f); // ui-color-ok: full-screen flash, not text
                     if (CameraPunch.Instance != null)
                         CameraPunch.Instance.PunchFov(5f, 0.4f);
                 }
                 else
                 {
-                    Announce(camper ? "¡Apagada! Vuelve a encenderla" : "¡Apagada! Que no la vuelva a prender", _failColor, true, 1.6f);
-                    Flash(new Color(0.3f, 0.5f, 1f, 0.25f), 0.4f);
+                    Announce(camper ? "¡Apagada! Vuelve a encenderla" : "¡Apagada! Que no la vuelva a prender", Theme.roleGnome, true, 1.6f);
+                    Flash(new Color(0.3f, 0.5f, 1f, 0.25f), 0.4f); // ui-color-ok: full-screen flash, not text
                 }
             }
 
@@ -514,7 +596,7 @@ namespace BetterTogether.UI
             var doused = fire.IsBeingDoused;
             if (_hasFireState && playing && doused && !_prevDoused && hasRole && Time.unscaledTime >= _nextDouseWarning && camper)
             {
-                Announce("¡Te apagan la fogata!", _failColor);
+                Announce("¡Te apagan la fogata!", Theme.hatDark);
                 _nextDouseWarning = Time.unscaledTime + 5f;
             }
 
@@ -524,7 +606,7 @@ namespace BetterTogether.UI
             if (_hasFireState && playing && hasRole && comeback && !_prevComeback)
             {
                 Announce(camper ? "¡Segundo aire! Los fósforos vuelven y tu mirada se amplía" : "¡El campista se recupera!",
-                    camper ? new Color(0.5f, 1f, 0.6f) : _urgentColor);
+                    camper ? Theme.leafDark : Theme.hatDark);
             }
 
             _prevComeback = comeback;
@@ -545,9 +627,9 @@ namespace BetterTogether.UI
             if (_hasSausageState && playing && state != _prevCook)
             {
                 if (state == Sausage.CookState.Cooked)
-                    Announce("¡La salchicha está lista!", _doneColor);
+                    Announce("¡La salchicha está lista!", Theme.leafDark);
                 else if (state == Sausage.CookState.Burnt)
-                    Announce("¡Se quemó la salchicha!", _failColor);
+                    Announce("¡Se quemó la salchicha!", Theme.hatDark);
             }
 
             _prevCook = state;
@@ -582,8 +664,26 @@ namespace BetterTogether.UI
             _hasCurrent = true;
             _currentElapsed = 0f;
             _announcer.text = announcement.Text;
-            _announcer.color = announcement.Color;
+            if (_pill != null)
+            {
+                // Cream text on the dark pill; the event colour goes to the pill border.
+                _pill.color = announcement.Color;
+                _pillPlate.Refresh();
+            }
+            else
+            {
+                _announcer.color = announcement.Color;
+            }
+
             _announcerPunch.Pop(0.6f, 1.15f, _popDuration);
+        }
+
+        private void SetAnnouncerAlpha(float alpha)
+        {
+            if (_pillGroup != null)
+                _pillGroup.alpha = alpha;
+            else
+                _announcer.alpha = alpha;
         }
 
         private void UpdateAnnouncer()
@@ -596,11 +696,11 @@ namespace BetterTogether.UI
                     ? Mathf.Clamp01(_currentElapsed / 0.1f)
                     : 1f - (_currentElapsed - fadeStart) / _fadeDuration;
 
-                _announcer.alpha = Mathf.Clamp01(alpha);
+                SetAnnouncerAlpha(Mathf.Clamp01(alpha));
                 if (_currentElapsed >= fadeStart + _fadeDuration)
                 {
                     _hasCurrent = false;
-                    _announcer.alpha = 0f;
+                    SetAnnouncerAlpha(0f);
                 }
             }
 
@@ -658,6 +758,7 @@ namespace BetterTogether.UI
 
             _endElapsed += Time.unscaledDeltaTime;
             _endGroup.alpha = Mathf.Clamp01(_endElapsed / _endFadeDuration);
+            HideMatchHud();
 
             var remaining = Mathf.CeilToInt(match.PhaseTimeRemaining);
             if (remaining != _lastRematch)
@@ -682,19 +783,19 @@ namespace BetterTogether.UI
 
             _endTitle.text = camperWon ? "¡Ganó el campista!" : "¡Ganaron los duendes!";
             _endSubtitle.text = victory ? "¡Victoria!" : "Derrota";
-            _endSubtitle.color = victory ? _doneColor : _failColor;
+            _endSubtitle.color = victory ? Theme.leafDark : Theme.hatDark; // sits on the paper end card
             _titlePunch.Pop(0.6f, 1.15f, 0.4f);
             BuildScoreboard();
 
             if (camperWon)
             {
-                Flash(new Color(1f, 0.6f, 0.2f, 0.3f), 0.6f);
+                Flash(new Color(1f, 0.6f, 0.2f, 0.3f), 0.6f); // ui-color-ok: full-screen flash, not text
                 if (CameraPunch.Instance != null)
                     CameraPunch.Instance.PunchFov(6f, 0.6f);
             }
             else
             {
-                Flash(new Color(0f, 0f, 0.1f, 0.6f), 0.8f);
+                Flash(new Color(0f, 0f, 0.1f, 0.6f), 0.8f); // ui-color-ok: full-screen flash, not text
             }
         }
 
@@ -751,7 +852,7 @@ namespace BetterTogether.UI
 
             if (_scoreRows.Count > 0 && best > 0)
             {
-                sb.Append("<color=#FFD94D>MVP: ");
+                sb.Append("<b>MVP: "); // bold ink on the paper end card (yellow on paper is unreadable)
                 var first = true;
                 for (var i = 0; i < _scoreRows.Count && _scoreRows[i].Points == best; i++)
                 {
@@ -761,7 +862,7 @@ namespace BetterTogether.UI
                     first = false;
                 }
 
-                sb.Append("</color>\n");
+                sb.Append("</b>\n");
             }
 
             var fire = match.FirstFireSeconds;
@@ -793,6 +894,57 @@ namespace BetterTogether.UI
         {
             _endShown = false;
             _endScreen.SetActive(false);
+            ShowMatchHud();
+        }
+
+        // The end screen stands alone: objectives, clock, controls, prompt, energy bar and stone notice go invisible.
+        // A CanvasGroup (not SetActive) hides them, since their own scripts keep running; alpha is held at 0 every frame
+        // because a script may fade one of them (ControlsHint does), and restored when the end screen goes away.
+        private void HideMatchHud()
+        {
+            if (_endHidden == null)
+                CollectHiddenOnEnd();
+
+            for (var i = 0; i < _endHidden.Length; i++)
+            {
+                var group = _endHidden[i];
+                if (group == null || group.alpha == 0f)
+                    continue;
+
+                if (_endHiddenAlpha[i] < 0f)
+                    _endHiddenAlpha[i] = group.alpha;
+
+                group.alpha = 0f;
+            }
+        }
+
+        private void ShowMatchHud()
+        {
+            if (_endHidden == null)
+                return;
+
+            for (var i = 0; i < _endHidden.Length; i++)
+            {
+                if (_endHidden[i] != null && _endHiddenAlpha[i] >= 0f)
+                    _endHidden[i].alpha = _endHiddenAlpha[i];
+
+                _endHiddenAlpha[i] = -1f;
+            }
+        }
+
+        private void CollectHiddenOnEnd()
+        {
+            _endHidden = new CanvasGroup[HiddenOnEnd.Length];
+            _endHiddenAlpha = new float[HiddenOnEnd.Length];
+            for (var i = 0; i < HiddenOnEnd.Length; i++)
+            {
+                _endHiddenAlpha[i] = -1f;
+                var part = transform.Find(HiddenOnEnd[i]);
+                if (part == null)
+                    continue;
+
+                _endHidden[i] = part.TryGetComponent<CanvasGroup>(out var group) ? group : part.gameObject.AddComponent<CanvasGroup>();
+            }
         }
 
         #endregion

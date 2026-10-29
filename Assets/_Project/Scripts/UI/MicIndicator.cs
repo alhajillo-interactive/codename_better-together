@@ -11,8 +11,8 @@ namespace BetterTogether.UI
     /// </summary>
     public class MicIndicator : MonoBehaviour
     {
-        private const string OnText = "MIC ON   [M]";
-        private const string OffText = "MIC OFF   [M]";
+        private const string OnText = "Micro abierto · M";
+        private const string OffText = "Micro apagado · M";
 
         [Header("References (wired by GameHudBuilder)")]
         [Tooltip("Root of the badge; hidden while there is no local voice.")]
@@ -23,23 +23,14 @@ namespace BetterTogether.UI
         [SerializeField] private TMP_Text _label;
 
         [Header("Style")]
-        [Tooltip("Background colour while the microphone is on.")]
-        [SerializeField] private Color _onColor = new(0.2f, 0.7f, 0.3f, 0.9f);
-        [Tooltip("Background colour while the microphone is off.")]
-        [SerializeField] private Color _offColor = new(0.8f, 0.2f, 0.2f, 0.9f);
+        [Tooltip("Opacity of the badge background (the colours come from the theme: leafDark on, hatDark off).")]
+        [Range(0.5f, 1f)] [SerializeField] private float _backgroundAlpha = 0.95f;
 
-        // The theme (leaf / hat) wins when it exists; the serialized colours are the fallback.
-        private Color OnColor => UiTheme.Current != null ? WithAlpha(UiTheme.Current.leaf, _onColor.a) : _onColor;
-        private Color OffColor => UiTheme.Current != null ? WithAlpha(UiTheme.Current.hat, _offColor.a) : _offColor;
+        private Color OnColor => UiTheme.WithAlpha(UiTheme.Safe.leafDark, _backgroundAlpha);
+        private Color OffColor => UiTheme.WithAlpha(UiTheme.Safe.hatDark, _backgroundAlpha);
 
         private bool _valid;
         private int _shownState = -1;
-
-        private static Color WithAlpha(Color color, float alpha)
-        {
-            color.a = alpha;
-            return color;
-        }
 
         private void Awake()
         {
@@ -47,8 +38,11 @@ namespace BetterTogether.UI
                      & HudSupport.Require(this, _background, nameof(_background))
                      & HudSupport.Require(this, _label, nameof(_label));
 
-            if (_valid)
-                _badge.SetActive(false);
+            if (!_valid)
+                return;
+
+            _label.color = UiTheme.Safe.cream; // cream on leafDark / hatDark
+            _badge.SetActive(false);
         }
 
         private void Update()

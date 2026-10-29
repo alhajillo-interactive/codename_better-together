@@ -17,6 +17,7 @@ namespace BetterTogether.EditorTools
     {
         private const string LogPrefix = "[GameHudBuilder]";
         private const string PrefabPath = "Assets/_Project/Prefabs/UI/MatchHUD.prefab";
+        private const string ThemePath = "Assets/_Project/Resources/UiTheme.asset";
         private const string ConePath = "Assets/_Project/Art/UI/vignette_radial.png";
         private const string GnomePath = "Assets/_Project/Art/UI/vignette_radial_gnome.png";
         private const string FocusPath = "Assets/_Project/Art/UI/vignette_radial_focus.png";
@@ -229,6 +230,13 @@ namespace BetterTogether.EditorTools
 
             Wire(GetOrAdd<ScreenFlash>(root), ("_image", flash));
 
+            // C6.2a: elastic objectives plate, line stamps, toast pill and the mic badge in the safe zone.
+            var theme = AssetDatabase.LoadAssetAtPath<UiTheme>(ThemePath);
+            if (theme != null)
+                HudPlateTools.Ensure(root, theme);
+            else
+                Debug.LogWarning($"{LogPrefix} No UiTheme at {ThemePath}: run GnoMore/Aplicar estilo de UI to finish the HUD plates.");
+
             // Draw order at the top: the end screen covers the crosshair and the prompt, and the flash covers everything.
             var endScreen = rootRect.Find("EndScreen");
             if (endScreen != null)
@@ -347,7 +355,8 @@ namespace BetterTogether.EditorTools
             if (titleCreated)
                 Place(titleRect, anchorMin, anchorMax, Center, Vector2.zero, new Vector2(0f, 70f));
 
-            counter = Text(rect, "Counter", "0/0", 30f, Color.white, TextAlignmentOptions.Center, font, false,
+            // Hidden by GazeFeedbackHUD (channel A); never shows a sample "0/0".
+            counter = Text(rect, "Counter", "", 30f, Color.white, TextAlignmentOptions.Center, font, false,
                 out var counterRect, out var counterCreated);
             if (counterCreated)
                 Place(counterRect, anchorMin, anchorMax, Center, new Vector2(0f, -60f), new Vector2(0f, 40f));
@@ -437,12 +446,12 @@ namespace BetterTogether.EditorTools
             background = GetOrAdd<Image>(badge);
             if (created)
             {
-                Place(rect, BottomLeft, BottomLeft, BottomLeft, new Vector2(12f, 12f), new Vector2(180f, 38f));
+                Place(rect, BottomLeft, BottomLeft, BottomLeft, new Vector2(64f, 40f), new Vector2(240f, 44f));
                 background.color = new Color(0.8f, 0.2f, 0.2f, 0.9f);
                 background.raycastTarget = false;
             }
 
-            label = Text(rect, "Label", "MIC OFF   [M]", 20f, Color.white, TextAlignmentOptions.Center, font, false,
+            label = Text(rect, "Label", "Micro apagado · M", 20f, Color.white, TextAlignmentOptions.Center, font, false,
                 out var labelRect, out var labelCreated);
             if (labelCreated)
                 Stretch(labelRect);

@@ -26,8 +26,7 @@ namespace BetterTogether.UI
         private const int MinRoomCodeLength = 3;
         private const string LastRoomKey = "BetterTogether.LastRoom";
 
-        private static readonly Color FallbackErrorColor = new Color(1f, 0.45f, 0.4f);
-        private static Color ErrorColor => UiTheme.Current != null ? UiTheme.Current.hat : FallbackErrorColor;
+        private static Color ErrorColor => UiTheme.Safe.hatDark;
 
         [SerializeField] Button createRoomBTN;
         [SerializeField] Button joinRoomBTN;
@@ -266,7 +265,7 @@ namespace BetterTogether.UI
                 return;
 
             _status.text = message ?? "";
-            _status.color = isError ? ErrorColor : Color.white;
+            _status.color = isError ? ErrorColor : UiTheme.Safe.cream; // sits over the menu illustration
             _status.gameObject.SetActive(!string.IsNullOrEmpty(message));
         }
 

@@ -5,6 +5,8 @@
 //    inputs, toggles, panels, frames, headers, backdrops and TMP texts. Texts typed by the game at runtime keep their colour.
 //  - Targets: MainMenu scene, CampBryan scene (SurveyCanvas only), and the prefabs SettingsPanel, MenuBTN, MatchHUD (only
 //    RoleCard, EndScreen, Waiting, Prompt, StoneOverlay, ControlsHint, MicBadge), StartMatch_Canvas.
+//  - C6.2a: generates Stamp.png / StampFail.png (ring + check / cross), and on the MatchHUD prefab makes the objectives plate
+//    elastic, adds the line stamps and the toast pill, and moves the mic badge into the safe zone (see HudPlateTools).
 //  - Idempotent: a value that already matches is not written, so a second run changes nothing. Prefabs are processed
 //    before the scenes. Scenes that have unsaved changes are skipped. Scene objects that belong to a prefab instance are
 //    left to their prefab. CampIsma and the other people's scenes are never opened.
@@ -40,6 +42,8 @@ namespace BetterTogether.EditorTools
         private const string BackdropSpritePath = UiSpriteFolder + "/BG/MainMenuBG.png";
         private const string KnobSpritePath = UiSpriteFolder + "/Knob.png";
         private const string PillSpritePath = UiSpriteFolder + "/Pill.png";
+        private const string StampSpritePath = UiSpriteFolder + "/Stamp.png";
+        private const string StampFailSpritePath = UiSpriteFolder + "/StampFail.png";
         private const string FontPath = "Assets/_Project/Fonts/LilitaOne/LilitaOne-Regular SDF.asset";
 
         private const int DiscPixels = 64;
@@ -114,6 +118,8 @@ namespace BetterTogether.EditorTools
         {
             GenerateDisc(KnobSpritePath, true);
             GenerateDisc(PillSpritePath, false);
+            GenerateStamp(StampSpritePath, false);
+            GenerateStamp(StampFailSpritePath, true);
             GenerateFrame(FrameSpritePath);
             GenerateNeutralButton(ButtonSpritePath, ButtonTintSpritePath);
 
@@ -123,6 +129,56 @@ namespace BetterTogether.EditorTools
             ConfigureSprite(ButtonTintSpritePath, 24);
             ConfigureSprite(KnobSpritePath, DiscBorder);
             ConfigureSprite(PillSpritePath, DiscBorder);
+            ConfigureSprite(StampSpritePath, 0);
+            ConfigureSprite(StampFailSpritePath, 0);
+        }
+
+        private const int StampPixels = 64;
+        private const float StampRing = 5f;
+        private const float StampGlyphHalfWidth = 3f;
+
+        // Writes a 64 px ink stamp: a ring with a check mark (ink) or a cross (hatDark). Never overwrites an existing file.
+        private static void GenerateStamp(string path, bool cross)
+        {
+            if (File.Exists(path))
+                return;
+
+            var defaults = ScriptableObject.CreateInstance<UiTheme>();
+            var ink = (Color32)(cross ? defaults.hatDark : defaults.ink);
+            Object.DestroyImmediate(defaults);
+
+            // Glyph segments in pixel coordinates (origin bottom-left).
+            var segments = cross
+                ? new[] { (new Vector2(21f, 21f), new Vector2(43f, 43f)), (new Vector2(21f, 43f), new Vector2(43f, 21f)) }
+                : new[] { (new Vector2(18f, 32f), new Vector2(28f, 21f)), (new Vector2(28f, 21f), new Vector2(47f, 43f)) };
+
+            var pixels = new Color32[StampPixels * StampPixels];
+            var center = (StampPixels - 1) * 0.5f;
+            var radius = StampPixels * 0.5f;
+            for (var y = 0; y < StampPixels; y++)
+            {
+                for (var x = 0; x < StampPixels; x++)
+                {
+                    var point = new Vector2(x, y);
+                    var distance = (point - new Vector2(center, center)).magnitude;
+                    var coverage = Mathf.Clamp01(radius - distance) * Mathf.Clamp01(distance - (radius - StampRing));
+                    foreach (var (a, b) in segments)
+                        coverage = Mathf.Max(coverage, Mathf.Clamp01(StampGlyphHalfWidth + 0.5f - SegmentDistance(point, a, b)));
+
+                    var color = ink;
+                    color.a = (byte)Mathf.RoundToInt(coverage * 255f);
+                    pixels[y * StampPixels + x] = color;
+                }
+            }
+
+            WritePng(path, StampPixels, StampPixels, pixels);
+        }
+
+        private static float SegmentDistance(Vector2 point, Vector2 a, Vector2 b)
+        {
+            var ab = b - a;
+            var t = Mathf.Clamp01(Vector2.Dot(point - a, ab) / ab.sqrMagnitude);
+            return (point - (a + ab * t)).magnitude;
         }
 
         private const int FramePixels = 128;
@@ -304,6 +360,8 @@ namespace BetterTogether.EditorTools
             Fill(ref theme.button, ButtonSpritePath, ref dirty);
             Fill(ref theme.knob, KnobSpritePath, ref dirty);
             Fill(ref theme.pill, PillSpritePath, ref dirty);
+            Fill(ref theme.stamp, StampSpritePath, ref dirty);
+            Fill(ref theme.stampFail, StampFailSpritePath, ref dirty);
             Fill(ref theme.backdrop, BackdropSpritePath, ref dirty);
 
             if (theme.titleFont == null)
@@ -386,6 +444,8 @@ namespace BetterTogether.EditorTools
             {
                 var before = _changes;
                 StyleRoots(root.transform, target, onlyParts, false);
+                if (onlyParts != null)
+                    _changes += HudPlateTools.Ensure(root, _theme);
                 if (_changes != before)
                     PrefabUtility.SaveAsPrefabAsset(root, path);
             }
@@ -533,7 +593,7 @@ namespace BetterTogether.EditorTools
                 return;
 
             Count(target, role);
-            var tint = role == UiRole.ButtonConfirm ? _theme.leaf : role == UiRole.ButtonDanger ? _theme.hat : Color.white;
+            var tint = role == UiRole.ButtonConfirm ? _theme.leafDark : role == UiRole.ButtonDanger ? _theme.hatDark : Color.white;
             var image = button.GetComponent<Image>();
             if (image != null)
             {
@@ -675,7 +735,7 @@ namespace BetterTogether.EditorTools
             }
 
             if (toggle.graphic != null)
-                SetColor(toggle.graphic, _theme.leaf);
+                SetColor(toggle.graphic, _theme.leafDark);
         }
 
         // ---- Plain images (panels, frames, headers, backdrops)
@@ -705,7 +765,7 @@ namespace BetterTogether.EditorTools
             if (t.name == "Prompt")
             {
                 SetSprite(image, _theme.pill, Image.Type.Sliced);
-                SetColor(image, WithAlpha(_theme.shade, 0.8f));
+                SetColor(image, _theme.night80);
                 return;
             }
 

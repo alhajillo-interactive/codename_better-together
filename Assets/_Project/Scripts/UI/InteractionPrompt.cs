@@ -28,12 +28,10 @@ namespace BetterTogether.UI
         [SerializeField] private TMP_Text _watchedWarning;
 
         [Header("Style")]
-        [Tooltip("Colour of the prompt text.")]
-        [SerializeField] private Color _textColor = Color.white;
         [Tooltip("Colour of the crosshair dot.")]
-        [SerializeField] private Color _crosshairColor = new(1f, 1f, 1f, 0.8f);
+        [SerializeField] private Color _crosshairColor = new(1f, 1f, 1f, 0.8f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
         [Tooltip("Colour of the 'the camper is looking at you' warning.")]
-        [SerializeField] private Color _watchedColor = new(1f, 0.25f, 0.2f);
+        [SerializeField] private Color _watchedColor = new(1f, 0.25f, 0.2f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
 
         [Header("Behaviour")]
         [Tooltip("Seconds between prompt re-evaluations. The text is built from strings, so it is not rebuilt every frame.")]
@@ -68,7 +66,7 @@ namespace BetterTogether.UI
 
             _crosshair.color = _crosshairColor;
             _crosshair.enabled = false;
-            _promptText.color = _textColor;
+            _promptText.color = UiTheme.Safe.cream; // cream on the dark pill (night80)
             _watchedWarning.color = _watchedColor;
             _promptRoot.SetActive(false);
             _watchedWarning.gameObject.SetActive(false);
@@ -87,6 +85,16 @@ namespace BetterTogether.UI
             }
 
             HudSupport.SetEnabled(_crosshair, true);
+
+            // Channel A: one thing in the centre. A petrified gnome sees the break-free widget only, so no prompt.
+            if (Petrifiable.Local is { IsStone: true })
+            {
+                HudSupport.SetActive(_promptRoot, false);
+                HudSupport.SetActive(_watchedWarning.gameObject, false);
+                _shownText = null;
+                _nextRefresh = 0f;
+                return;
+            }
 
             // Tells a gnome the camper is looking at it, so it knows why it can't move.
             var watched = Petrifiable.Local != null && Petrifiable.Local.IsWatched;
