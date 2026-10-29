@@ -152,6 +152,8 @@ namespace BetterTogether.UI
                 var session = sessions[i];
                 if (session == null || !session.IsValid || !session.IsVisible || !session.IsOpen)
                     continue;
+                if (session.Properties == null || !session.Properties.ContainsKey(ConnectionManager.PublicKey))
+                    continue;
 
                 var row = GetRow(shown++);
                 var full = session.PlayerCount >= session.MaxPlayers;
