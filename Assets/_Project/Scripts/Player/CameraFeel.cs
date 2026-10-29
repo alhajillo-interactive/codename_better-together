@@ -46,7 +46,7 @@ namespace BetterTogether.Player
 
         [Header("Landing")]
         [Tooltip("Minimum fall height (m) that causes a landing bump.")]
-        [SerializeField, Min(0.01f)] private float _landingMinDrop = 0.4f;
+        [SerializeField, Min(0.01f)] private float _landingMinDrop = 0.6f;
         [Tooltip("Downward camera bump (m) at the minimum fall height; it grows with the fall height.")]
         [SerializeField, Min(0f)] private float _landingPunch = 0.04f;
         [Tooltip("Cap of the landing bump, as a multiple of the base bump.")]
@@ -119,7 +119,8 @@ namespace BetterTogether.Player
             SampleSpeed(dt);
             var moving = _speed > _moveSpeedThreshold && !_movement.IsRiding;
             var crouching = _movement.IsCrouching;
-            var grounded = _controller == null || _controller.isGrounded;
+            // A rider's controller is off: treat the ride as grounded so leaving the tower is not a fall.
+            var grounded = _controller == null || _controller.isGrounded || _movement.IsRiding;
             if (_sprint == null && InputSystem.actions != null)
                 _sprint = InputSystem.actions.FindAction("Player/Sprint");
             var sprinting = moving && !crouching && _sprint != null && _sprint.IsPressed();
@@ -179,7 +180,7 @@ namespace BetterTogether.Player
             var focus = CameraFocus.Instance;
             var eased = _sprintBlend * _sprintBlend * (3f - 2f * _sprintBlend);
             var bonus = _sprintFovBonus * eased * (1f - (focus != null ? focus.Amount : 0f));
-            if (focus != null)
+            if (focus != null && focus.isActiveAndEnabled)
                 _punch.BaseFieldOfView += bonus;
             else
                 _punch.BaseFieldOfView = _normalFov + bonus;

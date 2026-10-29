@@ -40,6 +40,9 @@ namespace BetterTogether.EditorTools
                 {
                     foreach (var camera in root.GetComponentsInChildren<CinemachineCamera>(true))
                     {
+                        // Only gameplay cameras: menu cameras have no FirstPersonCamera.
+                        if (camera.GetComponent<BetterTogether.Player.FirstPersonCamera>() == null)
+                            continue;
                         Setup(camera, camper, gnome);
                         EditorSceneManager.MarkSceneDirty(scene);
                         cameras++;
