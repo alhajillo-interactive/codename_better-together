@@ -419,6 +419,10 @@ namespace BetterTogether.Interaction
             if (IsPinned && Runner.TryFindBehaviour(PinOwnerId, out NetworkBehaviour owner) && owner is FireplaceManager)
                 return false;
 
+            // Spots can forbid taking their items directly (hiding spots give them back only when searched).
+            if (IsPinned && Runner.TryFindBehaviour(PinOwnerId, out NetworkBehaviour pinOwner) && pinOwner is IPinSpot { AllowsTakeFromPin: false })
+                return false;
+
             return HolderCount == 0
                 || (HeldByGnomes && interactor.Role == PlayerRole.Gnome && HolderCount < _gnomesRequired);
         }
