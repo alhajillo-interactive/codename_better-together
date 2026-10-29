@@ -162,6 +162,7 @@ namespace BetterTogether.Player
         [Networked] private NetworkBool Crouching { get; set; }
 
         private PlayerInteractor _interactor;
+        private CamperKick _camperKick;
         private Carryable _heldItem;
 
         private void Awake()
@@ -172,6 +173,7 @@ namespace BetterTogether.Player
             _petrifiable = GetComponent<Petrifiable>();
             TryGetComponent(out _stack);
             TryGetComponent(out _interactor);
+            TryGetComponent(out _camperKick);
             _standHeight = _controller.height;
             _standRadius = _controller.radius;
             _standCenter = _controller.center;
@@ -814,6 +816,8 @@ namespace BetterTogether.Player
         private void RPC_PlayKickAnimation()
         {
             _kickSwingSfx.PlayAt(transform.position);
+            if (_camperKick != null)
+                _camperKick.NotifyDecoys();
             if (!CanAnimate)
                 return;
 

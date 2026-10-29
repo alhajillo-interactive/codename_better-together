@@ -208,6 +208,10 @@ namespace BetterTogether.Combat
             }
         }
 
+        /// <summary>Every client, from the kick animation: garden-gnome decoys inside this kick's cone wobble.</summary>
+        public void NotifyDecoys() =>
+            BetterTogether.Environment.GardenGnomeDecoy.NotifyKick(transform.position, Flat(transform.forward), _range, _halfAngle);
+
         private static Vector3 Flat(Vector3 v) => new(v.x, 0f, v.z);
 
         private void OnDrawGizmosSelected()
