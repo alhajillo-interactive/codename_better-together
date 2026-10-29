@@ -33,7 +33,7 @@ namespace BetterTogether.Networking
         [SerializeField, Min(1f)] private float _connectTimeout = 15f;
 
         /// <summary>Session property that marks a room as public (also the filter used by quick join).</summary>
-        private const string PublicKey = "pub";
+        public const string PublicKey = "pub";
 
         /// <summary>Session property with the room state: <see cref="PhaseLobby"/> or <see cref="PhaseGame"/>.</summary>
         public const string PhaseKey = "fase";
@@ -51,7 +51,8 @@ namespace BetterTogether.Networking
         // Lobby browsing runner (separate from the game runner; shut down before entering a room).
         private NetworkRunner _browseRunner;
         private SessionListListener _browseListener;
-        private bool _browseStarting;
+        private Task<bool> _browseTask;
+        private ShutdownReason _lastFailure;
 
         // Matchmaking telemetry waits for the match file to open (the menu has no file), then is sent once.
         private string _pendingMode;
@@ -126,7 +127,12 @@ namespace BetterTogether.Networking
         /// <summary>Creates a visible room with a readable random name.</summary>
         public Task<bool> CreatePublic()
         {
-            return StartSession("public", $"Campamento {UnityEngine.Random.Range(1000, 10000)}", true, PublicProps(PhaseLobby));
+            return CreatePublicAs("public");
+        }
+
+        private Task<bool> CreatePublicAs(string mode)
+        {
+            return StartSession(mode, $"Campamento {UnityEngine.Random.Range(1000, 10000)}", true, PublicProps(PhaseLobby));
         }
 
         /// <summary>Joins a room picked from <see cref="Sessions"/>.</summary>
@@ -151,9 +157,16 @@ namespace BetterTogether.Networking
         /// Joins any open public room with space (Fusion random matching, filtered by the public property); creates a
         /// new public room if there is none.
         /// </summary>
-        public Task<bool> QuickJoin()
+        public async Task<bool> QuickJoin()
         {
-            return StartSession("quick", null, true, new Dictionary<string, SessionProperty> { [PublicKey] = 1 });
+            // Join only (no automatic creation, which would give the room a random non-readable name).
+            var joined = await StartSession("quick", null, true, new Dictionary<string, SessionProperty> { [PublicKey] = 1 }, false);
+            if (joined || _lastFailure != ShutdownReason.GameNotFound)
+                return joined;
+
+            // No public room with space: create one with a readable name.
+            LastError = null;
+            return await CreatePublicAs("quick");
         }
 
         private static Dictionary<string, SessionProperty> PublicProps(string phase)
@@ -161,8 +174,10 @@ namespace BetterTogether.Networking
             return new Dictionary<string, SessionProperty> { [PublicKey] = 1, [PhaseKey] = phase };
         }
 
-        private async Task<bool> StartSession(string mode, string sessionName, bool visible, Dictionary<string, SessionProperty> properties)
+        private async Task<bool> StartSession(string mode, string sessionName, bool visible, Dictionary<string, SessionProperty> properties,
+            bool allowCreate = true)
         {
+            _lastFailure = ShutdownReason.Ok;
             if (IsConnecting || IsConnected || _leaving)
                 return false;
 
@@ -202,6 +217,7 @@ namespace BetterTogether.Networking
                 IsVisible = visible,
                 IsOpen = true,
                 SessionProperties = properties,
+                EnableClientSessionCreation = allowCreate,
                 PlayerCount = MaxPlayers,
                 Scene = sceneInfo,
                 SceneManager = sceneManager,
@@ -225,6 +241,7 @@ namespace BetterTogether.Networking
             if (!result.Ok)
             {
                 Debug.LogError($"[ConnectionManager] Failed to start: {result.ShutdownReason}");
+                _lastFailure = result.ShutdownReason;
                 LastError = result.ShutdownReason switch
                 {
                     ShutdownReason.GameIsFull => "La sala está llena",
@@ -297,10 +314,28 @@ namespace BetterTogether.Networking
         /// </summary>
         public async Task<bool> StartBrowsing()
         {
-            if (_browseRunner != null || _browseStarting || IsConnecting || IsConnected || _leaving)
-                return IsBrowsing;
+            // A start already in flight (e.g. Close then Open quickly): wait for it, then decide again.
+            while (_browseTask != null)
+                await _browseTask;
 
-            _browseStarting = true;
+            if (_browseRunner != null)
+                return true;
+            if (IsConnecting || IsConnected || _leaving)
+                return false;
+
+            _browseTask = BrowseCore();
+            try
+            {
+                return await _browseTask;
+            }
+            finally
+            {
+                _browseTask = null;
+            }
+        }
+
+        private async Task<bool> BrowseCore()
+        {
             LastError = null;
 
             var runnerObject = new GameObject("SessionBrowser");
@@ -314,7 +349,6 @@ namespace BetterTogether.Networking
 
             var joinTask = runner.JoinSessionLobby(SessionLobby.Shared);
             var finished = await Task.WhenAny(joinTask, Task.Delay(Mathf.RoundToInt(_connectTimeout * 1000f)));
-            _browseStarting = false;
 
             var ok = false;
             if (finished == joinTask)
@@ -329,12 +363,9 @@ namespace BetterTogether.Networking
                 _ = joinTask.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
             }
 
-            // Stopped while connecting (the menu closed or a room was joined): nothing left to keep.
+            // StopBrowsing ran while connecting: it already took this runner and shuts it down; never shut it down twice.
             if (_browseRunner != runner)
-            {
-                await ShutdownBrowseRunner(runner, listener);
                 return false;
-            }
 
             if (!ok)
             {
@@ -363,6 +394,7 @@ namespace BetterTogether.Networking
             if (listener != null)
                 listener.Updated -= OnBrowseListUpdated;
 
+            // `runner` is a UnityEngine.Object: the comparison is false once its GameObject was destroyed.
             if (runner != null)
                 await runner.Shutdown(); // Also destroys the runner's GameObject.
         }
