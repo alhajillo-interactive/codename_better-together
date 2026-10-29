@@ -1315,6 +1315,15 @@ MonoBehaviour:
   - {x: 9.75, y: -1, z: 32}
   - {x: 7.5, y: -1, z: 36}
   _fillRange: 1.5
+  _volumes:
+  - {fileID: 4963555192304156670}
+  - {fileID: 4963555192304156669}
+  - {fileID: 4963555192304156668}
+  - {fileID: 4963555192304156667}
+  - {fileID: 4963555192304156666}
+  - {fileID: 4963555192304156665}
+  - {fileID: 4963555192304156664}
+  _maxHeightAboveWater: 2
 --- !u!4 &1696582895
 Transform:
   m_ObjectHideFlags: 0
@@ -2071,6 +2080,41 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 7f875925aabf212f88518e4009d57f4d, type: 3}
+--- !u!64 &4963555192304156664 stripped
+MeshCollider:
+  m_CorrespondingSourceObject: {fileID: 1547793167025372993, guid: 7f875925aabf212f88518e4009d57f4d, type: 3}
+  m_PrefabInstance: {fileID: 4963555192304156663}
+  m_PrefabAsset: {fileID: 0}
+--- !u!64 &4963555192304156665 stripped
+MeshCollider:
+  m_CorrespondingSourceObject: {fileID: 1398397764660557397, guid: 7f875925aabf212f88518e4009d57f4d, type: 3}
+  m_PrefabInstance: {fileID: 4963555192304156663}
+  m_PrefabAsset: {fileID: 0}
+--- !u!64 &4963555192304156666 stripped
+MeshCollider:
+  m_CorrespondingSourceObject: {fileID: 9118776369519722507, guid: 7f875925aabf212f88518e4009d57f4d, type: 3}
+  m_PrefabInstance: {fileID: 4963555192304156663}
+  m_PrefabAsset: {fileID: 0}
+--- !u!64 &4963555192304156667 stripped
+MeshCollider:
+  m_CorrespondingSourceObject: {fileID: 302136994595585942, guid: 7f875925aabf212f88518e4009d57f4d, type: 3}
+  m_PrefabInstance: {fileID: 4963555192304156663}
+  m_PrefabAsset: {fileID: 0}
+--- !u!64 &4963555192304156668 stripped
+MeshCollider:
+  m_CorrespondingSourceObject: {fileID: 4522193073573100851, guid: 7f875925aabf212f88518e4009d57f4d, type: 3}
+  m_PrefabInstance: {fileID: 4963555192304156663}
+  m_PrefabAsset: {fileID: 0}
+--- !u!64 &4963555192304156669 stripped
+MeshCollider:
+  m_CorrespondingSourceObject: {fileID: 8691608439595907263, guid: 7f875925aabf212f88518e4009d57f4d, type: 3}
+  m_PrefabInstance: {fileID: 4963555192304156663}
+  m_PrefabAsset: {fileID: 0}
+--- !u!64 &4963555192304156670 stripped
+MeshCollider:
+  m_CorrespondingSourceObject: {fileID: 6335901546004917241, guid: 7f875925aabf212f88518e4009d57f4d, type: 3}
+  m_PrefabInstance: {fileID: 4963555192304156663}
+  m_PrefabAsset: {fileID: 0}
 --- !u!4 &5082513833886728665
 Transform:
   m_ObjectHideFlags: 0
