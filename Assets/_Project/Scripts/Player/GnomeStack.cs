@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using BetterTogether.Audio;
 using BetterTogether.Combat;
+using BetterTogether.Diagnostics;
+using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
 using Fusion;
@@ -74,6 +76,7 @@ namespace BetterTogether.Player
         private PlayerCharacter _character;
         private PlayerInteractor _interactor;
         private Kickable _kickable;
+        private Petrifiable _petrifiable;
         private CharacterController _controller;
         private InputAction _attack;
         private InputAction _jump;
@@ -89,6 +92,7 @@ namespace BetterTogether.Player
         private bool _climbing;
         private bool _mountHadMount;
         private bool _isSpawned;
+        private bool _wasTowerFrozen;
 
         [Networked] private GnomeStack MountRef { get; set; }
 
@@ -109,6 +113,27 @@ namespace BetterTogether.Player
         }
 
         public bool IsRiding => Mount != null;
+
+        /// <summary>
+        /// True while any gnome below this one in the tower is stone. Derived on every peer from the mounts and the
+        /// stone flag that each gnome's own authority replicates, so it needs no state or RPC of its own.
+        /// </summary>
+        public bool IsTowerFrozen
+        {
+            get
+            {
+                var current = Mount;
+                for (var i = 0; i <= _maxTowerHeight && current != null; i++)
+                {
+                    if (current._petrifiable != null && current._petrifiable.IsStone)
+                        return true;
+
+                    current = current.Mount;
+                }
+
+                return false;
+            }
+        }
 
         /// <summary>The interactor that carries things for this gnome.</summary>
         public PlayerInteractor Interactor => _interactor;
@@ -223,6 +248,7 @@ namespace BetterTogether.Player
             _character = GetComponent<PlayerCharacter>();
             _interactor = GetComponent<PlayerInteractor>();
             _kickable = GetComponent<Kickable>();
+            _petrifiable = GetComponent<Petrifiable>();
             _controller = GetComponent<CharacterController>();
         }
 
@@ -260,7 +286,7 @@ namespace BetterTogether.Player
             UpdateAim();
 
             // The hop itself runs in LateUpdate, after PlayerMovement.Update has seen (and ignored) this same press.
-            if (IsRiding && _jump != null && _jump.WasPressedThisFrame() && !_movement.IsFrozen)
+            if (IsRiding && _jump != null && _jump.WasPressedThisFrame() && !_movement.IsFrozen && !IsTowerFrozen)
                 _dismountRequested = true;
 
             // Holding something while next to another gnome in a tower: the clicks pass it on (climbing needs empty hands).
@@ -275,7 +301,7 @@ namespace BetterTogether.Player
         // Attack passes the item to the rider above, Focus (right click) to the mount below.
         private bool TryHandOff()
         {
-            if (_interactor == null || Time.time < _nextHandOffTime || Cursor.lockState != CursorLockMode.Locked)
+            if (_interactor == null || Time.time < _nextHandOffTime || Cursor.lockState != CursorLockMode.Locked || IsTowerFrozen)
                 return false;
 
             var carried = _interactor.Carried;
@@ -308,6 +334,11 @@ namespace BetterTogether.Player
                 return;
 
             _movement.LoadMultiplier = Mathf.Pow(_speedPerRider, RidersAbove);
+
+            var towerFrozen = IsTowerFrozen;
+            if (towerFrozen && !_wasTowerFrozen && Telemetry.Enabled)
+                Telemetry.Begin("tower_frozen").Int("height", TowerHeight).Send();
+            _wasTowerFrozen = towerFrozen;
 
             if (_movement.IsRiding || MountRef != null)
                 TickRiding();
@@ -380,7 +411,7 @@ namespace BetterTogether.Player
             if (_dismountRequested)
             {
                 _dismountRequested = false;
-                if (Local == this && IsRiding)
+                if (Local == this && IsRiding && !IsTowerFrozen)
                     Dismount();
             }
 
@@ -536,6 +567,8 @@ namespace BetterTogether.Player
 
             if (_movement.IsFrozen)
                 reason = "Estás petrificado";
+            else if (TowerHasStone(aimed))
+                reason = "La torre está petrificada";
             else if (_movement.IsStunned)
                 reason = "Estás aturdido";
             else if (_movement.IsCrouching)
@@ -637,6 +670,21 @@ namespace BetterTogether.Player
             for (var i = 0; i <= gnome._maxTowerHeight + 1 && current != null; i++)
             {
                 if (current._movement.IsCrouching)
+                    return true;
+
+                current = current.Mount;
+            }
+
+            return false;
+        }
+
+        // A frozen tower can't take more riders: someone in it, from its top down, is stone.
+        private static bool TowerHasStone(GnomeStack gnome)
+        {
+            var current = gnome.Top;
+            for (var i = 0; i <= gnome._maxTowerHeight + 1 && current != null; i++)
+            {
+                if (current._petrifiable != null && current._petrifiable.IsStone)
                     return true;
 
                 current = current.Mount;
