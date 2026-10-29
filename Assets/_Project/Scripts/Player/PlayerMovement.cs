@@ -25,13 +25,15 @@ namespace BetterTogether.Player
         [Tooltip("Camper: CharacterController height while crouched (m, world units).")]
         [SerializeField, Min(0.1f)] private float _camperCrouchHeight = 1f;
         [Tooltip("Gnome: CharacterController height while crouched (m, world units). Must fit under the 0.3 m gaps.")]
-        [SerializeField, Min(0.1f)] private float _gnomeCrouchHeight = 0.28f;
+        [SerializeField, Min(0.1f)] private float _gnomeCrouchHeight = 0.22f;
         [Tooltip("Camper: walk speed multiplier while crouched.")]
         [SerializeField, Range(0.1f, 1f)] private float _camperCrouchSpeed = 0.5f;
         [Tooltip("Gnome: walk speed multiplier while crouched.")]
         [SerializeField, Range(0.1f, 1f)] private float _gnomeCrouchSpeed = 0.6f;
-        [Tooltip("Camper: eye height above the feet while crouched (m). The gnome's eye drops in proportion to its body height.")]
-        [SerializeField, Min(0.1f)] private float _camperCrouchEyeHeight = 0.9f;
+        [Tooltip("Camper: eye height above the feet while crouched (m, world units).")]
+        [SerializeField, Min(0.05f)] private float _camperCrouchEyeHeight = 0.9f;
+        [Tooltip("Gnome: eye height above the feet while crouched (m, world units).")]
+        [SerializeField, Min(0.05f)] private float _gnomeCrouchEyeHeight = 0.18f;
         [Tooltip("Layers that block standing up. Camper: Environment + GnomeOnly. Gnome: Environment. Empty = chosen by role in Awake.")]
         [SerializeField] private LayerMask _standUpMask;
         [Header("Animation")]
@@ -68,6 +70,8 @@ namespace BetterTogether.Player
         private bool _appliedCrouch;
         private bool _hasCrouchParameter;
         private float _crouchStartTime;
+        private readonly Collider[] _standUpHits = new Collider[8];
+        private int _standUpPlayersMask;
 
         private static readonly int MovementParameter = Animator.StringToHash("Movement");
         private static readonly int JumpParameter = Animator.StringToHash("IsJump");
@@ -97,6 +101,7 @@ namespace BetterTogether.Player
                 _standUpMask = _petrifiable != null
                     ? LayerMask.GetMask("Environment")
                     : LayerMask.GetMask("Environment", "GnomeOnly");
+            _standUpPlayersMask = LayerMask.GetMask("Player", "Gnome");
             if (_animator == null)
                 _animator = FindUsableAnimator();
         }
@@ -128,14 +133,12 @@ namespace BetterTogether.Player
 
         /// <summary>
         /// How far the eye drops below its standing height while crouched, given the standing eye height above the feet.
-        /// The camper goes to a fixed eye height; the gnome shrinks in proportion to its body.
+        /// Both roles go to a serialized absolute eye height (world units).
         /// </summary>
         public float CrouchEyeDrop(float standingEyeHeight)
         {
-            var drop = _petrifiable != null
-                ? standingEyeHeight * (1f - _gnomeCrouchHeight / _standHeight)
-                : standingEyeHeight - _camperCrouchEyeHeight;
-            return Mathf.Max(0f, drop);
+            var crouchedEye = _petrifiable != null ? _gnomeCrouchEyeHeight : _camperCrouchEyeHeight;
+            return Mathf.Max(0f, standingEyeHeight - crouchedEye);
         }
 
         private float CrouchHeight => _petrifiable != null ? _gnomeCrouchHeight : _camperCrouchHeight;
@@ -172,26 +175,41 @@ namespace BetterTogether.Player
             _controller.center = center;
         }
 
-        // Owner only: whether the standing capsule fits at the current spot.
+        // Owner only: whether the standing capsule fits at the current spot (environment and other players).
         private bool CanStandUp()
         {
-            var scale = Mathf.Max(0.01f, Mathf.Abs(transform.lossyScale.y));
-            var radius = Mathf.Max(0.01f, _standRadius * scale - 0.02f);
-            var feet = transform.position + transform.rotation * Vector3.Scale(_standCenter, transform.lossyScale) -
-                Vector3.up * (_standHeight * 0.5f * scale);
+            var lossy = transform.lossyScale;
+            var scaleY = Mathf.Max(0.01f, Mathf.Abs(lossy.y));
+            var scaleXZ = Mathf.Max(0.01f, Mathf.Max(Mathf.Abs(lossy.x), Mathf.Abs(lossy.z)));
+            var radius = Mathf.Max(0.01f, _standRadius * scaleXZ - 0.02f);
+            var feet = transform.position + transform.rotation * Vector3.Scale(_standCenter, lossy) -
+                Vector3.up * (_standHeight * 0.5f * scaleY);
             var bottom = feet + Vector3.up * (radius + _controller.skinWidth + 0.01f);
-            var top = feet + Vector3.up * (_standHeight * scale - radius);
+            var top = feet + Vector3.up * (_standHeight * scaleY - radius);
             if (top.y < bottom.y)
                 top.y = bottom.y;
-            return !Physics.CheckCapsule(bottom, top, radius, _standUpMask, QueryTriggerInteraction.Ignore);
+
+            var count = Physics.OverlapCapsuleNonAlloc(bottom, top, radius, _standUpHits, _standUpMask | _standUpPlayersMask,
+                QueryTriggerInteraction.Ignore);
+            for (var i = 0; i < count; i++)
+            {
+                if (_standUpHits[i] != _controller)
+                    return false;
+            }
+
+            return true;
         }
 
         // Owner only, in FixedUpdateNetwork: hold Crouch to crouch; on release stand only if there is room.
         private void TickCrouch(bool blocked)
         {
-            var wants = !blocked && _crouch != null && _crouch.IsPressed();
             var crouching = Crouching;
-            if (!crouching && wants && (_stack == null || (!_stack.IsRiding && _stack.RidersAbove == 0)))
+            var hasRiders = _stack != null && _stack.RidersAbove > 0;
+            // Blocked (stunned, frozen, match locked) keeps the current state, so a statue doesn't stand up by itself.
+            var wants = blocked ? crouching : _crouch != null && _crouch.IsPressed();
+            if (hasRiders)
+                wants = false;
+            if (!crouching && wants && (_stack == null || !_stack.IsRiding))
             {
                 Crouching = true;
                 _crouchStartTime = Time.time;
