@@ -71,6 +71,9 @@ namespace BetterTogether.Fireplace
 
         private Carryable _carryable;
         private bool _isSpawned;
+        // Authority-local (never networked): whether the bucket had a holder on the previous tick. Starts false after a master migration.
+        private bool _hadHolder;
+        private bool _wasAuthority;
         // Presentation only (never networked).
         private Tween _riseTween;
         private float _waterRise = 1f;
@@ -111,6 +114,8 @@ namespace BetterTogether.Fireplace
         public override void Spawned()
         {
             _isSpawned = true;
+            _hadHolder = false;
+            _wasAuthority = false;
             _hasLast = false;
             _pourAngle = 0f;
             _pourSeen = 0f;
@@ -123,6 +128,37 @@ namespace BetterTogether.Fireplace
         {
             _isSpawned = false;
             _riseTween.Stop();
+        }
+
+        /// <summary>
+        /// Authority only: a full bucket that loses its holder (released, kicked, too far, player left, moved or placed in a
+        /// hiding spot) spills. If a pour or kick already emptied it this tick, <see cref="Full"/> is false and nothing repeats.
+        /// Late joiner: sees the state only. Master change: the new authority starts with no holder remembered, so it never spills extra.
+        /// </summary>
+        public override void FixedUpdateNetwork()
+        {
+            if (!HasStateAuthority)
+            {
+                _wasAuthority = false;
+                _hadHolder = false;
+                return;
+            }
+
+            bool held = _carryable.HolderCount > 0;
+            if (!_wasAuthority)
+            {
+                _wasAuthority = true;
+                _hadHolder = held;
+                return;
+            }
+
+            if (_hadHolder && !held && Full)
+            {
+                Full = false;
+                if (Telemetry.Enabled) Telemetry.Begin("bucket_spill").Str("reason", _carryable.IsPinned ? "placed" : "released").Send();
+            }
+
+            _hadHolder = held;
         }
 
         /// <summary>Authority only: the bucket is empty again at the start of a match.</summary>
