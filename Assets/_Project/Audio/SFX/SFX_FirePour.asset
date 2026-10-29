@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fd77393abf6441459fe19769897749e8, type: 3}
+  m_Name: SFX_FirePour
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Audio.SoundCue
+  Sound: {fileID: 8300000, guid: d15975104e2a86d4b8d8d457fcdc434f, type: 3}
+  Variations: []
+  Volume: 0.5
+  PitchRange: {x: 1.3, y: 1.5}
+  Spatial: 1
+  MaxDistance: 15
+  MinInterval: 0.05
