@@ -41,12 +41,11 @@ namespace BetterTogether.UI
         [Header("Behaviour")]
         [Tooltip("Seconds after the end screen appears before the survey is shown.")]
         [Min(0f)] [SerializeField] private float _showDelay = 1.5f;
-        [Tooltip("Tint of the answer that is currently selected.")]
-        [SerializeField] private Color _selectedColor = new(0.35f, 0.75f, 0.35f, 1f);
         [Tooltip("Tint of the answers that are not selected.")]
         [SerializeField] private Color _idleColor = new(1f, 1f, 1f, 1f);
 
-        private Color SelectedColor => UiTheme.Current != null ? UiTheme.Current.leaf : _selectedColor;
+        // Chosen option tint: leafDark from the theme (semantic: confirm).
+        private Color SelectedColor => UiTheme.Safe.leafDark;
 
         private bool _valid;
         private bool _open;

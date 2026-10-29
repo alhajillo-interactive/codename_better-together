@@ -28,8 +28,6 @@ namespace BetterTogether.UI
         [SerializeField] private TMP_Text _watchedWarning;
 
         [Header("Style")]
-        [Tooltip("Colour of the prompt text.")]
-        [SerializeField] private Color _textColor = Color.white;
         [Tooltip("Colour of the crosshair dot.")]
         [SerializeField] private Color _crosshairColor = new(1f, 1f, 1f, 0.8f);
         [Tooltip("Colour of the 'the camper is looking at you' warning.")]
@@ -68,7 +66,7 @@ namespace BetterTogether.UI
 
             _crosshair.color = _crosshairColor;
             _crosshair.enabled = false;
-            _promptText.color = _textColor;
+            _promptText.color = UiTheme.Safe.cream; // cream on the dark pill (night80)
             _watchedWarning.color = _watchedColor;
             _promptRoot.SetActive(false);
             _watchedWarning.gameObject.SetActive(false);
@@ -87,6 +85,16 @@ namespace BetterTogether.UI
             }
 
             HudSupport.SetEnabled(_crosshair, true);
+
+            // Channel A: one thing in the centre. A petrified gnome sees the break-free widget only, so no prompt.
+            if (Petrifiable.Local is { IsStone: true })
+            {
+                HudSupport.SetActive(_promptRoot, false);
+                HudSupport.SetActive(_watchedWarning.gameObject, false);
+                _shownText = null;
+                _nextRefresh = 0f;
+                return;
+            }
 
             // Tells a gnome the camper is looking at it, so it knows why it can't move.
             var watched = Petrifiable.Local != null && Petrifiable.Local.IsWatched;

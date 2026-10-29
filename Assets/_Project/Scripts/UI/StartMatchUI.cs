@@ -1,6 +1,7 @@
 using BetterTogether.Match;
 using BetterTogether.Networking;
 using BetterTogether.Player;
+using BetterTogether.UI;
 using Fusion;
 using TMPro;
 using UnityEngine;
@@ -44,9 +45,10 @@ public class StartMatchUI : MonoBehaviour
     [Min(0.1f)] [SerializeField] float copiedSeconds = 1.5f;
 
     const int MaxRows = 16;
-    const string CamperColor = "#FFB84D";
-    const string ReadyColor = "#7CE38B";
-    const string WaitColor = "#9AA0A6";
+    // Rich-text colours come from the theme (cached strings); the rows sit over the dark lobby backdrop.
+    static string CamperColor => UiTheme.Hex(UiTheme.Safe.roleCamper);
+    static string ReadyColor => UiTheme.Hex(UiTheme.Safe.leafDark);
+    static string WaitColor => UiTheme.Hex(UiTheme.WithAlpha(UiTheme.Safe.cream, 0.7f));
 
     readonly PlayerCharacter[] _order = new PlayerCharacter[MaxRows];
     readonly int[] _orderIds = new int[MaxRows];
@@ -202,7 +204,7 @@ public class StartMatchUI : MonoBehaviour
                 character.DisplayName,
                 isLocal ? " (tú)" : "",
                 isCamper ? $"   <color={CamperColor}>CAMPISTA</color>" : "",
-                ready ? $"   <color={ReadyColor}>LISTO</color>" : $"   <color={WaitColor}>esperando</color>");
+                ready ? $"   <color={ReadyColor}>✓ LISTO</color>" : $"   <color={WaitColor}>esperando</color>");
         }
 
         if (playerRows != null)

@@ -21,7 +21,7 @@ namespace BetterTogether.UI
         [SerializeField] private GameObject _stoneRoot;
         [Tooltip("Title of the petrified overlay; it shakes on every key press.")]
         [SerializeField] private TMP_Text _stoneTitle;
-        [Tooltip("Press counter of the petrified overlay, 'presses/required'.")]
+        [Tooltip("Press counter of the petrified overlay. Kept wired but hidden: the title and the bar carry the message (plan v2, channel A).")]
         [SerializeField] private TMP_Text _stoneCounter;
         [Tooltip("Stretched child of the break-free bar background; its right anchor is the progress.")]
         [SerializeField] private RectTransform _stoneBarFill;
@@ -86,7 +86,6 @@ namespace BetterTogether.UI
         private Vector2 _lastCanvasSize;
         private float _lastConeHalfAngle = -1f;
         private float _lastConeFov = -1f;
-        private int _lastCounterKey = -1;
         private float _lastBreakFill = -1f;
         private float _lastStaminaFill = -1f;
         private float _lastThreshold = -1f;
@@ -132,6 +131,7 @@ namespace BetterTogether.UI
             _focusVignette.enabled = false;
             _coneVignette.enabled = false;
             _stoneRoot.SetActive(false);
+            _stoneCounter.gameObject.SetActive(false);
             _staminaRoot.SetActive(false);
             _exhaustedLabel.gameObject.SetActive(false);
             _hintLabel.gameObject.SetActive(false);
@@ -232,7 +232,6 @@ namespace BetterTogether.UI
                 _gnomeVignette.color = color;
                 HudSupport.SetEnabled(_gnomeVignette, color.a > 0.001f);
                 HudSupport.SetActive(_stoneRoot, false);
-                _lastCounterKey = -1;
                 return;
             }
 
@@ -244,16 +243,6 @@ namespace BetterTogether.UI
 
         private void UpdateBreakFree(Petrifiable gnome)
         {
-            var presses = Mathf.FloorToInt(gnome.BreakProgress);
-            var required = Mathf.CeilToInt(gnome.RequiredPresses);
-            var key = presses * 10000 + required;
-            if (key != _lastCounterKey)
-            {
-                _lastCounterKey = key;
-                // TMP formats numbers as floats, so the format asks for zero decimals; no string is allocated.
-                _stoneCounter.SetText("{0:0}/{1:0}", presses, required);
-            }
-
             var fill = gnome.BreakFraction;
             if (!Mathf.Approximately(fill, _lastBreakFill))
             {
