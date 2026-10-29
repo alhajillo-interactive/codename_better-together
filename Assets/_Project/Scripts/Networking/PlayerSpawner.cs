@@ -118,7 +118,7 @@ namespace BetterTogether.Networking
         public void RespawnLocal(PlayerRole role)
         {
             var (position, rotation) = GetMatchSpawnPose(Runner.LocalPlayer, role);
-            var current = PlayerCharacter.Local;
+            var current = FindLocalCharacter();
             if (current != null && current.Role == role)
             {
                 if (current.TryGetComponent<PlayerMovement>(out var movement))
@@ -139,9 +139,20 @@ namespace BetterTogether.Networking
             Replace(current, role, currentTransform.position, currentTransform.rotation);
         }
 
+        // PlayerCharacter.Local is static, so with several peers in one process (multi-peer tests) it belongs to whichever
+        // spawned last. Ask this runner's own characters instead.
+        private PlayerCharacter FindLocalCharacter()
+        {
+            foreach (var character in PlayerCharacter.All)
+                if (character != null && character.Runner == Runner && character.HasStateAuthority)
+                    return character;
+
+            return null;
+        }
+
         private void SpawnLocalIfMissing()
         {
-            if (_localRequested || PlayerCharacter.Local != null)
+            if (_localRequested || FindLocalCharacter() != null)
                 return;
 
             _localRequested = true;
