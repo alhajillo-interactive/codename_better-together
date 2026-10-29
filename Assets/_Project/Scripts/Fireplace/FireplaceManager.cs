@@ -79,8 +79,16 @@ namespace BetterTogether.Fireplace
         [SerializeField, Min(0f)] private float _comebackGazeSeconds = 10f;
         [Tooltip("Metres in front of the camper where the matches are set down.")]
         [SerializeField, Min(0f)] private float _comebackMatchesDistance = 1f;
-        [Tooltip("Layers the matches can rest on when they are set down (ground and props).")]
-        [SerializeField] private LayerMask _comebackGroundMask = ~0;
+        [Tooltip("Layers the matches can rest on when they are set down (ground only: Environment).")]
+        [SerializeField] private LayerMask _comebackGroundMask = 1 << 11;
+        [Tooltip("Layers that block the line from the camper's chest to the drop point (Environment, Occluder).")]
+        [SerializeField] private LayerMask _comebackBlockMask = (1 << 11) | (1 << 12);
+        [Tooltip("Layers the drop point must be free of (Player, Gnome, Item, Environment).")]
+        [SerializeField] private LayerMask _comebackClearMask = (1 << 8) | (1 << 9) | (1 << 10) | (1 << 11);
+        [Tooltip("Radius of the free-space check at the drop point, in metres.")]
+        [SerializeField, Min(0.05f)] private float _comebackClearRadius = 0.3f;
+        [Tooltip("Metres to the side of the camper's feet used when the front is blocked.")]
+        [SerializeField, Min(0.5f)] private float _comebackSideDistance = 1.1f;
         [Tooltip("Speed (m/s) at which a log jumps out of the fireplace when the fire is put out.")]
         [SerializeField, Min(0f)] private float _logEjectSpeed = 3f;
         [Tooltip("Angle above the ground (degrees) of the jump of that log.")]
@@ -592,8 +600,10 @@ namespace BetterTogether.Fireplace
             if (Telemetry.Enabled) Telemetry.Begin("comeback").Int("count", ExtinguishCount).Send();
 
             CamperGaze camper = null;
-            foreach (var gaze in CamperGaze.All)
+            var gazes = CamperGaze.All;
+            for (var g = 0; g < gazes.Count; g++)
             {
+                var gaze = gazes[g];
                 if (gaze != null && gaze.Object != null && gaze.Object.IsValid)
                 {
                     camper = gaze;
@@ -606,12 +616,32 @@ namespace BetterTogether.Fireplace
 
             var forward = Vector3.ProjectOnPlane(camper.transform.forward, Vector3.up);
             forward = forward.sqrMagnitude < 0.0001f ? Vector3.forward : forward.normalized;
-            var point = camper.transform.position + forward * _comebackMatchesDistance;
-            if (Physics.Raycast(point + Vector3.up * 2f, Vector3.down, out var hit, 6f, _comebackGroundMask, QueryTriggerInteraction.Ignore))
-                point = hit.point;
+            var feet = camper.transform.position;
+            var right = Vector3.Cross(Vector3.up, forward);
+            var front = feet + forward * _comebackMatchesDistance;
 
-            foreach (var matches in Matches.All)
+            // The front spot is used only when nothing solid lies between the camper's chest and it; otherwise the matches
+            // go to a free spot beside the feet. Nothing may end up on a player or inside a prop.
+            var point = default(Vector3);
+            var found = false;
+            if (!Physics.Linecast(feet + Vector3.up * 1.2f, front + Vector3.up * 0.3f, _comebackBlockMask, QueryTriggerInteraction.Ignore))
+                found = TryFindDropPoint(front, out point);
+
+            if (!found)
             {
+                var side = _comebackSideDistance;
+                found = TryFindDropPoint(feet + right * side, out point)
+                    || TryFindDropPoint(feet - right * side, out point)
+                    || TryFindDropPoint(feet - forward * side, out point);
+            }
+
+            if (!found)
+                return;
+
+            var matchList = Matches.All;
+            for (var i = 0; i < matchList.Count; i++)
+            {
+                var matches = matchList[i];
                 if (matches == null || !matches.TryGetComponent<Carryable>(out var carryable) || !carryable.HasStateAuthority)
                     continue;
 
@@ -621,6 +651,17 @@ namespace BetterTogether.Fireplace
 
                 carryable.PlaceAt(point + Vector3.up * 0.1f, Quaternion.LookRotation(forward, Vector3.up));
             }
+        }
+
+        // Authority only: finds the ground under the candidate and checks the spot is free of players and props.
+        private bool TryFindDropPoint(Vector3 candidate, out Vector3 point)
+        {
+            point = candidate;
+            if (!Physics.Raycast(candidate + Vector3.up * 2f, Vector3.down, out var hit, 6f, _comebackGroundMask, QueryTriggerInteraction.Ignore))
+                return false;
+
+            point = hit.point;
+            return !Physics.CheckSphere(point + Vector3.up * (_comebackClearRadius + 0.05f), _comebackClearRadius, _comebackClearMask, QueryTriggerInteraction.Ignore);
         }
 
         private void ClearPour()

@@ -487,8 +487,8 @@ namespace BetterTogether.Gaze
             Gizmos.color = new Color(0.6f, 0.2f, 1f, 0.8f);
             foreach (var axis in new[] { Vector3.up, transform.right })
             {
-                Gizmos.DrawLine(eye, eye + Quaternion.AngleAxis(_halfAngle, axis) * forward * length);
-                Gizmos.DrawLine(eye, eye + Quaternion.AngleAxis(-_halfAngle, axis) * forward * length);
+                Gizmos.DrawLine(eye, eye + Quaternion.AngleAxis(HalfAngle, axis) * forward * length);
+                Gizmos.DrawLine(eye, eye + Quaternion.AngleAxis(-HalfAngle, axis) * forward * length);
             }
         }
     }

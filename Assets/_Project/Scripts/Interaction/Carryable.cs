@@ -599,7 +599,7 @@ namespace BetterTogether.Interaction
             if (!HasStateAuthority)
                 return;
 
-            if (Telemetry.Enabled && announce) LogDropAll(DropReason.Respawn);
+            if (Telemetry.Enabled && (announce || HolderCount > 0)) LogDropAll(DropReason.Respawn);
             WasHandled = false;
             LastHeldByCamper = false;
             ForceReleaseAll();
