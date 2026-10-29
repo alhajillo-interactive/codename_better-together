@@ -56,6 +56,9 @@ namespace BetterTogether.Gaze
             if (!_petrifiable.IsAvailable)
             {
                 _seen = false;
+                _weightTween.Stop();
+                if (_volume != null)
+                    _volume.weight = 0f;
                 return;
             }
 

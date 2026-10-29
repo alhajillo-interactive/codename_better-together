@@ -15,6 +15,7 @@ namespace BetterTogether.EditorTools
         private const string PrefabPath = "Assets/_Project/Prefabs/Gnome.prefab";
         private const string ProfilePath = "Assets/_Project/Settings/Volumes/Petrified.asset";
         private const string MaterialPath = "Assets/_Project/Materials/StoneDust.mat";
+        private const string TexturePath = "Assets/_Project/Art/FX/star.png";
         private const string CuePath = "Assets/_Project/Audio/SFX/SFX_Petrify.asset"; // Provisional crack.
         private const string VolumeName = "PetrifyVolume";
         private const string DustName = "PetrifyDust";
@@ -92,24 +93,34 @@ namespace BetterTogether.EditorTools
         private static Material EnsureMaterial()
         {
             var material = AssetDatabase.LoadAssetAtPath<Material>(MaterialPath);
-            if (material != null)
-                return material;
-
-            var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-            if (shader == null)
+            if (material == null)
             {
-                Debug.LogError($"{LogPrefix} Shader 'Universal Render Pipeline/Particles/Unlit' not found.");
-                return null;
+                var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+                if (shader == null)
+                {
+                    Debug.LogError($"{LogPrefix} Shader 'Universal Render Pipeline/Particles/Unlit' not found.");
+                    return null;
+                }
+
+                material = new Material(shader);
+                AssetDatabase.CreateAsset(material, MaterialPath);
             }
 
-            material = new Material(shader);
+            // Configured on every run so the tool stays idempotent (also fixes a material made by an older run).
             material.SetColor("_BaseColor", new Color(0.62f, 0.62f, 0.65f));
+            material.SetTexture("_BaseMap", AssetDatabase.LoadAssetAtPath<Texture2D>(TexturePath));
             material.SetFloat("_Surface", 1f); // Transparent
-            material.SetFloat("_Blend", 0f);
+            material.SetFloat("_Blend", 0f); // Alpha
+            material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            material.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            material.SetFloat("_ZWrite", 0f);
             material.SetOverrideTag("RenderType", "Transparent");
-            material.renderQueue = 3000;
-            AssetDatabase.CreateAsset(material, MaterialPath);
-            return AssetDatabase.LoadAssetAtPath<Material>(MaterialPath);
+            material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            BaseShaderGUI.SetupMaterialBlendMode(material);
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            EditorUtility.SetDirty(material);
+            AssetDatabase.SaveAssets();
+            return material;
         }
 
         private static GameObject ReplaceChild(Transform parent, string name, Vector3 localPosition)
