@@ -29,7 +29,7 @@ namespace BetterTogether.Player
         [SerializeField] private float _cooldown = 3f;
 
         [Header("Look")]
-        [Tooltip("Root of the visual; every renderer below it is tinted. Empty = the Animator's object.")]
+        [Tooltip("Root of the visual that pops on reveal. Empty = the Animator's object. The tint itself is applied by Petrifiable.")]
         [SerializeField] private Transform _visual;
         [Tooltip("Glossy painted-ceramic tint (different from the grey stone of the petrify).")]
         [SerializeField] private Color _ceramicColor = new(0.85f, 0.45f, 0.35f);
@@ -42,8 +42,6 @@ namespace BetterTogether.Player
         [Tooltip("Seconds of the reveal pop.")]
         [SerializeField] private float _popTime = 0.25f;
 
-        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
-
         private PlayerMovement _movement;
         private Petrifiable _petrifiable;
         private Kickable _kickable;
@@ -51,9 +49,6 @@ namespace BetterTogether.Player
         private PlayerInteractor _interactor;
         private InputAction _interact;
         private Animator _animator;
-        private Renderer[] _renderers;
-        private Color[] _originalColors;
-        private MaterialPropertyBlock _block;
         private bool _isSpawned;
 
         // Owner state (FixedUpdateNetwork only).
@@ -88,21 +83,12 @@ namespace BetterTogether.Player
             _stack = GetComponent<GnomeStack>();
             _interactor = GetComponent<PlayerInteractor>();
             _animator = GetComponentInChildren<Animator>();
-            _block = new MaterialPropertyBlock();
             if (_visual == null && _animator != null)
                 _visual = _animator.transform;
 
             _popTarget = _visual;
             if (_popTarget != null)
                 _scaleRest = _popTarget.localScale;
-
-            _renderers = _visual != null ? _visual.GetComponentsInChildren<Renderer>() : new Renderer[0];
-            _originalColors = new Color[_renderers.Length];
-            for (var i = 0; i < _renderers.Length; i++)
-            {
-                var material = _renderers[i].sharedMaterial;
-                _originalColors[i] = material != null && material.HasProperty(BaseColorId) ? material.GetColor(BaseColorId) : Color.white;
-            }
         }
 
         public override void Spawned()
@@ -227,7 +213,7 @@ namespace BetterTogether.Player
                 _snapped = true;
                 _wasDisguised = disguised;
                 _tintAmount = target;
-                _disguisedSince = Time.time - _freezeDelay - _tintTime;
+                _disguisedSince = Time.time;
                 ApplyTint();
                 return;
             }
@@ -254,7 +240,7 @@ namespace BetterTogether.Player
                 ApplyTint();
             }
 
-            if (disguised && !_animatorFrozen && _animator != null && Time.time - _disguisedSince >= _tintTime + _freezeDelay)
+            if (disguised && !_animatorFrozen && _animator != null && !(_kickable != null && _kickable.IsStunned) && Time.time - _disguisedSince >= _tintTime + _freezeDelay)
             {
                 _animator.speed = 0f;
                 _animatorFrozen = true;
@@ -273,6 +259,7 @@ namespace BetterTogether.Player
             if (_kickable != null && _kickable.IsStunned)
             {
                 _popLeft = 0f;
+                _popTarget.localScale = _scaleRest;
                 return;
             }
 
@@ -292,24 +279,15 @@ namespace BetterTogether.Player
                 return;
 
             _animatorFrozen = false;
-            if (_animator != null)
+            if (_animator != null && !(_kickable != null && _kickable.IsHitStopping))
                 _animator.speed = 1f;
         }
 
-        // Stone owns the tint while the gnome is petrified; the disguise never fights it.
+        // Petrifiable owns the renderers' property block; it composes this overlay under the stone tint.
         private void ApplyTint()
         {
-            if (_petrifiable != null && _petrifiable.IsStone)
-                return;
-
-            for (var i = 0; i < _renderers.Length; i++)
-            {
-                if (_renderers[i] == null)
-                    continue;
-
-                _block.SetColor(BaseColorId, Color.Lerp(_originalColors[i], _ceramicColor, _tintAmount));
-                _renderers[i].SetPropertyBlock(_block);
-            }
+            if (_petrifiable != null)
+                _petrifiable.SetOverlayTint(_ceramicColor, _tintAmount);
         }
     }
 }

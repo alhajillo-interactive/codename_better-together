@@ -83,6 +83,8 @@ namespace BetterTogether.Gaze
         private MaterialPropertyBlock _block;
         private float _focusHeight;
         private float _stoneAmount;
+        private Color _overlayTint = Color.white;
+        private float _overlayAmount;
         private int _pendingPresses;
         private float _requiredForFreeze;
         private int _timesPetrified;
@@ -175,9 +177,27 @@ namespace BetterTogether.Gaze
         /// <summary>Owner only: how many times this player was set free, for HUD feedback.</summary>
         public int ReleaseCount { get; private set; }
 
+        /// <summary>Cached disguise component of this gnome (null on players without one).</summary>
+        public GardenDisguise Disguise { get; private set; }
+
+        /// <summary>
+        /// Presentation: a non-stone tint (e.g. the garden disguise) blended over the original colours by <paramref name="amount"/>.
+        /// This component is the single owner of the renderers' property block; stone is composed on top of the overlay.
+        /// </summary>
+        public void SetOverlayTint(Color tint, float amount)
+        {
+            if (_overlayAmount == amount && _overlayTint == tint)
+                return;
+
+            _overlayTint = tint;
+            _overlayAmount = amount;
+            ApplyStone();
+        }
+
         private void Awake()
         {
             _movement = GetComponent<PlayerMovement>();
+            Disguise = GetComponent<GardenDisguise>();
             _stack = GetComponent<GnomeStack>();
             _block = new MaterialPropertyBlock();
             _renderers = _visual != null ? _visual.GetComponentsInChildren<Renderer>() : new Renderer[0];
@@ -436,7 +456,8 @@ namespace BetterTogether.Gaze
                     continue;
 
                 var amount = Mathf.Clamp01((_stoneAmount * (1f + _sweepBand) - _relativeHeights[i]) / _sweepBand);
-                _block.SetColor(BaseColorId, Color.Lerp(_originalColors[i], _stoneColor, amount));
+                var baseColor = Color.Lerp(_originalColors[i], _overlayTint, _overlayAmount);
+                _block.SetColor(BaseColorId, Color.Lerp(baseColor, _stoneColor, amount));
                 _renderers[i].SetPropertyBlock(_block);
             }
         }
