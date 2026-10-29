@@ -42,11 +42,21 @@ namespace BetterTogether.Combat
         [SerializeField] private float _hitFovPunch = 4f;
         [SerializeField] private float _hitFovPunchTime = 0.25f;
 
+        [Header("Feel (local presentation only)")]
+        [Tooltip("Tiny impulse on the camper's camera the instant the kick starts: the camera sinks back and down. The kick itself is not delayed.")]
+        [SerializeField] private float _anticipationForce = 0.05f;
+        [Tooltip("Seconds the kicked gnome's Animator freezes on impact (visual hit stop, never Time.timeScale).")]
+        [SerializeField] private float _hitStopTime = 0.06f;
+        [Tooltip("Field of view change when the kick hits nothing (negative = a small tug in).")]
+        [SerializeField] private float _missFovPunch = -1.5f;
+        [SerializeField] private float _missFovPunchTime = 0.2f;
+
         private readonly Collider[] _overlap = new Collider[16];
         private readonly List<Kickable> _targets = new();
         private InputAction _attack;
         private PlayerMovement _movement;
         private float _readyTime;
+        private float _pendingFovPunchTime = -1f;
 
         public static CamperKick Local { get; private set; }
 
@@ -63,6 +73,8 @@ namespace BetterTogether.Combat
 
             Local = this;
             _attack = InputSystem.actions.FindAction("Player/Attack");
+            if (!TryGetComponent<KickReadout>(out _))
+                gameObject.AddComponent<KickReadout>();
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
@@ -78,6 +90,14 @@ namespace BetterTogether.Combat
 
             FindTargets();
 
+            // The hit FOV punch waits for the visual hit stop; plain float compare, no allocations.
+            if (_pendingFovPunchTime >= 0f && Time.unscaledTime >= _pendingFovPunchTime)
+            {
+                _pendingFovPunchTime = -1f;
+                if (CameraPunch.Instance != null)
+                    CameraPunch.Instance.PunchFov(_hitFovPunch, _hitFovPunchTime);
+            }
+
             // Left click also re-locks the cursor (FirstPersonCamera), so ignore it while the cursor is free.
             if (_attack != null && _attack.WasPressedThisFrame() && Cursor.lockState == CursorLockMode.Locked && IsReady)
                 Kick();
@@ -90,6 +110,10 @@ namespace BetterTogether.Combat
             _movement.PlayKickAnimation();
             if (Telemetry.Enabled) LogKick(hit);
 
+            // Anticipation cue (local): the logic below runs this same frame.
+            if (_kickRecoil != null && _anticipationForce > 0f)
+                _kickRecoil.GenerateImpulseWithVelocity((Vector3.down + Vector3.back * 0.5f).normalized * _anticipationForce);
+
             var forward = Flat(transform.forward).normalized;
             foreach (var target in _targets)
             {
@@ -97,13 +121,16 @@ namespace BetterTogether.Combat
                 var toTarget = Flat(target.transform.position - transform.position).normalized;
                 var direction = (forward + toTarget).normalized;
                 target.Kick(direction * _horizontalSpeed + Vector3.up * _upwardSpeed, transform.position);
+                target.PlayHitStop(_hitStopTime);
             }
 
             if (_kickRecoil != null)
                 _kickRecoil.GenerateImpulseWithForce(hit ? _recoilForce : _missRecoilForce);
 
-            if (hit && CameraPunch.Instance != null)
-                CameraPunch.Instance.PunchFov(_hitFovPunch, _hitFovPunchTime);
+            if (hit)
+                _pendingFovPunchTime = Time.unscaledTime + _hitStopTime;
+            else if (CameraPunch.Instance != null)
+                CameraPunch.Instance.PunchFov(_missFovPunch, _missFovPunchTime); // The whoosh is _kickSwingSfx, played by PlayKickAnimation.
         }
 
         // Telemetry only: whether the kick landed, how many gnomes it reached and the distance to the nearest one.
