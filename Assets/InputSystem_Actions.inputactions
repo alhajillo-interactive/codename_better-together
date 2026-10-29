@@ -536,7 +536,18 @@
                 {
                     "name": "",
                     "id": "2083c6f0-308d-46f7-ac16-225e6a73fb59",
-                    "path": "<Keyboard>/q",
+                    "path": "<Keyboard>/f",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "Ping",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "d47fa299-8cc2-4df1-aea6-32934aa06c2b",
+                    "path": "<Mouse>/middleButton",
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard&Mouse",

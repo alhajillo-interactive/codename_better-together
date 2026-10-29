@@ -199,7 +199,7 @@ namespace BetterTogether.Player
                     continue;
 
                 _shownMeters[i] = meters;
-                marker.SetText(_kinds[i] == KindObject ? "⬤ {0} m" : "! {0} m", meters);
+                marker.SetText(_kinds[i] == KindObject ? "● {0} m" : "! {0} m", meters);
             }
         }
     }
