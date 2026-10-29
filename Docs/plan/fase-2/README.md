@@ -16,3 +16,10 @@ Reglas comunes:
 | C2.3 | Salchicha: siseo creciente, «ding» al estar lista, alarma antes de quemarse, mordiscos | `Sausage` |
 | C2.4 | Patada: anticipación, hit stop visual, FOV, estrellitas | `CamperKick`, `Kickable` |
 | Después | Petrificación (Volume + Shader Graph), día/noche (Volume + avisos), siluetas como Renderer Feature, pase de audio | — |
+
+## Estado (29 oct 2026)
+C2.1–C2.4 aprobadas por Sonnet, integradas, herramientas ejecutadas por CLI y test multi-peer en verde. Arreglos del orquestador: C2.2 umbral de aterrizaje 0,6 m, sin caída al bajar de la torre, FOV sin acumular, builder sólo en cámaras de juego; C2.3 siseo apagado al quemarse.
+
+**Sonidos provisionales para audio (Alejandro):** cubeta llenar/vaciar, vertido, apagado y siseo de vapor (todos con `cascada.wav`); siseo de salchicha (`fogata/fuego_loop.wav`), «lista» (`SFX_FireReady`), alarma (`SFX_Watched`), quemada (`SFX_Petrify`); pop al tomar (`SFX_LogHandOff`).
+
+**Para confirmar en V2:** el fuego «crece con los leños» vía brasas (no tamaño de llama); bob y FOV al correr con ambos roles (mareo del gnomo); indicador de patada y estrellitas; tiempos de la salchicha audibles.
