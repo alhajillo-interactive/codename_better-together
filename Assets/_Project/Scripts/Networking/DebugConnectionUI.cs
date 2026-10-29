@@ -26,6 +26,8 @@ namespace BetterTogether.Networking
         private string _roomCode = "TEST";
         private string _playerName = "";
         private bool _rolePanelOpen;
+        // Once connected the room panel is hidden behind a small toggle button, so it doesn't cover the game.
+        private bool _infoOpen;
 
         // PlayerPrefs can't be read from a field initializer (Unity throws and the panel breaks), so load it here.
         private void Awake() => _playerName = LocalPlayerProfile.Name;
@@ -74,7 +76,20 @@ namespace BetterTogether.Networking
                 GUIUtility.keyboardControl = 0;
             }
 
-            GUILayout.BeginArea(new Rect(10, 10, 260, inLobby ? 270 : 220), GUI.skin.box);
+            if (manager.IsConnected)
+            {
+                if (GUI.Button(new Rect(10, 10, 90, 24), _infoOpen ? "Ocultar sala" : "Sala"))
+                    _infoOpen = !_infoOpen;
+
+                if (!_infoOpen)
+                {
+                    if (_rolePanelOpen)
+                        DrawRolePanel();
+                    return;
+                }
+            }
+
+            GUILayout.BeginArea(new Rect(10, manager.IsConnected ? 40 : 10, 260, inLobby ? 270 : 220), GUI.skin.box);
 
             if (manager.IsConnected)
             {
