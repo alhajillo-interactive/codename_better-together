@@ -56,6 +56,7 @@ GameObject:
   - component: {fileID: 8800000000000000002}
   - component: {fileID: 8800000000000000004}
   - component: {fileID: 8800000000000000099}
+  - component: {fileID: 599096684618621986}
   m_Layer: 8
   m_Name: Camper
   m_TagString: Untagged
@@ -80,6 +81,7 @@ Transform:
   - {fileID: 7448268824482469954}
   - {fileID: 8427013488694503345}
   - {fileID: 3492481566404576480}
+  - {fileID: 1843962199840475517}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!143 &1848605719635223851
@@ -134,6 +136,7 @@ MonoBehaviour:
   - {fileID: 7371402795475265320}
   - {fileID: 5939314844524169216}
   - {fileID: 6152230495412790016}
+  - {fileID: 599096684618621986}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &8603880299416115042
 MonoBehaviour:
@@ -336,7 +339,7 @@ MonoBehaviour:
   _aimRadius: 0.15
   _interactionMask:
     serializedVersion: 2
-    m_Bits: 3072
+    m_Bits: 3584
   _eye: {fileID: 0}
   _holdDistanceFactor: 0.45
   _holdDropFactor: 0.18
@@ -394,6 +397,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Gaze.CamperGaze
   _eye: {fileID: 7448268824482469954}
   _halfAngle: 22
+  _comebackHalfAngle: 26
   _range: 8
   _occluders:
     serializedVersion: 2
@@ -530,6 +534,21 @@ MonoBehaviour:
   _strideLength: 0.7
   _minSpeed: 0.5
   _teleportDistance: 2
+--- !u!114 &599096684618621986
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2407974724338023452}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 11fd5f05325d47c5b2c92d22a38a0f01, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Interaction.GnomeCarrier
+  _carryAnchor: {fileID: 1843962199840475517}
+  _fallbackOffset: {x: 0, y: 1, z: 0.6}
+  _pickupDistance: 2
 --- !u!1 &3840529701168068516
 GameObject:
   m_ObjectHideFlags: 0
@@ -704,6 +723,37 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 1.07, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 5728052846930928352}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &8354329821216928418
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1843962199840475517}
+  m_Layer: 0
+  m_Name: GnomeCarryAnchor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1843962199840475517
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8354329821216928418}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0.95, z: 0.6}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
