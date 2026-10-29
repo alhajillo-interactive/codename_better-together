@@ -58,6 +58,9 @@ namespace BetterTogether.Combat
         [SerializeField] private float _starSize = 0.05f;
         [SerializeField] private Color _starColor = new(1f, 0.85f, 0.2f);
 
+        [Tooltip("Optional particle system of stars over the head (built by GnoMore/Construir feel de patada). Empty = the code-built star ring.")]
+        [SerializeField] private ParticleSystem _stunStars;
+
         [Header("Hit reaction")]
         [Tooltip("Seconds at the start of the stun the visual spends spinning around Y.")]
         [SerializeField] private float _spinTime = 0.45f;
@@ -78,6 +81,8 @@ namespace BetterTogether.Combat
         private bool _wasStunned;
         private bool _showingDizzy;
         private bool _isSpawned;
+        private Animator _hitStopAnimator;
+        private float _hitStopUntil = -1f;
 
         [Networked] private TickTimer StunTimer { get; set; }
         [Networked] private TickTimer ProtectedTimer { get; set; }
@@ -91,6 +96,7 @@ namespace BetterTogether.Combat
             _movement = GetComponent<PlayerMovement>();
             _interactor = GetComponent<PlayerInteractor>();
             _petrifiable = GetComponent<Petrifiable>();
+            _hitStopAnimator = GetComponentInChildren<Animator>();
             if (_wobbleTarget == null)
                 return;
 
@@ -101,10 +107,30 @@ namespace BetterTogether.Combat
         public override void Spawned()
         {
             _isSpawned = true;
-            _stars = CreateStars();
+            _stars = _stunStars == null ? CreateStars() : null;
+        }
+
+        /// <summary>
+        /// Local visual hit stop: freezes this player's Animator for a moment (never Time.timeScale, the simulation keeps running).
+        /// Called by the kicker's client on its own copy; each client decides alone.
+        /// </summary>
+        public void PlayHitStop(float seconds)
+        {
+            if (_hitStopAnimator == null || seconds <= 0f)
+                return;
+
+            _hitStopAnimator.speed = 0f;
+            _hitStopUntil = Time.unscaledTime + seconds;
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState) => _isSpawned = false;
+
+        private void OnDisable()
+        {
+            _hitStopUntil = -1f;
+            if (_hitStopAnimator != null)
+                _hitStopAnimator.speed = 1f;
+        }
 
         /// <summary>Called by the kicker's client on its local copy of this player.</summary>
         public void Kick(Vector3 velocity, Vector3 kickerPosition) => RPC_Kick(velocity, kickerPosition);
@@ -170,6 +196,13 @@ namespace BetterTogether.Combat
 
         public override void Render()
         {
+            if (_hitStopUntil >= 0f && Time.unscaledTime >= _hitStopUntil)
+            {
+                _hitStopUntil = -1f;
+                if (_hitStopAnimator != null)
+                    _hitStopAnimator.speed = 1f;
+            }
+
             var stunned = IsStunned;
             if (stunned && !_wasStunned)
                 _stunStartTime = Time.time;
@@ -179,7 +212,8 @@ namespace BetterTogether.Combat
 
             if (stunned)
             {
-                _stars.localRotation = Quaternion.Euler(0f, Time.time * 240f, 0f);
+                if (_stars != null)
+                    _stars.localRotation = Quaternion.Euler(0f, Time.time * 240f, 0f);
                 AnimateBody(Time.time - _stunStartTime);
             }
 
@@ -187,7 +221,15 @@ namespace BetterTogether.Combat
                 return;
 
             _showingDizzy = stunned;
-            _stars.gameObject.SetActive(stunned);
+            if (_stars != null)
+                _stars.gameObject.SetActive(stunned);
+            if (_stunStars != null)
+            {
+                if (stunned)
+                    _stunStars.Play();
+                else
+                    _stunStars.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+            }
             // The stun is networked, so this runs on every client: everyone hears the hit.
             if (stunned)
                 _kickedSfx.PlayAt(transform.position);
