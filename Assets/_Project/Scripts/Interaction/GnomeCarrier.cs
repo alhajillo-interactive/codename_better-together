@@ -27,6 +27,12 @@ namespace BetterTogether.Interaction
         [Tooltip("Metres from the camper's eyes to the gnome's body within which a petrified gnome can be picked up.")]
         [SerializeField, Min(0f)] private float _pickupDistance = 2f;
 
+        [Header("Motion tracking")]
+        [Tooltip("Speed in m/s above which a position change is treated as a teleport and ignored when estimating the camper's velocity.")]
+        [SerializeField, Min(0f)] private float _maxTrackedSpeed = 12f;
+        [Tooltip("How fast the estimated velocity follows the measured one (1/seconds); higher = less smoothing.")]
+        [SerializeField, Min(0.1f)] private float _velocitySharpness = 12f;
+
         private static readonly List<GnomeCarrier> AllCarriers = new();
 
         private PlayerInteractor _interactor;
@@ -34,11 +40,45 @@ namespace BetterTogether.Interaction
         private bool _isSpawned;
         private bool _dropQueued;
         private NetworkId _pendingPickup;
+        private Vector3 _previousPosition;
+        private bool _hasPreviousPosition;
+        private Vector3 _velocity;
 
         /// <summary>Id of the carried gnome (default when none). Written only by this camper. Read it through <see cref="Carried"/>.</summary>
         [Networked] private NetworkId CarriedGnome { get; set; }
 
+        /// <summary>Gnome that was put down by the last drop (default if none). Written only by this camper together with the drop point.</summary>
+        [Networked] private NetworkId DropGnome { get; set; }
+
+        /// <summary>Where the camper put that gnome down, computed on the camper's real position.</summary>
+        [Networked] private Vector3 DropPoint { get; set; }
+
+        /// <summary>Yaw (degrees) the dropped gnome faces.</summary>
+        [Networked] private float DropYaw { get; set; }
+
         public static GnomeCarrier Local { get; private set; }
+
+        /// <summary>
+        /// Horizontal velocity of this camper in m/s, derived on every peer from the positions it presents (no network state).
+        /// On a remote peer it is the velocity of the delayed, interpolated body.
+        /// </summary>
+        public Vector3 Velocity => _velocity;
+
+        /// <summary>
+        /// The drop spot the camper wrote for this gnome, if the camper's replicated state still says so.
+        /// Safe at any time; false before spawn or for any other gnome.
+        /// </summary>
+        public bool TryGetDrop(NetworkId gnomeId, out Vector3 point, out float yaw)
+        {
+            point = default;
+            yaw = 0f;
+            if (!_isSpawned || !gnomeId.IsValid || DropGnome != gnomeId)
+                return false;
+
+            point = DropPoint;
+            yaw = DropYaw;
+            return true;
+        }
 
         /// <summary>The gnome this camper carries according to the replicated state, or null. Safe to read at any time.</summary>
         public GnomeCapture Carried => _isSpawned && CarriedGnome.IsValid ? GnomeCapture.Find(CarriedGnome) : null;
@@ -119,6 +159,28 @@ namespace BetterTogether.Interaction
                 _pendingPickup = gnome.Object.Id;
         }
 
+        // Presentation only: measures the velocity of the body as presented, for estimating where it is "now".
+        private void LateUpdate()
+        {
+            if (!_isSpawned)
+                return;
+
+            var position = transform.position;
+            var dt = Time.deltaTime;
+            if (_hasPreviousPosition && dt > 0f)
+            {
+                var measured = (position - _previousPosition) / dt;
+                measured.y = 0f;
+                if (measured.magnitude > _maxTrackedSpeed)
+                    measured = Vector3.zero; // A teleport, not a run.
+
+                _velocity = Vector3.Lerp(_velocity, measured, 1f - Mathf.Exp(-_velocitySharpness * dt));
+            }
+
+            _previousPosition = position;
+            _hasPreviousPosition = true;
+        }
+
         // Local input only: nothing networked is written here.
         private void Update()
         {
@@ -144,6 +206,7 @@ namespace BetterTogether.Interaction
                 if (wanted != null && CanCarry(wanted))
                 {
                     CarriedGnome = pickup;
+                    DropGnome = default;
                     _dropQueued = false;
                     if (Telemetry.Enabled)
                         Telemetry.Begin("gnome_carry").Int("gnome", wanted.Object.StateAuthority.PlayerId).Send();
@@ -157,6 +220,16 @@ namespace BetterTogether.Interaction
                 var reason = Release(gnome);
                 if (reason != null)
                 {
+                    // Still stone (put down or reset): this camper decides where it lands, from its own real position,
+                    // and the gnome's owner teleports there. Written in the same tick as the id, so they replicate together.
+                    if (gnome != null && gnome.IsStoneNow && reason != "cage")
+                    {
+                        gnome.ComputeDropPoint(transform.position, transform.forward, out var point, out var yaw);
+                        DropPoint = point;
+                        DropYaw = yaw;
+                        DropGnome = carriedId;
+                    }
+
                     CarriedGnome = default;
                     if (Telemetry.Enabled)
                         Telemetry.Begin("gnome_drop").Str("reason", reason).Send();
