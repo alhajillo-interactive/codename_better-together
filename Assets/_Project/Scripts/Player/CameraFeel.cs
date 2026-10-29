@@ -7,7 +7,7 @@ namespace BetterTogether.Player
 {
     /// <summary>
     /// Local-only camera feel on the scene's CinemachineCamera: head bob (Cinemachine Noise with one profile per role,
-    /// gain driven by the local player's speed), a field-of-view widening while sprinting and a downward bump on landing.
+    /// gain driven by the local player's speed), a field-of-view widening while sprinting and a downward bump on landing (triggered by PlayerMovement).
     /// It adds the sprint FOV on top of <see cref="CameraPunch.BaseFieldOfView"/> after <see cref="CameraFocus"/> has set it
     /// (and fades it out while focusing), so the focus zoom wins and punches still add on top.
     /// Purely presentational and driven by the camera's target, which only the owning client sets: no networking at all.
@@ -45,9 +45,7 @@ namespace BetterTogether.Player
         [SerializeField, Min(0.01f)] private float _sprintFovBlendTime = 0.2f;
 
         [Header("Landing")]
-        [Tooltip("Minimum fall height (m) that causes a landing bump.")]
-        [SerializeField, Min(0.01f)] private float _landingMinDrop = 0.6f;
-        [Tooltip("Downward camera bump (m) at the minimum fall height; it grows with the fall height.")]
+        [Tooltip("Downward camera bump (m) at the minimum landing speed; it grows with the impact speed (see PlayerMovement landing punch).")]
         [SerializeField, Min(0f)] private float _landingPunch = 0.04f;
         [Tooltip("Cap of the landing bump, as a multiple of the base bump.")]
         [SerializeField, Min(1f)] private float _landingMaxScale = 3f;
@@ -68,8 +66,6 @@ namespace BetterTogether.Player
         private float _gain;
         private float _gainVelocity;
         private float _sprintBlend;
-        private bool _airborne;
-        private float _peakHeight;
 
         /// <summary>Accessibility scale of the head bob (0..1); the UI of phase 3 sets it and may persist it in PlayerPrefs "gm_bob".</summary>
         public float BobScale
@@ -78,8 +74,18 @@ namespace BetterTogether.Player
             set => _bobScale = Mathf.Clamp01(value);
         }
 
+        /// <summary>The camera feel of the scene, or null when there is none.</summary>
+        public static CameraFeel Instance { get; private set; }
+
+        private void OnDestroy()
+        {
+            if (Instance == this)
+                Instance = null;
+        }
+
         private void Awake()
         {
+            Instance = this;
             _punch = GetComponent<CameraPunch>();
             _normalFov = GetComponent<CinemachineCamera>().Lens.FieldOfView;
             _noise = GetComponent<CinemachineBasicMultiChannelPerlin>();
@@ -127,7 +133,6 @@ namespace BetterTogether.Player
 
             UpdateBob(moving && grounded, crouching, sprinting, dt);
             UpdateSprintFov(sprinting, dt);
-            UpdateLanding(grounded);
         }
 
         // Called when the camera starts or stops following a player (also on role change after respawn).
@@ -137,8 +142,6 @@ namespace BetterTogether.Player
             _controller = movement != null ? movement.GetComponent<CharacterController>() : null;
             _isGnome = movement != null && movement.GetComponent<Petrifiable>() != null;
             _speed = 0f;
-            _airborne = false;
-            _peakHeight = 0f;
             if (movement != null)
                 _lastPosition = movement.transform.position;
 
@@ -186,31 +189,16 @@ namespace BetterTogether.Player
                 _punch.BaseFieldOfView = _normalFov + bonus;
         }
 
-        private void UpdateLanding(bool grounded)
+        /// <summary>
+        /// Downward bump of the local camera for a landing. <paramref name="strength01"/> 0 = the minimum punch speed, 1 = the maximum
+        /// (the caller, PlayerMovement, measures the fall speed). Presentation only.
+        /// </summary>
+        public void LandingBump(float strength01)
         {
-            var height = _movement.transform.position.y;
-            if (!grounded)
-            {
-                if (!_airborne)
-                {
-                    _airborne = true;
-                    _peakHeight = height;
-                }
-                else if (height > _peakHeight)
-                    _peakHeight = height;
-
-                return;
-            }
-
-            if (!_airborne)
+            if (_impulse == null)
                 return;
 
-            _airborne = false;
-            var drop = _peakHeight - height;
-            if (drop < _landingMinDrop || _impulse == null)
-                return;
-
-            var scale = Mathf.Min(drop / _landingMinDrop, _landingMaxScale);
+            var scale = Mathf.Lerp(1f, _landingMaxScale, Mathf.Clamp01(strength01));
             _impulse.GenerateImpulseWithVelocity(Vector3.down * (_landingPunch * scale));
         }
 

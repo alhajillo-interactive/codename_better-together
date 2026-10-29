@@ -49,6 +49,15 @@ namespace BetterTogether.Player
         [Header("Animation")]
         [Tooltip("Animator on the visual child (Mesh). Leave empty to find it automatically.")]
         [SerializeField] private Animator _animator;
+        [Header("Landing")]
+        [Tooltip("Local player only: fall speed (m/s) at touchdown above which the camera gets a landing bump.")]
+        [SerializeField, Min(0f)] private float _landPunchMinSpeed = 4f;
+        [Tooltip("Local player only: fall speed (m/s) at which the landing bump reaches its maximum.")]
+        [SerializeField, Min(0.1f)] private float _landPunchMaxSpeed = 9f;
+        [Tooltip("Seconds over which the presented vertical speed (Animator VerticalSpeed) is smoothed.")]
+        [SerializeField, Min(0.001f)] private float _verticalSpeedSmoothing = 0.05f;
+        [Tooltip("Heard by everyone at the feet on touchdown after a fall above the minimum punch speed. May be empty (silence).")]
+        [SerializeField] private SoundCue _landSfx;
         [Header("Sound")]
         [Tooltip("Swing of the camper's kick, heard by everyone even when it misses.")]
         [SerializeField] private SoundCue _kickSwingSfx;
@@ -108,6 +117,14 @@ namespace BetterTogether.Player
         private Vector3 _standCenter;
         private bool _appliedCrouch;
         private bool _hasCrouchParameter;
+        private bool _hasLandingParameters;
+        // Presentation only (every peer, never networked): vertical speed derived from the presented position.
+        private bool _hasPresentedY;
+        private float _presentedY;
+        private float _presentedVerticalSpeed;
+        private float _peakFallSpeed;
+        private bool _wasAirborne;
+        private const float MaxPlausibleVerticalSpeed = 60f;
         private float _crouchStartTime;
         private readonly Collider[] _standUpHits = new Collider[8];
         private int _standUpPlayersMask;
@@ -134,6 +151,8 @@ namespace BetterTogether.Player
         private static readonly int StunParameter = Animator.StringToHash("IsStun");
         private static readonly int StatueParameter = Animator.StringToHash("IsStatue");
         private static readonly int DancingParameter = Animator.StringToHash("IsDancing");
+        private static readonly int VerticalSpeedParameter = Animator.StringToHash("VerticalSpeed");
+        private static readonly int LandParameter = Animator.StringToHash("Land");
         private static readonly int KickParameter = Animator.StringToHash("Kick");
         private static readonly int CrouchParameter = Animator.StringToHash("Crouch");
 
@@ -169,7 +188,13 @@ namespace BetterTogether.Player
         public override void Spawned()
         {
             _isSpawned = true;
+            _hasPresentedY = false;
+            _presentedVerticalSpeed = 0f;
+            _peakFallSpeed = 0f;
+            _wasAirborne = false;
             _hasCrouchParameter = HasAnimatorParameter(CrouchParameter);
+            _hasLandingParameters = HasAnimatorParameter(VerticalSpeedParameter, AnimatorControllerParameterType.Float) &&
+                                     HasAnimatorParameter(LandParameter, AnimatorControllerParameterType.Trigger);
             ApplyCrouchShape(Crouching);
 
             if (!HasStateAuthority)
@@ -205,14 +230,14 @@ namespace BetterTogether.Player
 
         private float CrouchSpeed => _petrifiable != null ? _gnomeCrouchSpeed : _camperCrouchSpeed;
 
-        private bool HasAnimatorParameter(int hash)
+        private bool HasAnimatorParameter(int hash, AnimatorControllerParameterType type = AnimatorControllerParameterType.Bool)
         {
             if (!CanAnimate)
                 return false;
 
             foreach (var parameter in _animator.parameters)
             {
-                if (parameter.nameHash == hash && parameter.type == AnimatorControllerParameterType.Bool)
+                if (parameter.nameHash == hash && parameter.type == type)
                     return true;
             }
 
@@ -700,6 +725,7 @@ namespace BetterTogether.Player
 
             ApplyCrouchShape(Crouching);
             PresentHeavyCarry();
+            var landed = TrackVerticalMotion();
 
             if (!CanAnimate)
                 return;
@@ -711,6 +737,15 @@ namespace BetterTogether.Player
             _animator.SetFloat(MovementParameter, isStunned || isStatue || isDancing ? 0f : AnimationMovement,
                 0.1f, Time.deltaTime);
             _animator.SetBool(JumpParameter, AnimationJump && !isStunned && !isStatue);
+            if (_hasLandingParameters)
+            {
+                _animator.SetFloat(VerticalSpeedParameter, _presentedVerticalSpeed);
+                if (landed)
+                {
+                    _animator.ResetTrigger(LandParameter);
+                    _animator.SetTrigger(LandParameter);
+                }
+            }
             if (_hasCrouchParameter)
                 _animator.SetBool(CrouchParameter, Crouching);
             if (isGnome)
@@ -719,6 +754,54 @@ namespace BetterTogether.Player
                 _animator.SetBool(StatueParameter, isStatue);
                 _animator.SetBool(DancingParameter, isDancing);
             }
+        }
+
+        // Render, every peer: derives the vertical speed from the presented position (no replication), and on the replicated
+        // jump flag going true -> false reports a touchdown. The local player also gets the camera bump; everyone hears the sound.
+        // Late joiners and proxies run exactly the same code from replicated state. Returns true on the touchdown frame.
+        private bool TrackVerticalMotion()
+        {
+            var y = transform.position.y;
+            var dt = Time.deltaTime;
+            if (!_hasPresentedY)
+            {
+                _hasPresentedY = true;
+                _presentedY = y;
+                _wasAirborne = AnimationJump;
+            }
+
+            if (dt > 0f)
+            {
+                var raw = (y - _presentedY) / dt;
+                _presentedY = y;
+                if (Mathf.Abs(raw) > MaxPlausibleVerticalSpeed)
+                    raw = 0f; // Teleport / respawn / mount jump: not a real fall.
+
+                var blend = 1f - Mathf.Exp(-dt / _verticalSpeedSmoothing);
+                _presentedVerticalSpeed = Mathf.Lerp(_presentedVerticalSpeed, raw, blend);
+            }
+
+            var airborne = AnimationJump;
+            if (airborne && -_presentedVerticalSpeed > _peakFallSpeed)
+                _peakFallSpeed = -_presentedVerticalSpeed;
+
+            var landed = _wasAirborne && !airborne;
+            _wasAirborne = airborne;
+            if (!landed)
+                return false;
+
+            var fallSpeed = _peakFallSpeed;
+            _peakFallSpeed = 0f;
+            if (fallSpeed >= _landPunchMinSpeed)
+            {
+                _landSfx.PlayAt(transform.position);
+                var feel = CameraFeel.Instance;
+                var view = FirstPersonCamera.Instance;
+                if (feel != null && view != null && view.TargetMovement == this)
+                    feel.LandingBump(Mathf.InverseLerp(_landPunchMinSpeed, Mathf.Max(_landPunchMaxSpeed, _landPunchMinSpeed + 0.01f), fallSpeed));
+            }
+
+            return true;
         }
 
         /// <summary>Plays the camper's attack on every client, including when the kick misses.</summary>
