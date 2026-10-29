@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BetterTogether.Match;
 using BetterTogether.Networking;
 using Fusion;
 using UnityEngine;
@@ -25,6 +26,22 @@ namespace BetterTogether.Player
 
         [Networked] private NetworkString<_16> NetName { get; set; }
 
+        // Lobby "ready" flag. Written only by the owner (in FixedUpdateNetwork, from the local request below); changes on
+        // player input only, so it costs nothing per tick. Cleared by the owner as soon as the match leaves the lobby.
+        [Networked] private NetworkBool Ready { get; set; }
+
+        private bool _wantReady;
+
+        /// <summary>True when this player marked itself ready in the lobby. Safe to read at any time.</summary>
+        public bool IsReady => _isSpawned && Ready;
+
+        /// <summary>Owner only: marks or unmarks this player as ready in the lobby (applied on the next network tick).</summary>
+        public void SetReady(bool value)
+        {
+            if (_isSpawned && HasStateAuthority)
+                _wantReady = value;
+        }
+
         /// <summary>Name chosen by this player, or "Jugador N" when none is known. Safe to read at any time.</summary>
         public string DisplayName
         {
@@ -50,6 +67,20 @@ namespace BetterTogether.Player
             }
 
             RefreshObjectName();
+        }
+
+        public override void FixedUpdateNetwork()
+        {
+            if (!HasStateAuthority)
+                return;
+
+            // Ready only means something in the lobby; the next lobby (rematch) starts with everybody not ready.
+            var match = MatchManager.Instance;
+            if (match != null && match.Phase != MatchPhase.Waiting)
+                _wantReady = false;
+
+            if (Ready != _wantReady)
+                Ready = _wantReady;
         }
 
         /// <summary>Owner only: renames this player and saves the name for next sessions.</summary>
