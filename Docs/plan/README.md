@@ -106,6 +106,6 @@ Rama de integración: `feature/fase-0`. V0 tras integrar el lote B y el lote C (
 | C0.4 Telemetría | aprobada (falta V2), Opus vuelta 2 | 094e711 | V2 (12 pasos en la tarjeta); añadir eventos nuevos a Notion |
 | C0.7 HUD sin IMGUI | aprobada (falta V2), Opus vuelta 2 | 6d9f4e8 | ejecutar `GnoMore/Construir HUD de juego`, quitar componentes viejos de las escenas, decidir CampIsma; 2 vueltas de playtest |
 | C0.8 Predicción de presentación | aprobada (falta V2), Opus vuelta 2 | e586d99 | asignar `_pickupSfx` en Wood/Matches/Sausage/Bucket; V2 con Network Conditions; 2 vueltas de playtest |
-| C0.6 Capas y máscaras | pendiente (persona en editor) | — | — |
+| C0.6 Capas y máscaras | aprobada tras corrección (falta V2), hecha por CLI | 7b6c989 | V2: carpa sólida, arbustos atravesables y opacos, «[E] Tomar» sólo sobre ítems |
 
-Orden propuesto para la sesión de V2: montar en el editor (`GnoMore/Construir HUD de juego`, quitar HUD viejo, `LevelBounds`, cubeta, `WaterSource`, `Fireplace`) → auditoría de flotantes en escena (C1.9) → partida de 3 min con PerfProbe (C0.1) y PlaytestLogger (C0.4) + `Tools/playtest-report.py` → pasos de C0.2, C0.3, C0.5, C1.0 y C1.H.
+Orden propuesto para la sesión de V2: montaje del editor ya hecho por CLI (HUD, cubeta, río, `LevelBounds`, gracia 4 s, capas) → seguir `V2-sesion-1.md`: auditoría de flotantes en escena (C1.9) → partida de 3 min con PerfProbe (C0.1) y PlaytestLogger (C0.4) + `Tools/playtest-report.py` → pasos de C0.2, C0.3, C0.5, C1.0 y C1.H.
