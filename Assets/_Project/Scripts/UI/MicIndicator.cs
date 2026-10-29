@@ -28,8 +28,18 @@ namespace BetterTogether.UI
         [Tooltip("Background colour while the microphone is off.")]
         [SerializeField] private Color _offColor = new(0.8f, 0.2f, 0.2f, 0.9f);
 
+        // The theme (leaf / hat) wins when it exists; the serialized colours are the fallback.
+        private Color OnColor => UiTheme.Current != null ? WithAlpha(UiTheme.Current.leaf, _onColor.a) : _onColor;
+        private Color OffColor => UiTheme.Current != null ? WithAlpha(UiTheme.Current.hat, _offColor.a) : _offColor;
+
         private bool _valid;
         private int _shownState = -1;
+
+        private static Color WithAlpha(Color color, float alpha)
+        {
+            color.a = alpha;
+            return color;
+        }
 
         private void Awake()
         {
@@ -60,7 +70,7 @@ namespace BetterTogether.UI
                 return;
 
             _shownState = state;
-            _background.color = state == 1 ? _onColor : _offColor;
+            _background.color = state == 1 ? OnColor : OffColor;
             _label.text = state == 1 ? OnText : OffText;
         }
     }

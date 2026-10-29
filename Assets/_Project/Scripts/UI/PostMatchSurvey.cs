@@ -46,6 +46,8 @@ namespace BetterTogether.UI
         [Tooltip("Tint of the answers that are not selected.")]
         [SerializeField] private Color _idleColor = new(1f, 1f, 1f, 1f);
 
+        private Color SelectedColor => UiTheme.Current != null ? UiTheme.Current.leaf : _selectedColor;
+
         private bool _valid;
         private bool _open;
         private bool _shownThisEnd;
@@ -188,7 +190,7 @@ namespace BetterTogether.UI
         private void Tint(Button button, bool selected)
         {
             if (button.targetGraphic != null)
-                button.targetGraphic.color = selected ? _selectedColor : _idleColor;
+                button.targetGraphic.color = selected ? SelectedColor : _idleColor;
         }
     }
 }

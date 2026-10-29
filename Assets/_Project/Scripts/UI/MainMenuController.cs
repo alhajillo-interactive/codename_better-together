@@ -26,7 +26,8 @@ namespace BetterTogether.UI
         private const int MinRoomCodeLength = 3;
         private const string LastRoomKey = "BetterTogether.LastRoom";
 
-        private static readonly Color ErrorColor = new Color(1f, 0.45f, 0.4f);
+        private static readonly Color FallbackErrorColor = new Color(1f, 0.45f, 0.4f);
+        private static Color ErrorColor => UiTheme.Current != null ? UiTheme.Current.hat : FallbackErrorColor;
 
         [SerializeField] Button createRoomBTN;
         [SerializeField] Button joinRoomBTN;
