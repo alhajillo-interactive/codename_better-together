@@ -99,7 +99,7 @@ namespace BetterTogether.Interaction
         private bool _blendFresh;
         private GnomeCarrier _lastCarrierSeen;
         private bool _blendToDrop;
-        private bool _blendFresh2;
+        private bool _dropBlendFresh;
         private Vector3 _dropPoint;
         private Quaternion _dropRotation;
         private Vector3 _blendFromPosition;
@@ -302,9 +302,9 @@ namespace BetterTogether.Interaction
                 var toDrop = _dropRotation * Quaternion.Inverse(transform.rotation);
                 var targetPosition = _dropPoint + toDrop * (naturalPosition - transform.position);
                 var targetRotation = toDrop * naturalRotation;
-                if (_blendFresh2)
+                if (_dropBlendFresh)
                 {
-                    _blendFresh2 = false;
+                    _dropBlendFresh = false;
                     _blendFromPosition = naturalPosition + _blendOffset;
                     _blendFromRotation = _blendTurn * naturalRotation;
                 }
@@ -330,6 +330,7 @@ namespace BetterTogether.Interaction
                 return;
             }
 
+            var ease = k * k * (3f - 2f * k);
             var position = naturalPosition + _blendOffset * (1f - ease) + Vector3.up * (_releaseArc * Mathf.Sin(Mathf.PI * k));
             _visual.SetPositionAndRotation(position, Quaternion.Slerp(_blendTurn, Quaternion.identity, ease) * naturalRotation);
         }
@@ -581,7 +582,7 @@ namespace BetterTogether.Interaction
                 {
                     _blending = true;
                     _blendFresh = true;
-                    _blendFresh2 = true;
+                    _dropBlendFresh = true;
                     _blendToDrop = false;
                     _blendStart = Time.time;
 
