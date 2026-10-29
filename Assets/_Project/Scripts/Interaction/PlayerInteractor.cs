@@ -73,6 +73,9 @@ namespace BetterTogether.Interaction
 
         public Transform CarryAnchor => _carryAnchor;
 
+        /// <summary>The movement component; only assigned on the owner (null on proxies).</summary>
+        public PlayerMovement Movement => _movement;
+
         /// <summary>World position of the holder's eyes (the camera anchor).</summary>
         public Vector3 EyePosition
         {
