@@ -158,6 +158,11 @@ namespace BetterTogether.EditorTools
 
             var name = CreateText("Label", row, font, label, 34, TextAlignmentOptions.MidlineLeft, 60f);
             name.gameObject.GetComponent<LayoutElement>().preferredWidth = 330f;
+            // Long labels ("Sensibilidad del ratón") shrink to fit their column instead of running into the slider.
+            name.enableAutoSizing = true;
+            name.fontSizeMin = 20f;
+            name.fontSizeMax = 34f;
+            name.enableWordWrapping = false;
 
             var slider = CreateSlider("Slider", row, min, max);
             var sliderLayout = slider.gameObject.AddComponent<LayoutElement>();

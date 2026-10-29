@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 50a8e432376e404c8a8d698739580fc1, type: 3}
+  m_Name: UiTheme
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.UI.UiTheme
+  woodDark: {r: 0.65882355, g: 0.2627451, b: 0.101960786, a: 1}
+  wood: {r: 0.7607843, g: 0.38431373, b: 0.18431373, a: 1}
+  woodLight: {r: 0.9372549, g: 0.70980394, b: 0.46666667, a: 1}
+  paper: {r: 0.9764706, g: 0.91764706, b: 0.78431374, a: 1}
+  ink: {r: 0.36862746, g: 0.17254902, b: 0.07058824, a: 1}
+  cream: {r: 1, g: 0.95686275, b: 0.87058824, a: 1}
+  leaf: {r: 0.41960785, g: 0.64705884, b: 0.22352941, a: 1}
+  hat: {r: 0.72156864, g: 0.25882354, b: 0.22745098, a: 1}
+  ember: {r: 0.9647059, g: 0.7647059, b: 0.2627451, a: 1}
+  shade: {r: 0.16862746, g: 0.101960786, b: 0.0627451, a: 0.55}
+  titleFont: {fileID: 11400000, guid: ec275716f79078e1f98f82915eda0424, type: 2}
+  bodyFont: {fileID: 11400000, guid: ec275716f79078e1f98f82915eda0424, type: 2}
+  titleOutline: {fileID: 2100000, guid: 0ef659f6bf52bc8449b2ed2d289a6319, type: 2}
+  bodyOutline: {fileID: 2100000, guid: 0ef659f6bf52bc8449b2ed2d289a6319, type: 2}
+  outlineWidth: 0.25
+  panel: {fileID: 21300000, guid: 926f6c0782a318c48aabcd62a058d61a, type: 3}
+  frame: {fileID: 21300000, guid: 4cfa67ca6d550304891c562164adb644, type: 3}
+  header: {fileID: 21300000, guid: b873d65405e0d2e8ab7173209e846df6, type: 3}
+  button: {fileID: 21300000, guid: 45eb8218b95278f53bf596acec43a5cd, type: 3}
+  buttonTint: {fileID: 21300000, guid: 42ae9fceac070d146be37213a8eb9e8d, type: 3}
+  knob: {fileID: 21300000, guid: cae478ae77880524780a91e39fedbfd1, type: 3}
+  pill: {fileID: 21300000, guid: b7c7d429f72b87e4aa6cdfc45363528a, type: 3}
+  backdrop: {fileID: 21300000, guid: f9eb7814776b7e34685fa6c30bceadb9, type: 3}
+  titleSize: 64
+  subtitleSize: 40
+  buttonSize: 34
+  bodySize: 28
+  hintSize: 22

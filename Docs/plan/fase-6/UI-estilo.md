@@ -32,3 +32,7 @@ Basada en lo que ya tiene el equipo: el logo (letras de madera con hojas y gorro
 
 ## Textos que se corrigen
 «Waiting to start match...» → «Esperando a que empiece la partida…»; valores de ejemplo de la escena («3:00», «Leños 0/6») que se ven un instante antes de que el juego los actualice.
+
+## Estado (29 oct 2026)
+Aplicada con `GnoMore/Aplicar estilo de UI` (idempotente: segunda pasada 0 cambios; `Revisar escalado de UI` sin elementos fuera). Menú principal, conexión, partidas públicas, créditos (con fondo atenuado y «Volver»), ajustes (etiquetas largas se encogen), sala de espera (fondo del bosque, textos crema con contorno), HUD (tarjeta de rol en marco, aviso de piedra, caja de interacción redondeada, barra de energía), encuesta y pantalla final. Marco nuevo `Frame.png` generado (no se reutiliza `Credits.png`, que trae los nombres pintados) y `ButtonTint.png` (botón neutro para los tintes verde/rojo).
+**Pendiente**: fuente con tildes (Lilita One + Fredoka, OFL) — espera permiso de descarga; al tenerla basta con asignarla en `Resources/UiTheme` y volver a aplicar.

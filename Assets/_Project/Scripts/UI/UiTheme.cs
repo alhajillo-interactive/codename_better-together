@@ -59,6 +59,8 @@ namespace BetterTogether.UI
         public Sprite header;
         [Tooltip("Wooden button board (ButtonBG).")]
         public Sprite button;
+        [Tooltip("Light, neutral copy of the wood button for the tinted variants (confirm, danger), so the tint reads clean.")]
+        public Sprite buttonTint;
         [Tooltip("Paper disc with a woodDark rim; 9-sliced it is the rounded text field background and the slider handle.")]
         public Sprite knob;
         [Tooltip("White rounded pill, tinted for slider tracks and fills.")]

@@ -31,7 +31,10 @@ namespace BetterTogether.EditorTools
         private const string ThemePath = ThemeFolder + "/UiTheme.asset";
         private const string UiSpriteFolder = "Assets/_Project/Sprites/UI";
         private const string PanelSpritePath = UiSpriteFolder + "/tareas-bg.png";
-        private const string FrameSpritePath = UiSpriteFolder + "/BG/Credits.png";
+        // Generated: Credits.png has the team names painted in, so it can't be reused as a frame.
+        private const string FrameSpritePath = UiSpriteFolder + "/Frame.png";
+        private const string CreditsSpritePath = UiSpriteFolder + "/BG/Credits.png";
+        private const string ButtonTintSpritePath = UiSpriteFolder + "/ButtonTint.png";
         private const string HeaderSpritePath = UiSpriteFolder + "/BG/InputHeader.png";
         private const string ButtonSpritePath = UiSpriteFolder + "/ButtonBG.png";
         private const string BackdropSpritePath = UiSpriteFolder + "/BG/MainMenuBG.png";
@@ -52,7 +55,7 @@ namespace BetterTogether.EditorTools
         private const string MainMenuScene = "Assets/_Project/Scenes/MainMenu.unity";
         private const string CampBryanScene = "Assets/_Project/Scenes/CampBryan.unity";
 
-        private static readonly string[] HudParts = { "RoleCard", "EndScreen", "Waiting", "Prompt", "StoneOverlay", "ControlsHint", "MicBadge" };
+        private static readonly string[] HudParts = { "RoleCard", "EndScreen", "Waiting", "Prompt", "StoneOverlay", "StaminaBar", "ControlsHint", "MicBadge" };
 
         // Never restyled (logo art, event system).
         private static readonly HashSet<string> SkipNames = new() { "Logo", "GnomeLogo", "EventSystem" };
@@ -111,12 +114,97 @@ namespace BetterTogether.EditorTools
         {
             GenerateDisc(KnobSpritePath, true);
             GenerateDisc(PillSpritePath, false);
+            GenerateFrame(FrameSpritePath);
+            GenerateNeutralButton(ButtonSpritePath, ButtonTintSpritePath);
 
             ConfigureSprite(ButtonSpritePath, 24);
             ConfigureSprite(HeaderSpritePath, 28);
-            ConfigureSprite(FrameSpritePath, 60);
+            ConfigureSprite(FrameSpritePath, FrameBorder);
+            ConfigureSprite(ButtonTintSpritePath, 24);
             ConfigureSprite(KnobSpritePath, DiscBorder);
             ConfigureSprite(PillSpritePath, DiscBorder);
+        }
+
+        private const int FramePixels = 128;
+        private const int FrameBorder = 44;
+        private const float FrameRadius = 30f;
+        private const float FrameWood = 14f;
+        private const float FrameRim = 4f;
+
+        // Rounded wooden frame with a paper inside (the look of the credits board, without its names): dark rim, wood, paper.
+        private static void GenerateFrame(string path)
+        {
+            if (File.Exists(path))
+                return;
+
+            var defaults = ScriptableObject.CreateInstance<UiTheme>();
+            Color rim = defaults.woodDark, wood = defaults.wood, paper = defaults.paper;
+            Object.DestroyImmediate(defaults);
+
+            var pixels = new Color32[FramePixels * FramePixels];
+            var half = FramePixels * 0.5f;
+            for (var y = 0; y < FramePixels; y++)
+            {
+                for (var x = 0; x < FramePixels; x++)
+                {
+                    // Signed distance to the rounded rectangle (negative inside).
+                    var px = Mathf.Abs(x + 0.5f - half) - (half - FrameRadius);
+                    var py = Mathf.Abs(y + 0.5f - half) - (half - FrameRadius);
+                    var outside = new Vector2(Mathf.Max(px, 0f), Mathf.Max(py, 0f)).magnitude + Mathf.Min(Mathf.Max(px, py), 0f) - FrameRadius;
+                    var depth = -outside;
+                    var color = depth < FrameRim ? rim : depth < FrameWood ? wood : paper;
+                    if (depth >= FrameRim && depth < FrameRim + 2f)
+                        color = Color.Lerp(rim, wood, (depth - FrameRim) * 0.5f);
+                    if (depth >= FrameWood && depth < FrameWood + 2f)
+                        color = Color.Lerp(rim, paper, (depth - FrameWood) * 0.5f);
+                    color.a = Mathf.Clamp01(depth + 0.5f);
+                    pixels[y * FramePixels + x] = color;
+                }
+            }
+
+            WritePng(path, FramePixels, FramePixels, pixels);
+        }
+
+        // Greyscale copy of the wood button, brightened so its lightest fill is white: a Selectable tint then gives clean colours.
+        private static void GenerateNeutralButton(string source, string path)
+        {
+            if (File.Exists(path) || !File.Exists(source))
+                return;
+
+            var input = new Texture2D(2, 2);
+            input.LoadImage(File.ReadAllBytes(source));
+            var pixels = input.GetPixels32();
+            var maxLuma = 0.01f;
+            foreach (var p in pixels)
+            {
+                if (p.a > 200)
+                    maxLuma = Mathf.Max(maxLuma, Luma(p));
+            }
+
+            for (var i = 0; i < pixels.Length; i++)
+            {
+                var v = (byte)Mathf.RoundToInt(Mathf.Clamp01(Luma(pixels[i]) / maxLuma) * 255f);
+                pixels[i] = new Color32(v, v, v, pixels[i].a);
+            }
+
+            var width = input.width;
+            var height = input.height;
+            Object.DestroyImmediate(input);
+            WritePng(path, width, height, pixels);
+        }
+
+        private static float Luma(Color32 c) => (0.299f * c.r + 0.587f * c.g + 0.114f * c.b) / 255f;
+
+        private static void WritePng(string path, int width, int height, Color32[] pixels)
+        {
+            var texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            texture.SetPixels32(pixels);
+            var png = texture.EncodeToPNG();
+            Object.DestroyImmediate(texture);
+            File.WriteAllBytes(path, png);
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+            _changes++;
+            Notes.Add($"Generated {path}");
         }
 
         // Writes a 64 px anti-aliased disc: paper with a woodDark rim (knob) or plain white (pill, to be tinted).
@@ -208,7 +296,10 @@ namespace BetterTogether.EditorTools
             }
 
             Fill(ref theme.panel, PanelSpritePath, ref dirty);
+            if (theme.frame != null && AssetDatabase.GetAssetPath(theme.frame) == CreditsSpritePath)
+                theme.frame = null;
             Fill(ref theme.frame, FrameSpritePath, ref dirty);
+            Fill(ref theme.buttonTint, ButtonTintSpritePath, ref dirty);
             Fill(ref theme.header, HeaderSpritePath, ref dirty);
             Fill(ref theme.button, ButtonSpritePath, ref dirty);
             Fill(ref theme.knob, KnobSpritePath, ref dirty);
@@ -446,7 +537,7 @@ namespace BetterTogether.EditorTools
             var image = button.GetComponent<Image>();
             if (image != null)
             {
-                SetSprite(image, _theme.button);
+                SetSprite(image, role != UiRole.Button && _theme.buttonTint != null ? _theme.buttonTint : _theme.button);
                 SetColor(image, Color.white);
                 if (button.targetGraphic != image)
                 {
@@ -598,9 +689,23 @@ namespace BetterTogether.EditorTools
                 return;
             }
 
-            if (t.name == "BarFill")
+            if (t.name == "BarFill" || (t.name == "Fill" && t.parent != null && t.parent.name == "StaminaBar"))
             {
                 SetColor(image, _theme.ember);
+                return;
+            }
+
+            if (t.name == "StaminaBar")
+            {
+                SetColor(image, WithAlpha(_theme.woodDark, 0.85f));
+                return;
+            }
+
+            // The interaction prompt floats over the game: a dark rounded pill behind cream text.
+            if (t.name == "Prompt")
+            {
+                SetSprite(image, _theme.pill, Image.Type.Sliced);
+                SetColor(image, WithAlpha(_theme.shade, 0.8f));
                 return;
             }
 
@@ -688,7 +793,7 @@ namespace BetterTogether.EditorTools
                 return UiRole.Backdrop;
             if (lower.StartsWith("header"))
                 return UiRole.Header;
-            if (lower == "window")
+            if (lower == "window" || lower == "rolecard")
                 return UiRole.Frame;
             if (lower == "bg")
                 return t.parent != null && (t.parent.name == "RoleCard" || t.parent.name == "EndScreen") ? UiRole.Frame : UiRole.Panel;
@@ -724,8 +829,9 @@ namespace BetterTogether.EditorTools
                 var role = buttonParent.TryGetComponent<UiStyleRole>(out var buttonRole) ? buttonRole.Role : UiRole.Button;
                 if (role == UiRole.Skip)
                     return;
-                color = _theme.cream;
-                outline = true;
+                // The plain wood button has a light fill: ink reads best. Tinted variants are dark: cream with an outline.
+                outline = role != UiRole.Button;
+                color = outline ? _theme.cream : _theme.ink;
                 titleFont = true;
             }
             else if (inputParent != null)
@@ -810,6 +916,10 @@ namespace BetterTogether.EditorTools
                 EnsureModal(ObjectField(hud, "_endScreen"), target);
             foreach (var survey in top.GetComponentsInChildren<PostMatchSurvey>(true))
                 EnsureModal(ObjectField(survey, "_panel"), target);
+            // The credits board of the main menu: dim the menu behind it.
+            var credits = FindDeep(top, "Credits");
+            if (credits != null && credits.parent != null && credits.parent.name == "MainMenu")
+                EnsureModal(credits.gameObject, target);
         }
 
         private static void EnsureModal(GameObject toggled, string target)
