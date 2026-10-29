@@ -5,7 +5,6 @@ using BetterTogether.Interaction;
 using Fusion;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 namespace BetterTogether.EditorTools
 {
@@ -19,6 +18,9 @@ namespace BetterTogether.EditorTools
         // Fraction of the bounds width between neighbouring slots, and how far below the centre the slots sit (fraction of height).
         private const float SlotSpread = 0.25f;
         private const float SlotDrop = 0.15f;
+
+        // Lowest a slot may sit above the bottom of the bounds, in world metres.
+        private const float MinSlotHeight = 0.25f;
 
         [MenuItem(MenuPath, true)]
         private static bool CanCreate() => Selection.gameObjects.Length > 0;
@@ -45,68 +47,85 @@ namespace BetterTogether.EditorTools
                     continue;
                 }
 
-                if (!TryGetBounds(target, out var bounds))
+                if (!HasRenderers(target))
                 {
                     Debug.LogWarning($"{LogPrefix} {target.name} has no renderers to size the collider; skipped.", target);
                     continue;
                 }
 
-                Create(target, bounds, layer);
+                Create(target, layer);
                 created++;
             }
 
             Debug.Log($"{LogPrefix} Created {created} hiding spot(s).");
         }
 
-        private static bool TryGetBounds(GameObject target, out Bounds bounds)
+        private static bool HasRenderers(GameObject target) => target.GetComponentInChildren<Renderer>() != null;
+
+        // Bounds of every renderer in the local space of <space>, from the eight corners of each renderer's local bounds,
+        // so a rotated or scaled parent still gives a tight box.
+        private static Bounds LocalBounds(GameObject target, Transform space)
         {
-            bounds = default;
-            var found = false;
+            var bounds = new Bounds();
+            var first = true;
             foreach (var renderer in target.GetComponentsInChildren<Renderer>())
             {
-                if (!found)
-                    bounds = renderer.bounds;
-                else
-                    bounds.Encapsulate(renderer.bounds);
-                found = true;
+                var local = renderer.localBounds;
+                for (var i = 0; i < 8; i++)
+                {
+                    var sign = new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1);
+                    var corner = local.center + Vector3.Scale(local.extents, sign);
+                    var point = space.InverseTransformPoint(renderer.transform.TransformPoint(corner));
+                    if (first)
+                        bounds = new Bounds(point, Vector3.zero);
+                    else
+                        bounds.Encapsulate(point);
+                    first = false;
+                }
             }
 
-            return found;
+            return bounds;
         }
 
-        private static void Create(GameObject target, Bounds bounds, int layer)
+        private static void Create(GameObject target, int layer)
         {
             var spot = new GameObject(ChildName);
             Undo.RegisterCreatedObjectUndo(spot, "Crear escondite");
             spot.transform.SetParent(target.transform, false);
-            spot.transform.SetPositionAndRotation(bounds.center, Quaternion.identity);
             if (layer >= 0)
                 spot.layer = layer;
 
             // Fusion needs the object to be a master client object so the master arbitrates hiding and searching.
+            // The inspector clears these two flags for master client objects, so do the same.
             var networkObject = spot.AddComponent<NetworkObject>();
             var flags = new SerializedObject(networkObject).FindProperty("Flags");
             if (flags != null)
             {
                 flags.intValue |= (int)NetworkObjectFlags.MasterClientObject;
+                flags.intValue &= ~(int)NetworkObjectFlags.AllowStateAuthorityOverride;
+                flags.intValue &= ~(int)NetworkObjectFlags.DestroyWhenStateAuthorityLeaves;
                 flags.serializedObject.ApplyModifiedPropertiesWithoutUndo();
             }
 
             var hiding = spot.AddComponent<HidingSpot>();
 
-            // The box is the bounds in world axes; dividing by the lossy scale keeps its world size under a scaled parent.
-            var scale = spot.transform.lossyScale;
+            // The spot shares the target's axes (local identity), so the box is measured in that space under any parent.
+            var bounds = LocalBounds(target, spot.transform);
             var box = spot.AddComponent<BoxCollider>();
             box.isTrigger = false;
-            box.size = new Vector3(Safe(bounds.size.x, scale.x), Safe(bounds.size.y, scale.y), Safe(bounds.size.z, scale.z));
+            box.center = bounds.center;
+            box.size = bounds.size;
 
+            // Slots sit below the centre but never lower than 25 cm above the bottom (measured in world metres).
+            var scaleY = Mathf.Max(1e-4f, Mathf.Abs(spot.transform.lossyScale.y));
+            var minY = bounds.min.y + MinSlotHeight / scaleY;
+            var slotY = Mathf.Min(Mathf.Max(bounds.center.y - bounds.size.y * SlotDrop, minY), bounds.max.y);
             var slots = new Transform[SlotCount];
             for (var i = 0; i < SlotCount; i++)
             {
                 var slot = new GameObject($"Slot{i + 1}").transform;
                 slot.SetParent(spot.transform, false);
-                var offset = (i - (SlotCount - 1) * 0.5f) * SlotSpread * bounds.size.x;
-                slot.SetPositionAndRotation(bounds.center + new Vector3(offset, -bounds.size.y * SlotDrop, 0f), Quaternion.identity);
+                slot.localPosition = new Vector3(bounds.center.x + (i - (SlotCount - 1) * 0.5f) * SlotSpread * bounds.size.x, slotY, bounds.center.z);
                 slots[i] = slot;
             }
 
@@ -117,11 +136,7 @@ namespace BetterTogether.EditorTools
                 slotsProperty.GetArrayElementAtIndex(i).objectReferenceValue = slots[i];
             serialized.ApplyModifiedPropertiesWithoutUndo();
 
-            EditorSceneManager_MarkDirty(spot.scene);
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(spot.scene);
         }
-
-        private static float Safe(float size, float scale) => Mathf.Abs(scale) > 1e-4f ? size / Mathf.Abs(scale) : size;
-
-        private static void EditorSceneManager_MarkDirty(Scene scene) => UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(scene);
     }
 }

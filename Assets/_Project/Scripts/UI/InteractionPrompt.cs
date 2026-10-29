@@ -114,7 +114,7 @@ namespace BetterTogether.UI
             var holdStep = local.HoldProgress > 0f ? local.HoldPercentStep : -1;
 
             var changed = holdStep != _lastHoldStep
-                          ||!ReferenceEquals(focused, _lastFocused)
+                          || !ReferenceEquals(focused, _lastFocused)
                           || carried != _lastCarried
                           || stunned != _lastStunned
                           || riding != _lastRiding

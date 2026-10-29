@@ -17,10 +17,16 @@ namespace BetterTogether.Interaction
     /// <see cref="Carryable"/>s pinned to this spot, which already replicates (late joiners and a new master see it).
     /// The search progress is local input and is never networked.
     /// </summary>
-    public class HidingSpot : NetworkBehaviour, IPinSpot, IInteractable, IHoldInteractable
+    public class HidingSpot : NetworkBehaviour, IPinSpot, IInteractable, IHoldInteractable, IStateAuthorityChanged
     {
         // Seconds a ejected item waits for the Carryable's own rule to make it dynamic before the jump is dropped.
         private const float EjectWaitSeconds = 1f;
+
+        // Extra seconds, after the jump wait, that an ejected item may keep ignoring the spot's colliders before they are restored.
+        private const float IgnoreMarginSeconds = 1.5f;
+
+        // Seconds between occupancy checks for the hide sound (the check walks every Carryable).
+        private const float OccupancyCheckInterval = 0.2f;
 
         // After spawning, changes in occupancy are baseline, not events (a late joiner must not hear past sounds).
         private const float QuietSecondsAfterSpawn = 1f;
@@ -46,6 +52,9 @@ namespace BetterTogether.Interaction
             public Carryable Item;
             public Vector3 Velocity;
             public float Until;
+            public float RestoreAt;
+            public bool Applied;
+            public Collider[] Colliders;
         }
 
         private static readonly List<Carryable> PinnedBuffer = new(8);
@@ -56,6 +65,7 @@ namespace BetterTogether.Interaction
         private bool _isSpawned;
         private float _spawnTime;
         private int _lastCount;
+        private float _nextOccupancyCheck;
 
         public Transform GetPinPoint(int slot) =>
             _slots != null && _slots.Length > 0 ? _slots[Mathf.Clamp(slot, 0, _slots.Length - 1)] : transform;
@@ -78,8 +88,11 @@ namespace BetterTogether.Interaction
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             _isSpawned = false;
-            _ejecting.Clear();
+            RestoreAllCollisions();
         }
+
+        /// <summary>The ignored collisions only exist on the old authority: they are restored at once when the authority changes.</summary>
+        public void StateAuthorityChanged() => RestoreAllCollisions();
 
         // ---- Prompt (mirror of the authority's rules) ----
 
@@ -121,9 +134,14 @@ namespace BetterTogether.Interaction
             return carried != null && carried.HolderCount == 1 && carried.IsMoving && !carried.Inert && TryGetFreeSlot(out _);
         }
 
-        /// <summary>The camper, able to act and in reach. An empty spot can be searched too.</summary>
+        /// <summary>
+        /// The camper with empty hands (so E keeps placing, pouring and dropping what is carried), able to act and in reach.
+        /// An empty spot can be searched too. The local player also counts a predicted grab as a full hand.
+        /// </summary>
         public bool CanSearch(PlayerInteractor who) =>
-            _isSpawned && MatchManager.AllowsInteraction && who != null && who.Role == PlayerRole.Camper && CanAct(who) && InReach(who);
+            _isSpawned && MatchManager.AllowsInteraction && who != null && who.Role == PlayerRole.Camper
+            && who.Carried == null && (who != PlayerInteractor.Local || who.CarriedOrPredicted == null)
+            && CanAct(who) && InReach(who);
 
         private static bool CanAct(PlayerInteractor who) =>
             !(who.TryGetComponent<Kickable>(out var kickable) && kickable.IsStunned)
@@ -202,7 +220,17 @@ namespace BetterTogether.Interaction
                 // The item stays kinematic until the Carryable's own rule makes it dynamic (and zeroes its velocity),
                 // so the jump is applied in FixedUpdateNetwork afterwards.
                 item.Unpin();
-                _ejecting.Add(new PendingEject { Item = item, Velocity = velocity, Until = Time.time + EjectWaitSeconds });
+                // The slots lie inside the solid collider: without this PhysX would shove the item out violently.
+                var colliders = item.GetComponentsInChildren<Collider>();
+                SetIgnore(colliders, true);
+                _ejecting.Add(new PendingEject
+                {
+                    Item = item,
+                    Velocity = velocity,
+                    Until = Time.time + EjectWaitSeconds,
+                    RestoreAt = Time.time + EjectWaitSeconds + IgnoreMarginSeconds,
+                    Colliders = colliders,
+                });
             }
 
             RPC_PlaySearch();
@@ -210,6 +238,9 @@ namespace BetterTogether.Interaction
                 Telemetry.Begin("search", who).Str("spot", _displayName).Int("found", found).Send();
         }
 
+        // Authority only. An ejected item gets its jump once the Carryable's rule makes it dynamic; it keeps ignoring the
+        // spot's colliders until it leaves the spot's bounds or the time runs out. If the master migrates mid-ejection the
+        // new master has no pending list, so the item simply falls without the jump (collisions are restored on the old one).
         public override void FixedUpdateNetwork()
         {
             if (!HasStateAuthority)
@@ -219,10 +250,21 @@ namespace BetterTogether.Interaction
             {
                 var pending = _ejecting[i];
                 var item = pending.Item;
-                if (item == null || item.Object == null || !item.Object.IsValid || Time.time > pending.Until || item.IsPinned || item.IsHeld
-                    || !item.TryGetComponent<Rigidbody>(out var body))
+                if (item == null || item.Object == null || !item.Object.IsValid || Time.time > pending.RestoreAt || item.IsPinned || item.IsHeld
+                    || (pending.Applied && !Overlaps(pending.Colliders)))
                 {
+                    SetIgnore(pending.Colliders, false);
                     _ejecting.RemoveAt(i);
+                    continue;
+                }
+
+                if (pending.Applied)
+                    continue;
+
+                if (Time.time > pending.Until || !item.TryGetComponent<Rigidbody>(out var body))
+                {
+                    pending.Applied = true;
+                    _ejecting[i] = pending;
                     continue;
                 }
 
@@ -230,8 +272,52 @@ namespace BetterTogether.Interaction
                     continue;
 
                 body.linearVelocity = pending.Velocity;
-                _ejecting.RemoveAt(i);
+                pending.Applied = true;
+                _ejecting[i] = pending;
             }
+        }
+
+        // Whether any collider of the item still touches the spot's bounds.
+        private bool Overlaps(Collider[] items)
+        {
+            foreach (var item in items)
+            {
+                if (item == null)
+                    continue;
+
+                foreach (var spot in _colliders)
+                {
+                    if (spot != null && spot.bounds.Intersects(item.bounds))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void SetIgnore(Collider[] items, bool ignore)
+        {
+            if (items == null)
+                return;
+
+            foreach (var item in items)
+            {
+                if (item == null)
+                    continue;
+
+                foreach (var spot in _colliders)
+                {
+                    if (spot != null)
+                        Physics.IgnoreCollision(item, spot, ignore);
+                }
+            }
+        }
+
+        private void RestoreAllCollisions()
+        {
+            foreach (var pending in _ejecting)
+                SetIgnore(pending.Colliders, false);
+            _ejecting.Clear();
         }
 
         private int PinnedCount()
@@ -252,6 +338,10 @@ namespace BetterTogether.Interaction
             if (!_isSpawned)
                 return;
 
+            if (Time.time < _nextOccupancyCheck)
+                return;
+
+            _nextOccupancyCheck = Time.time + OccupancyCheckInterval;
             var count = PinnedCount();
             if (_lastCount >= 0 && count > _lastCount && Time.time - _spawnTime > QuietSecondsAfterSpawn)
                 _hideSfx.PlayAt(transform.position);
