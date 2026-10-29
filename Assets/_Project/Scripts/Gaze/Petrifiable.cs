@@ -73,11 +73,17 @@ namespace BetterTogether.Gaze
 
         private static readonly List<Petrifiable> _all = new();
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        // The gnome models use the project's watercolor shader, whose tint has its own name.
+        private static readonly int WatercolorColorId = Shader.PropertyToID("_WatercolorBaseColor");
 
         private PlayerMovement _movement;
         private GnomeStack _stack;
         private InputAction _interact;
         private Renderer[] _renderers;
+        // One slot per tintable material (renderer + submesh): which colour property it has and its original value.
+        private int[] _slotRenderer;
+        private int[] _slotMaterial;
+        private int[] _slotColorId;
         private Color[] _originalColors;
         private float[] _relativeHeights; // 0 = feet, 1 = head, per renderer: when the sweep reaches it.
         private MaterialPropertyBlock _block;
@@ -201,12 +207,7 @@ namespace BetterTogether.Gaze
             _stack = GetComponent<GnomeStack>();
             _block = new MaterialPropertyBlock();
             _renderers = _visual != null ? _visual.GetComponentsInChildren<Renderer>() : new Renderer[0];
-            _originalColors = new Color[_renderers.Length];
-            for (var i = 0; i < _renderers.Length; i++)
-            {
-                var material = _renderers[i].sharedMaterial;
-                _originalColors[i] = material != null && material.HasProperty(BaseColorId) ? material.GetColor(BaseColorId) : Color.white;
-            }
+            BuildTintSlots();
 
             ComputeRelativeHeights();
 
@@ -458,18 +459,65 @@ namespace BetterTogether.Gaze
                 _relativeHeights[i] = Mathf.Clamp01((_renderers[i].bounds.center.y - minY) / height);
         }
 
+        // Awake only: finds every material that has a tint colour (URP Lit or the watercolor shader), per submesh.
+        private void BuildTintSlots()
+        {
+            var count = 0;
+            foreach (var renderer in _renderers)
+            {
+                foreach (var material in renderer.sharedMaterials)
+                {
+                    if (TintColorId(material) != 0)
+                        count++;
+                }
+            }
+
+            _slotRenderer = new int[count];
+            _slotMaterial = new int[count];
+            _slotColorId = new int[count];
+            _originalColors = new Color[count];
+            var slot = 0;
+            for (var i = 0; i < _renderers.Length; i++)
+            {
+                var materials = _renderers[i].sharedMaterials;
+                for (var m = 0; m < materials.Length; m++)
+                {
+                    var id = TintColorId(materials[m]);
+                    if (id == 0)
+                        continue;
+
+                    _slotRenderer[slot] = i;
+                    _slotMaterial[slot] = m;
+                    _slotColorId[slot] = id;
+                    _originalColors[slot] = materials[m].GetColor(id);
+                    slot++;
+                }
+            }
+        }
+
+        private static int TintColorId(Material material)
+        {
+            if (material == null)
+                return 0;
+            if (material.HasProperty(BaseColorId))
+                return BaseColorId;
+            return material.HasProperty(WatercolorColorId) ? WatercolorColorId : 0;
+        }
+
         // The sweep front moves from below the feet to above the head: renderers it has passed are stone.
         private void ApplyStone()
         {
-            for (var i = 0; i < _renderers.Length; i++)
+            for (var slot = 0; slot < _slotRenderer.Length; slot++)
             {
+                var i = _slotRenderer[slot];
                 if (_renderers[i] == null)
                     continue;
 
                 var amount = Mathf.Clamp01((_stoneAmount * (1f + _sweepBand) - _relativeHeights[i]) / _sweepBand);
-                var baseColor = Color.Lerp(_originalColors[i], _overlayTint, _overlayAmount);
-                _block.SetColor(BaseColorId, Color.Lerp(baseColor, _stoneColor, amount));
-                _renderers[i].SetPropertyBlock(_block);
+                var baseColor = Color.Lerp(_originalColors[slot], _overlayTint, _overlayAmount);
+                _block.Clear();
+                _block.SetColor(_slotColorId[slot], Color.Lerp(baseColor, _stoneColor, amount));
+                _renderers[i].SetPropertyBlock(_block, _slotMaterial[slot]);
             }
         }
     }
