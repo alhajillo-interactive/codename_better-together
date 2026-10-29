@@ -22,6 +22,13 @@ MonoBehaviour:
   hat: {r: 0.72156864, g: 0.25882354, b: 0.22745098, a: 1}
   ember: {r: 0.9647059, g: 0.7647059, b: 0.2627451, a: 1}
   shade: {r: 0.16862746, g: 0.101960786, b: 0.0627451, a: 0.55}
+  inkSoft: {r: 0.47843137, g: 0.2901961, b: 0.18039216, a: 1}
+  night80: {r: 0.16862746, g: 0.101960786, b: 0.0627451, a: 0.8}
+  leafLight: {r: 0.4862745, g: 0.8901961, b: 0.54509807, a: 1}
+  leafDark: {r: 0.24705882, g: 0.47843137, b: 0.13333334, a: 1}
+  hatDark: {r: 0.61960787, g: 0.18431373, b: 0.15686275, a: 1}
+  roleCamper: {r: 1, g: 0.70980394, b: 0.2784314, a: 1}
+  roleGnome: {r: 0.23921569, g: 0.43529412, b: 0.65882355, a: 1}
   titleFont: {fileID: 11400000, guid: 89011f902c7eb8948a282cdea05b2ad1, type: 2}
   bodyFont: {fileID: 11400000, guid: 89011f902c7eb8948a282cdea05b2ad1, type: 2}
   titleOutline: {fileID: 2100000, guid: 0f0f67e631a03d14f9b40d925ee15be8, type: 2}
@@ -35,6 +42,8 @@ MonoBehaviour:
   knob: {fileID: 21300000, guid: cae478ae77880524780a91e39fedbfd1, type: 3}
   pill: {fileID: 21300000, guid: b7c7d429f72b87e4aa6cdfc45363528a, type: 3}
   backdrop: {fileID: 21300000, guid: f9eb7814776b7e34685fa6c30bceadb9, type: 3}
+  stamp: {fileID: 21300000, guid: b821108739bd0a54b8192c6f2893e0f9, type: 3}
+  stampFail: {fileID: 21300000, guid: 0a958a9b4b306264890cce24243efe99, type: 3}
   titleSize: 64
   subtitleSize: 40
   buttonSize: 34

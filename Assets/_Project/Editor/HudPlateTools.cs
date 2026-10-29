@@ -20,8 +20,9 @@ namespace BetterTogether.EditorTools
         private const float HeaderLeft = 11f;
         private const float HeaderCenterY = 45f;
         private const float LineStampSize = 34f;
-        private const float LineRightRoom = 44f;
+        private const float LineRightRoom = 72f;
         private const float PillBorder = 3f;
+        private const float ToastFontSize = 48f;
         private static readonly string[] LineNames = { "Line1", "Line2", "Line3", "Line4" };
 
         /// <summary>Applies every C6.2a prefab change to the MatchHUD contents; returns the number of writes.</summary>
@@ -129,9 +130,11 @@ namespace BetterTogether.EditorTools
                     changes++;
                 }
 
+                // The stamp sits at the start of the line like a checklist box; the right margin keeps the text on the paper.
                 var margin = text.margin;
-                if (margin.z < LineRightRoom)
+                if (margin.x != LineStampSize + 8f || margin.z != LineRightRoom)
                 {
+                    margin.x = LineStampSize + 8f;
                     margin.z = LineRightRoom;
                     text.margin = margin;
                     changes++;
@@ -146,7 +149,7 @@ namespace BetterTogether.EditorTools
                     changes++;
                 }
 
-                changes += SetRect(stamp, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-4f, 0f),
+                changes += SetRect(stamp, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), Vector2.zero,
                     new Vector2(LineStampSize, LineStampSize));
 
                 var image = stamp.GetComponent<Image>();
@@ -240,7 +243,10 @@ namespace BetterTogether.EditorTools
             }
 
             var fillImage = fill.GetComponent<Image>();
-            changes += SetImage(fillImage, theme.pill, theme.night80);
+            // Opaque fill: a translucent one would mix with the event-coloured border drawn underneath it.
+            var night = theme.night80;
+            night.a = 1f;
+            changes += SetImage(fillImage, theme.pill, night);
             if (fillImage.raycastTarget)
             {
                 fillImage.raycastTarget = false;
@@ -262,6 +268,15 @@ namespace BetterTogether.EditorTools
             // The toast text is always cream; the event colour lives on the border.
             changes += SetText(text, theme.cream, text.font, text.fontSharedMaterial, TextAlignmentOptions.Center);
 
+            // Toasts live under the clock (plan §6), away from the objectives note and the prompt; 48 px reads at a glance and the pill stays clear of the objectives note.
+            changes += SetRect(pill, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -130f));
+            if (!Mathf.Approximately(text.fontSize, ToastFontSize) || text.enableAutoSizing)
+            {
+                text.enableAutoSizing = false;
+                text.fontSize = ToastFontSize;
+                changes++;
+            }
+
             var plate = pill.GetComponent<ElasticPlate>();
             var created = plate == null;
             if (created)
@@ -277,7 +292,7 @@ namespace BetterTogether.EditorTools
                 so.FindProperty("_paddingX").floatValue = 40f;
                 so.FindProperty("_paddingY").floatValue = 14f;
                 so.FindProperty("_minWidth").floatValue = 160f;
-                so.FindProperty("_maxWidth").floatValue = 1300f;
+                so.FindProperty("_maxWidth").floatValue = 860f;
                 so.FindProperty("_fitHeight").boolValue = true;
                 so.FindProperty("_minHeight").floatValue = 72f;
                 so.FindProperty("_minFontSize").floatValue = 30f;

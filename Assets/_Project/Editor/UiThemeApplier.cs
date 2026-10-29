@@ -761,6 +761,13 @@ namespace BetterTogether.EditorTools
                 return;
             }
 
+            // The voice badge is a pill whose colour MicIndicator sets (open / muted); the wood button art would muddy it.
+            if (t.name == "MicBadge")
+            {
+                SetSprite(image, _theme.pill, Image.Type.Sliced);
+                return;
+            }
+
             // The interaction prompt floats over the game: a dark rounded pill behind cream text.
             if (t.name == "Prompt")
             {
