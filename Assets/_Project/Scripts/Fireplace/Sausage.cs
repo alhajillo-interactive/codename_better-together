@@ -339,7 +339,7 @@ namespace BetterTogether.Fireplace
                 _feelState = state;
             }
 
-            UpdateSizzle(cooking, progress);
+            UpdateSizzle(cooking && state != CookState.Burnt, progress);
             SetEmitting(_sparks, cooking && state != CookState.Burnt);
 
             var alarm = cooking && state == CookState.Cooked && CookTime >= _burntAt - _alarmLead;

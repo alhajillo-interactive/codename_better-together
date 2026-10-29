@@ -3152,6 +3152,8 @@ GameObject:
   - component: {fileID: 1443689712}
   - component: {fileID: 1443689790}
   - component: {fileID: 1443689791}
+  - component: {fileID: 1443689793}
+  - component: {fileID: 1443689792}
   m_Layer: 0
   m_Name: PlayerCamera
   m_TagString: Untagged
@@ -3315,6 +3317,50 @@ MonoBehaviour:
   _focusFov: 35
   _transitionTime: 0.2
   _focusSensitivity: 0.55
+--- !u!114 &1443689792
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1443689710}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bff54496c059438bb7fceb8a79791f37, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Player.CameraFeel
+  _camperNoise: {fileID: 11400000, guid: 00f96aca937386b43aafcba22e912051, type: 2}
+  _gnomeNoise: {fileID: 11400000, guid: e69ede2b5ab44d549836ad09cd079a6b, type: 2}
+  _bobScale: 1
+  _walkGain: 1
+  _sprintGain: 1.3
+  _crouchGain: 0.5
+  _gainSmoothTime: 0.12
+  _moveSpeedThreshold: 0.15
+  _maxSpeedSample: 20
+  _sprintFovBonus: 6
+  _sprintFovBlendTime: 0.2
+  _landingMinDrop: 0.6
+  _landingPunch: 0.04
+  _landingMaxScale: 3
+  _landingDuration: 0.25
+--- !u!114 &1443689793
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1443689710}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 68bb026fafb42b14791938953eaace77, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Cinemachine::Unity.Cinemachine.CinemachineBasicMultiChannelPerlin
+  NoiseProfile: {fileID: 11400000, guid: 00f96aca937386b43aafcba22e912051, type: 2}
+  PivotOffset: {x: 0, y: 0, z: 0}
+  AmplitudeGain: 0
+  FrequencyGain: 1
+  m_NoiseOffsets: {x: 0, y: 0, z: 0}
 --- !u!1 &1483648771
 GameObject:
   m_ObjectHideFlags: 0

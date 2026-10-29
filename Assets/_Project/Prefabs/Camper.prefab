@@ -193,6 +193,16 @@ MonoBehaviour:
   _sprintSpeed: 5
   _jumpHeight: 1
   _gravity: -20
+  _pairCarrySpeedMultiplier: 0.7
+  _camperCrouchHeight: 1
+  _gnomeCrouchHeight: 0.22
+  _camperCrouchSpeed: 0.5
+  _gnomeCrouchSpeed: 0.6
+  _camperCrouchEyeHeight: 0.9
+  _gnomeCrouchEyeHeight: 0.18
+  _standUpMask:
+    serializedVersion: 2
+    m_Bits: 0
   _animator: {fileID: 0}
   _kickSwingSfx: {fileID: 11400000, guid: 7aa6b956ba554a34b988b9859c5085ca, type: 2}
   _knockbackAirDrag: 1.5
@@ -365,6 +375,12 @@ MonoBehaviour:
   _missRecoilForce: 0.1
   _hitFovPunch: 4
   _hitFovPunchTime: 0.25
+  _anticipationForce: 0.05
+  _anticipationTime: 0.1
+  _ringSprite: {fileID: 21300000, guid: e797185f8a0f7d04aa8dbd6c27d926b1, type: 3}
+  _hitStopTime: 0.06
+  _missFovPunch: -1.5
+  _missFovPunchTime: 0.2
 --- !u!114 &6152230495412790016
 MonoBehaviour:
   m_ObjectHideFlags: 0
