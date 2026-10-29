@@ -22,10 +22,10 @@ MonoBehaviour:
   hat: {r: 0.72156864, g: 0.25882354, b: 0.22745098, a: 1}
   ember: {r: 0.9647059, g: 0.7647059, b: 0.2627451, a: 1}
   shade: {r: 0.16862746, g: 0.101960786, b: 0.0627451, a: 0.55}
-  titleFont: {fileID: 11400000, guid: ec275716f79078e1f98f82915eda0424, type: 2}
-  bodyFont: {fileID: 11400000, guid: ec275716f79078e1f98f82915eda0424, type: 2}
-  titleOutline: {fileID: 2100000, guid: 0ef659f6bf52bc8449b2ed2d289a6319, type: 2}
-  bodyOutline: {fileID: 2100000, guid: 0ef659f6bf52bc8449b2ed2d289a6319, type: 2}
+  titleFont: {fileID: 11400000, guid: 89011f902c7eb8948a282cdea05b2ad1, type: 2}
+  bodyFont: {fileID: 11400000, guid: 89011f902c7eb8948a282cdea05b2ad1, type: 2}
+  titleOutline: {fileID: 2100000, guid: 0f0f67e631a03d14f9b40d925ee15be8, type: 2}
+  bodyOutline: {fileID: 2100000, guid: 0f0f67e631a03d14f9b40d925ee15be8, type: 2}
   outlineWidth: 0.25
   panel: {fileID: 21300000, guid: 926f6c0782a318c48aabcd62a058d61a, type: 3}
   frame: {fileID: 21300000, guid: 4cfa67ca6d550304891c562164adb644, type: 3}

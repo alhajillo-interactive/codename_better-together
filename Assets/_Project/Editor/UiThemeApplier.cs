@@ -40,7 +40,7 @@ namespace BetterTogether.EditorTools
         private const string BackdropSpritePath = UiSpriteFolder + "/BG/MainMenuBG.png";
         private const string KnobSpritePath = UiSpriteFolder + "/Knob.png";
         private const string PillSpritePath = UiSpriteFolder + "/Pill.png";
-        private const string FontPath = "Assets/_Project/Fonts/Black_Han_Sans/BlackHanSans-Regular SDF.asset";
+        private const string FontPath = "Assets/_Project/Fonts/LilitaOne/LilitaOne-Regular SDF.asset";
 
         private const int DiscPixels = 64;
         private const int DiscBorder = 31;
