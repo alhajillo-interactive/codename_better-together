@@ -291,7 +291,7 @@ namespace BetterTogether.Gaze
                 _pressSfx.Play();
             }
 
-            _movement.IsFrozen = HoldsStill;
+            _movement.IsFrozen = HoldsStill || _movement.IsCaptured;
             IsWatched = locked && !IsPetrified;
             WarningProgress = ComputeWarning(locker, IsGazeImmune);
         }
@@ -319,7 +319,7 @@ namespace BetterTogether.Gaze
             if (IsPetrified)
                 UpdateBreaking(presses);
 
-            _movement.IsFrozen = HoldsStill;
+            _movement.IsFrozen = HoldsStill || _movement.IsCaptured;
         }
 
         private void BeginFreeze()

@@ -191,6 +191,10 @@ namespace BetterTogether.UI
                     ? HoldText(local, local.Focused.GetPrompt(local))
                     : "[E] " + local.Focused.GetPrompt(local);
             }
+            else if (local.TryGetComponent<GnomeCarrier>(out var gnomeCarrier) && gnomeCarrier.Carried != null)
+            {
+                text = $"[E] Soltar a {gnomeCarrier.Carried.DisplayName}";
+            }
             else if (CamperKick.Local is { HasTargetInRange: true, IsReady: true })
             {
                 text = "[Clic] Patear";
