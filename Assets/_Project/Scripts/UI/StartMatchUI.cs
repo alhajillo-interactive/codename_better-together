@@ -47,7 +47,7 @@ public class StartMatchUI : MonoBehaviour
     const int MaxRows = 16;
     // Rich-text colours come from the theme (cached strings); the rows sit over the dark lobby backdrop.
     static string CamperColor => UiTheme.Hex(UiTheme.Safe.roleCamper);
-    static string ReadyColor => UiTheme.Hex(UiTheme.Safe.leafDark);
+    static string ReadyColor => UiTheme.Hex(UiTheme.Safe.leafLight);
     static string WaitColor => UiTheme.Hex(UiTheme.WithAlpha(UiTheme.Safe.cream, 0.7f));
 
     readonly PlayerCharacter[] _order = new PlayerCharacter[MaxRows];
@@ -204,7 +204,7 @@ public class StartMatchUI : MonoBehaviour
                 character.DisplayName,
                 isLocal ? " (tú)" : "",
                 isCamper ? $"   <color={CamperColor}>CAMPISTA</color>" : "",
-                ready ? $"   <color={ReadyColor}>✓ LISTO</color>" : $"   <color={WaitColor}>esperando</color>");
+                ready ? $"   <color={ReadyColor}>LISTO</color>" : $"   <color={WaitColor}>esperando</color>");
         }
 
         if (playerRows != null)

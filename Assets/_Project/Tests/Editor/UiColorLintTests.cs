@@ -19,7 +19,7 @@ namespace BetterTogether.Tests
         private static readonly string[] ExemptFiles = { "UiTheme.cs" };
 
         private static readonly Regex HardCoded = new(
-            @"new\s+Color32?\s*\(|<color=#|\bColor\.(white|black|red|green|blue|yellow|cyan|magenta|gray|grey)\b",
+            @"new\s+Color(32)?\s*\(|\bColor(32)?\s+\w+\s*=\s*new\s*\(|<color=#|\bColor\.(white|black|red|green|blue|yellow|cyan|magenta|gray|grey)\b",
             RegexOptions.Compiled);
 
         [Test]

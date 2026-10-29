@@ -50,9 +50,9 @@ namespace BetterTogether.UI
         [SerializeField] private RectTransform _sun;
         [SerializeField] private Image _sunImage;
         [SerializeField] private TMP_Text _timeLabel;
-        [SerializeField] private Color _sunColor = new(1f, 0.85f, 0.3f);
-        [SerializeField] private Color _moonColor = new(0.7f, 0.8f, 1f);
-        [SerializeField] private Color _urgentColor = new(1f, 0.25f, 0.2f);
+        [SerializeField] private Color _sunColor = new(1f, 0.85f, 0.3f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
+        [SerializeField] private Color _moonColor = new(0.7f, 0.8f, 1f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
+        [SerializeField] private Color _urgentColor = new(1f, 0.25f, 0.2f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
         [SerializeField] private float _urgentSeconds = 10f;
 
         [Header("Objectives")]
@@ -137,6 +137,9 @@ namespace BetterTogether.UI
 
         /// <summary>The HUD of this client, if one is in the scene.</summary>
         public static MatchHUD Instance { get; private set; }
+
+        /// <summary>True while the end screen is up (other HUD parts must not show themselves then).</summary>
+        public bool EndScreenShown => _endShown;
 
         /// <summary>Shows a message in the announcer of this client only. Safe to call without a HUD.</summary>
         public static void AnnounceLocal(string text, Color color)

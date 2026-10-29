@@ -45,10 +45,10 @@ namespace BetterTogether.UI
         [SerializeField] private TMP_Text _hintLabel;
 
         [Header("Gnome")]
-        [SerializeField] private Color _warningColor = new(0.45f, 0.55f, 0.7f, 0.8f);
+        [SerializeField] private Color _warningColor = new(0.45f, 0.55f, 0.7f, 0.8f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
         [Tooltip("Cooler tint for being inside a camper's cone without being locked yet.")]
-        [SerializeField] private Color _coneWarningColor = new(0.3f, 0.5f, 0.85f, 0.8f);
-        [SerializeField] private Color _petrifiedColor = new(0.5f, 0.5f, 0.52f, 0.9f);
+        [SerializeField] private Color _coneWarningColor = new(0.3f, 0.5f, 0.85f, 0.8f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
+        [SerializeField] private Color _petrifiedColor = new(0.5f, 0.5f, 0.52f, 0.9f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
         [Tooltip("Fraction of the half screen that stays clear in the gnome vignette.")]
         [Range(0.05f, 1f)]
         [SerializeField] private float _warningInnerRadius = 0.35f;
@@ -57,24 +57,24 @@ namespace BetterTogether.UI
         [Tooltip("Sideways shake of the title in canvas units on each key press.")]
         [SerializeField] private float _shakePixels = 6f;
         [SerializeField] private float _shakeDuration = 0.06f;
-        [SerializeField] private Color _releaseFlashColor = new(1f, 1f, 1f, 0.25f);
+        [SerializeField] private Color _releaseFlashColor = new(1f, 1f, 1f, 0.25f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
 
         [Header("Camper")]
-        [SerializeField] private Color _coneColor = new(0.3f, 0.2f, 0.5f, 1f);
+        [SerializeField] private Color _coneColor = new(0.3f, 0.2f, 0.5f, 1f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
         [SerializeField] private float _coneVignetteAlpha = 0.12f;
         [SerializeField] private float _pulseAlpha = 0.35f;
         [SerializeField] private float _pulseDuration = 0.3f;
 
         [Header("Focus vignette")]
         [Tooltip("Colour of the dark vignette; its alpha is the peak opacity at full focus.")]
-        [SerializeField] private Color _focusVignetteColor = new(0f, 0f, 0f, 0.55f);
+        [SerializeField] private Color _focusVignetteColor = new(0f, 0f, 0f, 0.55f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
         [Tooltip("Fraction of the screen centre that stays clear.")]
         [Range(0.05f, 1f)]
         [SerializeField] private float _focusVignetteInner = 0.55f;
 
         [Header("Stamina bar")]
-        [SerializeField] private Color _staminaColor = new(0.6f, 0.5f, 1f, 0.95f);
-        [SerializeField] private Color _exhaustedColor = new(1f, 0.2f, 0.2f, 0.95f);
+        [SerializeField] private Color _staminaColor = new(0.6f, 0.5f, 1f, 0.95f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
+        [SerializeField] private Color _exhaustedColor = new(1f, 0.2f, 0.2f, 0.95f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
         [Tooltip("Blinks per second of the bar while exhausted.")]
         [SerializeField] private float _exhaustedBlinkHz = 3f;
 

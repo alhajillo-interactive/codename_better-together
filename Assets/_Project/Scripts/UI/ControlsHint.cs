@@ -69,6 +69,10 @@ namespace BetterTogether.UI
             if (_root == null || _group == null || _lines == null)
                 return;
 
+            // The end screen stands alone: never (re)activate or fade the hint while it is up.
+            if (MatchHUD.Instance != null && MatchHUD.Instance.EndScreenShown)
+                return;
+
             var match = MatchManager.Instance;
             if (match == null || match.Phase != MatchPhase.Playing)
             {

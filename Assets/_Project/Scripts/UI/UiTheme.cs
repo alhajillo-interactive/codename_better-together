@@ -47,7 +47,9 @@ namespace BetterTogether.UI
         public Color inkSoft = new Color32(0x7A, 0x4A, 0x2E, 0xFF);
         [Tooltip("Pill behind text over the scene (prompt, toasts); cream text on it reads at 8:1 in the worst case.")]
         public Color night80 = new Color(0x2B / 255f, 0x1A / 255f, 0x10 / 255f, 0.8f);
-        [Tooltip("Confirm / ready / positive. One primary button per screen, the ready chip, positive toasts. Cream text on it: 4.79:1.")]
+        [Tooltip("Green text over dark backgrounds (ready chip in the lobby). leafDark is for fills with cream text.")]
+        public Color leafLight = new Color32(0x7C, 0xE3, 0x8B, 0xFF);
+        [Tooltip("Confirm / ready / positive fill. One primary button per screen, positive toasts. Cream text on it: 4.79:1.")]
         public Color leafDark = new Color32(0x3F, 0x7A, 0x22, 0xFF);
         [Tooltip("Danger, failure, exit. Cream text on it: 6.66:1.")]
         public Color hatDark = new Color32(0x9E, 0x2F, 0x28, 0xFF);

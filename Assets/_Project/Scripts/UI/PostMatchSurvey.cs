@@ -42,7 +42,7 @@ namespace BetterTogether.UI
         [Tooltip("Seconds after the end screen appears before the survey is shown.")]
         [Min(0f)] [SerializeField] private float _showDelay = 1.5f;
         [Tooltip("Tint of the answers that are not selected.")]
-        [SerializeField] private Color _idleColor = new(1f, 1f, 1f, 1f);
+        [SerializeField] private Color _idleColor = new(1f, 1f, 1f, 1f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
 
         // Chosen option tint: leafDark from the theme (semantic: confirm).
         private Color SelectedColor => UiTheme.Safe.leafDark;

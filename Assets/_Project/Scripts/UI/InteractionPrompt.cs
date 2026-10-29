@@ -29,9 +29,9 @@ namespace BetterTogether.UI
 
         [Header("Style")]
         [Tooltip("Colour of the crosshair dot.")]
-        [SerializeField] private Color _crosshairColor = new(1f, 1f, 1f, 0.8f);
+        [SerializeField] private Color _crosshairColor = new(1f, 1f, 1f, 0.8f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
         [Tooltip("Colour of the 'the camper is looking at you' warning.")]
-        [SerializeField] private Color _watchedColor = new(1f, 0.25f, 0.2f);
+        [SerializeField] private Color _watchedColor = new(1f, 0.25f, 0.2f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
 
         [Header("Behaviour")]
         [Tooltip("Seconds between prompt re-evaluations. The text is built from strings, so it is not rebuilt every frame.")]
