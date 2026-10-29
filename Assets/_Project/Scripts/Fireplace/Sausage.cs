@@ -48,6 +48,8 @@ namespace BetterTogether.Fireplace
         private Vector3 _spawnPosition;
         private Quaternion _spawnRotation;
         private CookState _shownState = (CookState)(-1);
+        private bool _burnWatched;
+        private bool _wasBurnt;
         private bool _lastEaten;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         // Telemetry: last state and grill flag seen, so only changes are logged.
@@ -159,9 +161,14 @@ namespace BetterTogether.Fireplace
         public override void FixedUpdateNetwork()
         {
             if (!HasStateAuthority)
+            {
+                // A new master must not pay for a burn that already happened under the previous one.
+                _burnWatched = false;
                 return;
+            }
 
             ApplyEaten();
+            WatchBurn();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (Telemetry.Enabled) TrackCooking();
 #endif
@@ -181,6 +188,17 @@ namespace BetterTogether.Fireplace
                 ResetTimer = TickTimer.CreateFromSeconds(Runner, _resetDelay);
             else if (ResetTimer.Expired(Runner))
                 ResetToSpawn();
+        }
+
+        // Authority only: pays every gnome when the sausage turns burnt. The first tick as authority only records the state.
+        private void WatchBurn()
+        {
+            var burnt = State == CookState.Burnt;
+            if (_burnWatched && burnt && !_wasBurnt && MatchManager.Instance != null)
+                MatchManager.Instance.AwardGnomes(MatchManager.ScoreReason.BurntSausage);
+
+            _wasBurnt = burnt;
+            _burnWatched = true;
         }
 
         private void ResetToSpawn()

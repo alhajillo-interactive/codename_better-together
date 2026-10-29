@@ -196,6 +196,7 @@ namespace BetterTogether.Interaction
             var item = who.Carried;
             item.ForceReleaseAll();
             item.Pin(this, slot);
+            if (MatchManager.Instance != null) MatchManager.Instance.Award(who.Object.StateAuthority, MatchManager.ScoreReason.Hide);
             if (Telemetry.Enabled)
                 Telemetry.Begin("hide", who).Str("object", item.DisplayName).Str("spot", _displayName).Int("occupancy", PinnedCount()).Send();
         }

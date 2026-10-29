@@ -74,6 +74,15 @@ namespace BetterTogether.UI
         [SerializeField] private TMP_Text _endSubtitle;
         [SerializeField] private TMP_Text _endRematch;
         [SerializeField] private float _endFadeDuration = 0.4f;
+        [Tooltip("Optional text for the gnome ranking, MVP and match numbers. When empty, one is cloned from the subtitle at start.")]
+        [SerializeField] private TMP_Text _endScores;
+        [Tooltip("Font size of the cloned ranking text (only used when End Scores is empty).")]
+        [SerializeField] private float _endScoresFontSize = 26f;
+        [Tooltip("How many pixels below the subtitle the cloned ranking text sits (only used when End Scores is empty).")]
+        [SerializeField] private float _endScoresOffset = 110f;
+
+        private readonly List<MatchManager.ScoreEntry> _scoreRows = new();
+        private readonly System.Text.StringBuilder _scoreText = new();
 
         private static readonly Dictionary<string, string> StruckCache = new();
 
@@ -120,6 +129,18 @@ namespace BetterTogether.UI
             _announcer.alpha = 0f;
             _waiting.gameObject.SetActive(false);
             _endScreen.SetActive(false);
+
+            if (_endScores == null && _endSubtitle != null)
+            {
+                _endScores = Instantiate(_endSubtitle, _endSubtitle.transform.parent);
+                _endScores.name = "EndScores";
+                _endScores.fontSize = _endScoresFontSize;
+                _endScores.enableAutoSizing = false;
+                _endScores.alignment = TextAlignmentOptions.Top;
+                _endScores.color = Color.white;
+                _endScores.richText = true;
+                _endScores.rectTransform.anchoredPosition -= new Vector2(0f, _endScoresOffset);
+            }
         }
 
         private void Update()
@@ -622,6 +643,7 @@ namespace BetterTogether.UI
             _endSubtitle.text = victory ? "¡Victoria!" : "Derrota";
             _endSubtitle.color = victory ? _doneColor : _failColor;
             _titlePunch.Pop(0.6f, 1.15f, 0.4f);
+            BuildScoreboard();
 
             if (camperWon)
             {
@@ -633,6 +655,79 @@ namespace BetterTogether.UI
             {
                 Flash(new Color(0f, 0f, 0.1f, 0.6f), 0.8f);
             }
+        }
+
+        // Once per end screen (also for a late joiner, who reads the replicated scores): ranking, MVP and three match numbers.
+        private void BuildScoreboard()
+        {
+            if (_endScores == null)
+                return;
+
+            var match = MatchManager.Instance;
+            if (match == null)
+            {
+                _endScores.text = string.Empty;
+                return;
+            }
+
+            match.GetScoreRows(_scoreRows);
+            for (var i = 1; i < _scoreRows.Count; i++)
+            {
+                var row = _scoreRows[i];
+                var j = i - 1;
+                while (j >= 0 && _scoreRows[j].Points < row.Points)
+                {
+                    _scoreRows[j + 1] = _scoreRows[j];
+                    j--;
+                }
+
+                _scoreRows[j + 1] = row;
+            }
+
+            var sb = _scoreText;
+            sb.Clear();
+            var best = _scoreRows.Count > 0 ? _scoreRows[0].Points : 0;
+            for (var i = 0; i < _scoreRows.Count; i++)
+                sb.Append(i + 1).Append(". ").Append(NameOf(_scoreRows[i].Player)).Append(" - ").Append(_scoreRows[i].Points).Append(" pts\n");
+
+            if (_scoreRows.Count > 0 && best > 0)
+            {
+                sb.Append("<color=#FFD94D>MVP: ");
+                var first = true;
+                for (var i = 0; i < _scoreRows.Count && _scoreRows[i].Points == best; i++)
+                {
+                    if (!first)
+                        sb.Append(" y ");
+                    sb.Append(NameOf(_scoreRows[i].Player));
+                    first = false;
+                }
+
+                sb.Append("</color>\n");
+            }
+
+            var fire = match.FirstFireSeconds;
+            sb.Append("Fuego: ");
+            if (fire < 0f)
+                sb.Append("sin fuego");
+            else
+                sb.Append(Mathf.FloorToInt(fire / 60f)).Append(':').Append(Mathf.FloorToInt(fire % 60f).ToString("00"));
+            sb.Append("  |  Fogata apagada: ").Append(match.FiresExtinguished)
+                .Append(" veces  |  Objetos escondidos: ").Append(match.ObjectsHidden);
+            _endScores.text = sb.ToString();
+        }
+
+        // The player's name, or "Jugador N" when it has left (its character no longer exists).
+        private static string NameOf(Fusion.PlayerRef player)
+        {
+            var all = PlayerCharacter.All;
+            for (var i = 0; i < all.Count; i++)
+            {
+                var character = all[i];
+                if (character != null && character.Object != null && character.Object.IsValid && character.Object.StateAuthority == player)
+                    return character.DisplayName;
+            }
+
+            return $"Jugador {player.PlayerId}";
         }
 
         private void HideEndScreen()
