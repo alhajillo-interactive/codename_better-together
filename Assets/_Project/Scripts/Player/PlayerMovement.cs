@@ -75,6 +75,9 @@ namespace BetterTogether.Player
         // Set from OnControllerColliderHit during Move: standing on another player's capsule instead of real ground.
         private bool _onPlayerThisMove;
         private bool _onPlayerLastMove;
+        // Same, for real ground (anything but another player) under the feet: only slide when the other player is the sole support.
+        private bool _groundThisMove;
+        private bool _groundLastMove;
         private Vector3 _otherPlayerPosition;
         private bool _isRiding;
         private bool _isCaptured;
@@ -366,7 +369,10 @@ namespace BetterTogether.Player
 
             var other = hit.collider;
             if (!(other is CharacterController) || (_standUpPlayersMask & (1 << other.gameObject.layer)) == 0)
+            {
+                _groundThisMove = true;
                 return;
+            }
 
             _onPlayerThisMove = true;
             _otherPlayerPosition = other.transform.position;
@@ -376,6 +382,8 @@ namespace BetterTogether.Player
         {
             _jumpBufferTimer = 0f;
             _coyoteTimer = 0f;
+            _onPlayerThisMove = _onPlayerLastMove = false;
+            _groundThisMove = _groundLastMove = false;
         }
 
         /// <summary>Upward speed that reaches the given jump height with this player's gravity.</summary>
@@ -412,7 +420,7 @@ namespace BetterTogether.Player
 
             var touching = _controller.isGrounded;
             // Resting on another player's head is not ground: no jump, no coyote time, and we slide off.
-            var onPlayer = touching && _onPlayerLastMove;
+            var onPlayer = touching && _onPlayerLastMove && !_groundLastMove;
             var grounded = touching && !onPlayer;
             if (touching && _verticalVelocity < 0f)
                 _verticalVelocity = -1f; // Small push keeps the controller stuck to the ground.
@@ -433,6 +441,8 @@ namespace BetterTogether.Player
             var jumpBlocked = stunned || locked || crouching;
             if (grounded)
                 _coyoteTimer = _coyoteTime;
+            else if (onPlayer)
+                _coyoteTimer = 0f;
             var viaCoyote = !grounded && _coyoteTimer > 0f;
             var jumped = _jumpBufferTimer > 0f && (grounded || viaCoyote) && !jumpBlocked;
             if (jumped)
@@ -463,8 +473,10 @@ namespace BetterTogether.Player
 
             _verticalVelocity += _gravity * dt;
             _onPlayerThisMove = false;
+            _groundThisMove = false;
             _controller.Move((direction * speed + _knockback + slide + Vector3.up * _verticalVelocity) * dt);
             _onPlayerLastMove = _onPlayerThisMove;
+            _groundLastMove = _groundThisMove;
 
             transform.rotation = Quaternion.Euler(0f, yaw, 0f);
 

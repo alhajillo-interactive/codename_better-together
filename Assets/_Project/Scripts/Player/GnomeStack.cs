@@ -47,7 +47,7 @@ namespace BetterTogether.Player
         [Header("Dismount")]
         [Tooltip("Forward speed of the hop when getting off.")]
         [SerializeField] private float _dismountForward = 1.5f;
-        [Tooltip("Upward speed of the hop when getting off.")]
+        [Tooltip("Upward speed of the push when the tower topples.")]
         [SerializeField] private float _dismountUp = 3f;
         [Tooltip("Seconds without control after the hop.")]
         [SerializeField, Min(0f)] private float _dismountStun = 0.1f;
