@@ -1967,6 +1967,7 @@ GameObject:
   - component: {fileID: 8800000000000000002}
   - component: {fileID: 8800000000000000003}
   - component: {fileID: 8800000000000000099}
+  - component: {fileID: 2902491068937995564}
   m_Layer: 9
   m_Name: Gnome
   m_TagString: Untagged
@@ -2049,6 +2050,7 @@ MonoBehaviour:
   - {fileID: 7805739811996808192}
   - {fileID: 4683119257163552768}
   - {fileID: 8800000000000000003}
+  - {fileID: 2902491068937995564}
   - {fileID: 6775593931138393117}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &2317096137556648295
@@ -2108,6 +2110,15 @@ MonoBehaviour:
   _sprintSpeed: 3.5
   _jumpHeight: 0.5
   _gravity: -20
+  _camperCrouchHeight: 1
+  _gnomeCrouchHeight: 0.22
+  _camperCrouchSpeed: 0.5
+  _gnomeCrouchSpeed: 0.6
+  _camperCrouchEyeHeight: 0.9
+  _gnomeCrouchEyeHeight: 0.18
+  _standUpMask:
+    serializedVersion: 2
+    m_Bits: 0
   _animator: {fileID: 7591416831320830020}
   _kickSwingSfx: {fileID: 0}
   _knockbackAirDrag: 1.5
@@ -2465,6 +2476,31 @@ MonoBehaviour:
   _strideLength: 0.45
   _minSpeed: 0.5
   _teleportDistance: 2
+--- !u!114 &2902491068937995564
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7618880620199038078}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dee118d7369d43d89bfb6fc40c1e10bb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Player.GnomePing
+  _cooldown: 1
+  _range: 30
+  _mask:
+    serializedVersion: 2
+    m_Bits: 7424
+  _markerDuration: 3
+  _poolSize: 4
+  _fontSize: 4
+  _screenScale: 0.05
+  _placeColor: {r: 1, g: 0.85, b: 0.2, a: 1}
+  _objectColor: {r: 0.4, g: 0.9, b: 1, a: 1}
+  _camperColor: {r: 1, g: 0.3, b: 0.3, a: 1}
+  _pingSfx: {fileID: 0}
 --- !u!1 &7633086498065669159
 GameObject:
   m_ObjectHideFlags: 0
