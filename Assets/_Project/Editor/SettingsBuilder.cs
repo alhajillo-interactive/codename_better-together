@@ -255,7 +255,7 @@ namespace BetterTogether.EditorTools
                 return;
             }
 
-            if (!EditorSceneManager.SaveCurrentModifiedScenes())
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
             {
                 Debug.LogError($"{LogPrefix} Cancelled: save the open scenes first.");
                 return;
