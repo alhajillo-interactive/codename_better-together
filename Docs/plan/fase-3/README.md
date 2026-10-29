@@ -10,3 +10,10 @@ Reglas comunes: UI en uGUI + TMP + PrimeTween (nada de IMGUI); textos para el ju
 | C3.2 | Lobby: lista de jugadores, quién será el campista (rotación), estado «listo» | `UI/StartMatchUI.cs` + herramienta (prefab `StartMatch_Canvas`) |
 | C3.3 | Encuesta post-partida y métricas de usabilidad en la telemetría | nuevo `UI/PostMatchSurvey.cs`, ganchos de telemetría, `Tools/playtest-report.py` |
 | C3.4 | Ajustes: volúmenes, sensibilidad, bob de cámara, micrófono (pulsar para hablar / abierto) | `UI/MainMenuController.cs` o nuevo `UI/SettingsPanel.cs` + herramienta (escena `MainMenu`) |
+
+## Estado (29 oct 2026)
+C3.1–C3.4 integradas y montadas por CLI; compila y test multi-peer en verde. Auditorías: C3.2 Opus (estado `Ready` replicado), resto Sonnet. Arreglos del orquestador: C3.4 `SaveCurrentModifiedScenesIfUserWantsTo`; pantalla final de 6 a **20 s** (`GameManager.MatchManager._endScreen`) para ver el ranking y responder la encuesta.
+
+Decisiones que cambian el juego (para V2): sólo el master puede empezar la partida desde el lobby (antes cualquiera podía pedirlo); cambiar de rol en el lobby quita el «listo»; escribir en un campo de texto bloquea movimiento e interacción.
+
+V2: dos personas nuevas juegan sin explicación (tarjeta de rol, controles que se atenúan); 4 jugadores en el lobby con listos y campista anunciado; Esc abre ajustes en partida y en el menú (verificar que el botón «Ajustes» no tapa «Créditos»); al terminar, encuesta y `playtest-report.py` con las secciones Usability y Survey.
