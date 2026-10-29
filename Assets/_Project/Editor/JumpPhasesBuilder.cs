@@ -1,12 +1,12 @@
 // Editor-only builder for the three-phase jump (C5.5). Run it from the menu GnoMore/Construir fases de salto.
-// It edits Campista.controller and GnomeController.controller (never by hand): adds the parameters VerticalSpeed (Float)
-// and Land (Trigger), turns the old single "Jump" state into JumpUp and adds Fall and Land states, all with the same jump clip:
+// It edits Campista.controller and GnomeController.controller (never by hand): adds the parameter VerticalSpeed (Float)
+// (and removes the obsolete Land trigger), turns the old single "Jump" state into JumpUp and adds Fall and Land states, all with the same jump clip:
 //   JumpUp: the clip from 0 at normal speed (left as soon as the vertical speed turns negative).
 //   Fall:   speed 0 with cycleOffset = PeakFraction, i.e. the pose of the jump peak held for as long as the fall lasts.
 //   Land:   the last LandSeconds of the clip (cycleOffset), then back to Locomotion by exit time.
 // Transitions: Locomotion -> JumpUp (IsJump, VerticalSpeed > 0.1), Locomotion -> Fall (IsJump, VerticalSpeed < 0.1: walking off an
 // edge), JumpUp -> Fall (VerticalSpeed < 0), Fall -> JumpUp (VerticalSpeed > 0.5, recovers a start picked before the speed was known),
-// JumpUp/Fall -> Land (IsJump false, or the Land trigger fired by PlayerMovement). The Any State transitions (kick, stun, statue)
+// JumpUp/Fall -> Land (IsJump false). The Any State transitions (kick, stun, statue)
 // are untouched. It is idempotent: states and transitions it owns are rebuilt on every run. A controller without the jump clip
 // is left unchanged and the reason is logged.
 using System.Linq;
@@ -28,7 +28,7 @@ namespace BetterTogether.EditorTools
         private const string LandName = "Land";
         private const string JumpParam = "IsJump";
         private const string SpeedParam = "VerticalSpeed";
-        private const string LandParam = "Land";
+        private const string ObsoleteLandTrigger = "Land";
 
         /// <summary>Normalized time of the clip where the jump peaks (the Fall pose).</summary>
         private const float PeakFraction = 0.45f;
@@ -66,14 +66,15 @@ namespace BetterTogether.EditorTools
             }
 
             EnsureParameter(controller, SpeedParam, AnimatorControllerParameterType.Float);
-            EnsureParameter(controller, LandParam, AnimatorControllerParameterType.Trigger);
+            RemoveParameter(controller, ObsoleteLandTrigger);
 
             // Rebuild what this tool owns: Fall and Land (removing a state drops its transitions) and the jump transitions.
             RemoveState(machine, FallName);
             RemoveState(machine, LandName);
             foreach (var transition in locomotion.transitions.Where(t => t.destinationState == jumpUp).ToArray())
                 locomotion.RemoveTransition(transition);
-            foreach (var transition in jumpUp.transitions.ToArray())
+            // Only the transitions this tool creates: the ones leaving JumpUp towards Fall, Land or Locomotion.
+            foreach (var transition in jumpUp.transitions.Where(t => t.destinationState == null || t.destinationState == locomotion).ToArray())
                 jumpUp.RemoveTransition(transition);
 
             jumpUp.name = JumpUpName;
@@ -111,7 +112,6 @@ namespace BetterTogether.EditorTools
             foreach (var source in new[] { jumpUp, fall })
             {
                 Add(source, land, 0.05f).AddCondition(AnimatorConditionMode.IfNot, 0f, JumpParam);
-                Add(source, land, 0.05f).AddCondition(AnimatorConditionMode.If, 0f, LandParam);
             }
 
             // Back to Locomotion near the end of the clip (the exit time includes the cycle offset).
@@ -123,6 +123,10 @@ namespace BetterTogether.EditorTools
             exit.duration = BlendSeconds;
 
             EditorUtility.SetDirty(controller);
+            EditorUtility.SetDirty(machine);
+            EditorUtility.SetDirty(jumpUp);
+            EditorUtility.SetDirty(fall);
+            EditorUtility.SetDirty(land);
             Debug.Log($"{LogPrefix} {path}: clip '{clip.name}' ({length:0.00}s), peak at {PeakFraction:0.00}, land from {landStart:0.00}.");
             return true;
         }
@@ -152,6 +156,19 @@ namespace BetterTogether.EditorTools
             var state = FindState(machine, name);
             if (state != null)
                 machine.RemoveState(state);
+        }
+
+        private static void RemoveParameter(AnimatorController controller, string name)
+        {
+            var parameters = controller.parameters;
+            for (var i = 0; i < parameters.Length; i++)
+            {
+                if (parameters[i].name == name)
+                {
+                    controller.RemoveParameter(i);
+                    return;
+                }
+            }
         }
 
         private static void EnsureParameter(AnimatorController controller, string name, AnimatorControllerParameterType type)
