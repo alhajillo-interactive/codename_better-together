@@ -97,7 +97,7 @@ namespace BetterTogether.Tests
 
                 // Each peer has its own player and sees the world objects.
                 yield return WaitUntil(() => FindLocal(peerA) != null && FindLocal(peerB) != null && Carryables(peerB).Count > 0,
-                    StepTimeout, "both peers to have their player and the scene objects");
+                    StepTimeout, "both peers to have their player and the scene objects", () => Describe(runners));
 
                 // Interaction is only allowed while the match is Playing; ask for it and wait on both peers.
                 var master = peerA.IsSharedModeMasterClient ? peerA : peerB;
@@ -174,6 +174,8 @@ namespace BetterTogether.Tests
             runner.ProvideInput = true;
             // Scenes are identified by path, like the game does (see PathSceneManager in the game).
             go.AddComponent(Game.Type("BetterTogether.Networking.PathSceneManager"));
+            // Same as ConnectionManager: the players' VoiceNetworkObject needs it on the runner.
+            go.AddComponent(Game.Type("Photon.Voice.Fusion.FusionVoiceClient"));
             return runner;
         }
 
@@ -191,7 +193,25 @@ namespace BetterTogether.Tests
             };
         }
 
-        private static IEnumerator WaitUntil(Func<bool> condition, float seconds, string what, bool failOnTimeout = true)
+        // One block per runner: why a peer might not have its player (scene, interactors, authority, local player).
+        private static string Describe(List<NetworkRunner> runners)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (var runner in runners)
+            {
+                var scene = runner.SimulationUnityScene;
+                var interactors = OfRunner(runner, Game.InteractorType);
+                sb.Append($"[{runner.name}] running={runner.IsRunning} master={runner.IsSharedModeMasterClient} localPlayer={runner.LocalPlayer} ")
+                  .Append($"sceneValid={scene.IsValid()} sceneLoaded={scene.IsValid() && scene.isLoaded} carryables={Carryables(runner).Count} interactors={interactors.Count}");
+                foreach (var interactor in interactors)
+                    sb.Append($" (stateAuthority={interactor.Object.StateAuthority} inputAuthority={interactor.Object.InputAuthority})");
+                sb.AppendLine();
+            }
+
+            return sb.ToString();
+        }
+
+        private static IEnumerator WaitUntil(Func<bool> condition, float seconds, string what, Func<string> diagnostics = null, bool failOnTimeout = true)
         {
             var deadline = Time.realtimeSinceStartup + seconds;
             while (!condition())
@@ -199,7 +219,7 @@ namespace BetterTogether.Tests
                 if (Time.realtimeSinceStartup > deadline)
                 {
                     if (failOnTimeout)
-                        Assert.Fail($"Timed out after {seconds:0}s waiting for {what}.");
+                        Assert.Fail($"Timed out after {seconds:0}s waiting for {what}." + (diagnostics != null ? Environment.NewLine + diagnostics() : ""));
                     yield break;
                 }
 
