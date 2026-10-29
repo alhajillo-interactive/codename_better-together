@@ -338,6 +338,14 @@ namespace BetterTogether.Player
                 return;
             }
 
+            // Someone below crouched (decided from the replicated flag, so no RPC): the rider steps off.
+            if (ChainHasCrouching(mount))
+            {
+                DropCarried();
+                ClearMount();
+                return;
+            }
+
             if (LosesRace(mount) || LosesCycle() || (Rider == null && TowerHeight > _maxTowerHeight))
             {
                 ClearMount();
@@ -530,6 +538,10 @@ namespace BetterTogether.Player
                 reason = "Estás petrificado";
             else if (_movement.IsStunned)
                 reason = "Estás aturdido";
+            else if (_movement.IsCrouching)
+                reason = "Estás agachado";
+            else if (TowerHasCrouching(aimed))
+                reason = "Ese duende está agachado";
             else if (_interactor != null && _interactor.Carried != null)
                 reason = "Tienes las manos ocupadas";
             else if (aimed.Base == this)
@@ -596,6 +608,35 @@ namespace BetterTogether.Player
             for (var i = 0; i <= _maxTowerHeight && current != null; i++)
             {
                 if (current._kickable != null && current._kickable.IsStunned)
+                    return true;
+
+                current = current.Mount;
+            }
+
+            return false;
+        }
+
+        // A rider can't stay on a gnome that crouches; every gnome of the chain from <paramref name="start"/> down is checked.
+        private static bool ChainHasCrouching(GnomeStack start)
+        {
+            var current = start;
+            for (var i = 0; i <= start._maxTowerHeight + 1 && current != null; i++)
+            {
+                if (current._movement.IsCrouching)
+                    return true;
+
+                current = current.Mount;
+            }
+
+            return false;
+        }
+
+        private static bool TowerHasCrouching(GnomeStack gnome)
+        {
+            var current = gnome.Top;
+            for (var i = 0; i <= gnome._maxTowerHeight + 1 && current != null; i++)
+            {
+                if (current._movement.IsCrouching)
                     return true;
 
                 current = current.Mount;

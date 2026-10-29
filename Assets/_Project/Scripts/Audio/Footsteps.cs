@@ -1,3 +1,4 @@
+using BetterTogether.Gaze;
 using BetterTogether.Player;
 using UnityEngine;
 
@@ -21,6 +22,7 @@ namespace BetterTogether.Audio
 
         private PlayerMovement _movement;
         private GnomeStack _stack;
+        private bool _isGnome;
         private Vector3 _lastPosition;
         private float _distance;
 
@@ -28,6 +30,7 @@ namespace BetterTogether.Audio
         {
             _movement = GetComponent<PlayerMovement>();
             TryGetComponent(out _stack);
+            _isGnome = TryGetComponent<Petrifiable>(out _);
         }
 
         private void OnEnable()
@@ -63,6 +66,8 @@ namespace BetterTogether.Audio
             _stepSfx.PlayAt(position);
         }
 
-        private bool CanStep() => !_movement.IsAirborne && (_stack == null || !_stack.IsRiding);
+        // A crouching gnome is silent; IsCrouching is replicated, so every peer agrees.
+        private bool CanStep() => !_movement.IsAirborne && (_stack == null || !_stack.IsRiding) &&
+            !(_isGnome && _movement.IsCrouching);
     }
 }
