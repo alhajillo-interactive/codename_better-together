@@ -55,7 +55,11 @@ namespace BetterTogether.Gaze
         [Tooltip("Root of the visual; every renderer below it is tinted.")]
         [SerializeField] private Transform _visual;
         [SerializeField] private Color _stoneColor = new(0.55f, 0.55f, 0.58f);
-        [SerializeField] private float _stoneBlendTime = 0.2f;
+        [Tooltip("Seconds the stone tint takes to sweep from the feet to the head (and back when freed).")]
+        [SerializeField] private float _sweepTime = 0.4f;
+        [Tooltip("Height fraction of the body that is mid-blend at any moment; bigger = softer sweep edge.")]
+        [Range(0.05f, 1f)]
+        [SerializeField] private float _sweepBand = 0.35f;
 
         [Header("Sound")]
         [Tooltip("Tension sting when the camper locks onto you. Only you hear it; set the cue to not Spatial.")]
@@ -75,6 +79,7 @@ namespace BetterTogether.Gaze
         private InputAction _interact;
         private Renderer[] _renderers;
         private Color[] _originalColors;
+        private float[] _relativeHeights; // 0 = feet, 1 = head, per renderer: when the sweep reaches it.
         private MaterialPropertyBlock _block;
         private float _focusHeight;
         private float _stoneAmount;
@@ -84,6 +89,7 @@ namespace BetterTogether.Gaze
         private bool _wasLocked;
         private bool _isSpawned;
         private bool _lastPetrified;
+        private bool _stoneSnapped; // The first Render after spawn sets the tint without a sweep (late joiners).
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         private float _freezeStartTime; // Owner only, telemetry: when the current freeze began.
 #endif
@@ -104,6 +110,9 @@ namespace BetterTogether.Gaze
         public bool IsStone => _isSpawned && IsPetrified;
 
         public bool IsAvailable => _isSpawned;
+
+        /// <summary>True while held as stone, itself or by a frozen tower below. Safe to read at any time.</summary>
+        public bool IsHeldStone => _isSpawned && HoldsStill;
 
         // Stone itself, or riding on a tower whose base (or anyone below) is stone: held still and tinted like stone.
         private bool HoldsStill => (bool)IsPetrified || (_stack != null && _stack.IsTowerFrozen);
@@ -179,6 +188,8 @@ namespace BetterTogether.Gaze
                 _originalColors[i] = material != null && material.HasProperty(BaseColorId) ? material.GetColor(BaseColorId) : Color.white;
             }
 
+            ComputeRelativeHeights();
+
             var sum = 0f;
             foreach (var height in _checkHeights)
                 sum += height;
@@ -188,6 +199,7 @@ namespace BetterTogether.Gaze
         public override void Spawned()
         {
             _isSpawned = true;
+            _stoneSnapped = false;
             _lastPetrified = IsPetrified; // Late joiners don't hear a freeze that already happened.
             _all.Add(this);
             if (!HasStateAuthority)
@@ -377,14 +389,45 @@ namespace BetterTogether.Gaze
             _lastPetrified = petrified;
 
             var target = (bool)petrified || (_stack != null && _stack.IsTowerFrozen) ? 1f : 0f;
+            if (!_stoneSnapped)
+            {
+                _stoneSnapped = true;
+                _stoneAmount = target;
+                if (target > 0f)
+                    ApplyStone();
+                return;
+            }
+
             if (Mathf.Approximately(_stoneAmount, target))
                 return;
 
-            var step = _stoneBlendTime > 0f ? Time.deltaTime / _stoneBlendTime : 1f;
+            var step = _sweepTime > 0f ? Time.deltaTime / _sweepTime : 1f;
             _stoneAmount = Mathf.MoveTowards(_stoneAmount, target, step);
             ApplyStone();
         }
 
+        // Height of each renderer's center inside the combined bounds, as 0..1 (feet..head).
+        private void ComputeRelativeHeights()
+        {
+            _relativeHeights = new float[_renderers.Length];
+            var minY = float.MaxValue;
+            var maxY = float.MinValue;
+            foreach (var renderer in _renderers)
+            {
+                var bounds = renderer.bounds;
+                minY = Mathf.Min(minY, bounds.min.y);
+                maxY = Mathf.Max(maxY, bounds.max.y);
+            }
+
+            var height = maxY - minY;
+            if (_renderers.Length == 0 || height < 0.0001f)
+                return;
+
+            for (var i = 0; i < _renderers.Length; i++)
+                _relativeHeights[i] = Mathf.Clamp01((_renderers[i].bounds.center.y - minY) / height);
+        }
+
+        // The sweep front moves from below the feet to above the head: renderers it has passed are stone.
         private void ApplyStone()
         {
             for (var i = 0; i < _renderers.Length; i++)
@@ -392,7 +435,8 @@ namespace BetterTogether.Gaze
                 if (_renderers[i] == null)
                     continue;
 
-                _block.SetColor(BaseColorId, Color.Lerp(_originalColors[i], _stoneColor, _stoneAmount));
+                var amount = Mathf.Clamp01((_stoneAmount * (1f + _sweepBand) - _relativeHeights[i]) / _sweepBand);
+                _block.SetColor(BaseColorId, Color.Lerp(_originalColors[i], _stoneColor, amount));
                 _renderers[i].SetPropertyBlock(_block);
             }
         }
