@@ -276,6 +276,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4b3741d2dd446a645b0c90e2b24aa3f5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Networking.DebugConnectionUI
+  _showConnectForm: 1
 --- !u!114 &1428246799
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -292,6 +293,10 @@ MonoBehaviour:
   _gameplayScene:
     asset: {fileID: 102900000, guid: 0bee5b5803db80eabbaf7a2089e3a1e9, type: 3}
     guid: 0bee5b5803db80eabbaf7a2089e3a1e9
+  _menuScene:
+    asset: {fileID: 0}
+    guid: 00000000000000000000000000000000
+  _connectTimeout: 15
 --- !u!4 &1428246800
 Transform:
   m_ObjectHideFlags: 0
@@ -605,88 +610,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5dd78c5c933f488a83e9bf602a34a70b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Player.CameraPunch
---- !u!1 &1711334501
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1711334502}
-  - component: {fileID: 1711334503}
-  - component: {fileID: 3028013765900696080}
-  - component: {fileID: 1711334590}
-  - component: {fileID: 1711334591}
-  m_Layer: 0
-  m_Name: HUD
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1711334502
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1711334501}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1711334503
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1711334501}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 690da4b983b748288f31391545c2f27c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.UI.MicIndicator
-  _onColor: {r: 0.2, g: 0.7, b: 0.3, a: 0.9}
-  _offColor: {r: 0.8, g: 0.2, b: 0.2, a: 0.9}
-  _size: {x: 160, y: 34}
-  _margin: 12
---- !u!114 &1711334590
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1711334501}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6fa3016418c942f7a4592129ad5d61fe, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.UI.GazeFeedbackHUD
-  _warningColor: {r: 0.45, g: 0.55, b: 0.7, a: 0.8}
-  _petrifiedColor: {r: 0.5, g: 0.5, b: 0.52, a: 0.9}
-  _warningInnerRadius: 0.35
-  _coneColor: {r: 0.3, g: 0.2, b: 0.5, a: 1}
-  _coneVignetteAlpha: 0.12
-  _pulseAlpha: 0.35
-  _pulseDuration: 0.3
---- !u!114 &1711334591
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1711334501}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fb235d88bded4c01969b4899bd4721e8, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.UI.ScreenFlash
 --- !u!1 &8120500011
 GameObject:
   m_ObjectHideFlags: 0
@@ -735,6 +658,7 @@ MonoBehaviour:
   _startTimeOfDay: 0.02
   _endTimeOfDay: 0.6
   _loopDuration: 240
+  _loopWithoutMatch: 0
 --- !u!114 &8120500015
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1121,24 +1045,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 31b8d71263de450b92d14d9b96315a24, type: 3}
---- !u!114 &3028013765900696080
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1711334501}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 061505a3be22da74c91eb6774eae2252, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.UI.InteractionPrompt
-  _fontSize: 20
-  _textColor: {r: 1, g: 1, b: 1, a: 1}
-  _crosshairColor: {r: 1, g: 1, b: 1, a: 0.8}
-  _crosshairSize: 6
-  _promptOffset: 40
-  _watchedColor: {r: 1, g: 0.25, b: 0.2, a: 1}
 --- !u!1001 &3154967123450098701
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1665,6 +1571,7 @@ MonoBehaviour:
   - {fileID: 1980241223855773941}
   - {fileID: 3856957381441106266}
   - {fileID: 5082513833886728665}
+  _overflowSpacing: 0.9
 --- !u!1001 &7647937820464219110
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1765,7 +1672,6 @@ SceneRoots:
   - {fileID: 1396005439}
   - {fileID: 4963555192304156663}
   - {fileID: 1428246800}
-  - {fileID: 1711334502}
   - {fileID: 2664608863382494121}
   - {fileID: 2741830038433109648}
   - {fileID: 6792044492993184011}

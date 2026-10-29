@@ -288,7 +288,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Fireplace.FireplaceManager
   _amountLabel: {fileID: 7110843426241940737}
   _requiredWood: 5
-  _fire: {fileID: 1410353406928399179}
+  _fire: {fileID: 1058315466805192064}
   _logsLayer:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -296,17 +296,17 @@ MonoBehaviour:
   _restSpeed: 0.25
   _settleTime: 0.4
   _placeTolerance: 0.5
-  _douseRange: 3.5
-  _dousePressesBase: 18
-  _dousePressesPerExtinguish: 6
-  _dousePressesMax: 36
-  _minPressInterval: 0.07
-  _douseDecayDelay: 0.5
-  _douseDecayPerSecond: 5
-  _litGraceTime: 2
+  _pourRange: 2
+  _pourTolerance: 0.5
+  _pourTime: 0.8
+  _pourCancelSlack: 0.5
+  _litGraceTime: 4
+  _snapGraceAfterMigration: 3
+  _logEjectSpeed: 3
+  _logEjectElevation: 45
   _extinguishSfx: {fileID: 0}
-  _douseSfx: {fileID: 0}
-  _lightSfx: {fileID: 11400000, guid: ff80f11fd78570bd5a8de0325cb2e392, type: 2}
+  _pourSfx: {fileID: 0}
+  _smokePuff: {fileID: 0}
   _slotRadius: 0.5
   _slotHeight: 0.34
   _slotTiltFromVertical: 62
@@ -319,6 +319,7 @@ MonoBehaviour:
   _snapSfx: {fileID: 11400000, guid: 87da417129e3e0d65ed0b4af36e523f8, type: 2}
   _unsnapSfx: {fileID: 11400000, guid: f39328ebdd3706d8e1a11f71a0056582, type: 2}
   _readySfx: {fileID: 11400000, guid: 95ee4e6dedf22ffb866f1f2a5436acf8, type: 2}
+  _lightSfx: {fileID: 11400000, guid: ff80f11fd78570bd5a8de0325cb2e392, type: 2}
   _IsLit:
     RawValue: 0
 --- !u!114 &37296725320174696
@@ -1123,14 +1124,33 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 7100000000000000125}
   m_SourcePrefab: {fileID: 100100000, guid: e3bc91dd8c9ccce4faa8855031754a22, type: 3}
+--- !u!1 &1058315466805192064 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5453110120342394976, guid: e3bc91dd8c9ccce4faa8855031754a22, type: 3}
+  m_PrefabInstance: {fileID: 4972733254800063968}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &7100000000000000125
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1058315466805192064}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d420b08d12cdb75e3c5fd204675416a6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Audio.LoopEmitter
+  _clip: {fileID: 8300000, guid: b3f968d75127a674d9128d568b9d8067, type: 3}
+  _volume: 0.8
+  _spatialBlend: 1
+  _minDistance: 1.5
+  _maxDistance: 15
+  _fadeIn: 0.6
+  _path: []
 --- !u!4 &1410353406928399178 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 6237527814780458666, guid: e3bc91dd8c9ccce4faa8855031754a22, type: 3}
-  m_PrefabInstance: {fileID: 4972733254800063968}
-  m_PrefabAsset: {fileID: 0}
---- !u!1 &1410353406928399179 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 5453110120342394976, guid: e3bc91dd8c9ccce4faa8855031754a22, type: 3}
   m_PrefabInstance: {fileID: 4972733254800063968}
   m_PrefabAsset: {fileID: 0}
 --- !u!1001 &6632036402777863802
@@ -1445,22 +1465,3 @@ Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 7e2d9614330bbc94581d232791743a1d, type: 3}
   m_PrefabInstance: {fileID: 8798067986932225105}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &7100000000000000125
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1410353406928399179}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d420b08d12cdb75e3c5fd204675416a6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Audio.LoopEmitter
-  _clip: {fileID: 8300000, guid: b3f968d75127a674d9128d568b9d8067, type: 3}
-  _volume: 0.8
-  _spatialBlend: 1
-  _minDistance: 1.5
-  _maxDistance: 15
-  _fadeIn: 0.6
-  _path: []

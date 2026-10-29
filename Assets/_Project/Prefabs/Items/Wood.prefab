@@ -123,6 +123,19 @@ MonoBehaviour:
   _handOffArc: 0.15
   _snapBlendTime: 0.28
   _snapArc: 0.25
+  _holdEuler: {x: 0, y: 0, z: 0}
+  _predictionTimeout: 0.5
+  _predictionRttMargin: 0.15
+  _lateConfirmWindow: 1
+  _releaseMatchDistance: 0.05
+  _releaseHoldCap: 0.15
+  _reconcileBlendTime: 0.15
+  _pickupSfx: {fileID: 11400000, guid: efdcfbc4017178e1d68f4205c06124be, type: 2}
+  _pickupFovPunch: 1.5
+  _pickupFovPunchTime: 0.1
+  _killHeight: -5
+  _lostSeconds: 20
+  _respawnSfx: {fileID: 0}
 --- !u!136 &2427449002643352461
 CapsuleCollider:
   m_ObjectHideFlags: 0

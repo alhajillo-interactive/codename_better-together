@@ -118,32 +118,25 @@ MonoBehaviour:
   _maxGnomeSpan: 1.6
   _maxSoloGrabDistance: 1.2
   _handOffSfx: {fileID: 11400000, guid: efdcfbc4017178e1d68f4205c06124be, type: 2}
+  _impactSfx: {fileID: 0}
+  _impactMinSpeed: 1.5
   _handOffBlendTime: 0.18
   _handOffArc: 0.15
   _snapBlendTime: 0.28
   _snapArc: 0.25
-  _HolderA: {fileID: 0}
-  _HolderB: {fileID: 0}
---- !u!114 &6120458837193254071
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1531457764762274690}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5b1e8d3a7c2f4e90a6d4b2c8e0f17a36, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Fireplace.Sausage
-  _cookedAt: 15
-  _burntAt: 25
-  _resetDelay: 4
-  _eatSfx: {fileID: 11400000, guid: 4260266f5bb59b0be511ef6f7296ae8e, type: 2}
-  _visual: {fileID: 4737430231874366731}
-  _rawColor: {r: 0.9, g: 0.45, b: 0.45, a: 1}
-  _cookedColor: {r: 0.65, g: 0.3, b: 0.1, a: 1}
-  _burntColor: {r: 0.08, g: 0.06, b: 0.05, a: 1}
+  _holdEuler: {x: 0, y: 0, z: 0}
+  _predictionTimeout: 0.5
+  _predictionRttMargin: 0.15
+  _lateConfirmWindow: 1
+  _releaseMatchDistance: 0.05
+  _releaseHoldCap: 0.15
+  _reconcileBlendTime: 0.15
+  _pickupSfx: {fileID: 11400000, guid: efdcfbc4017178e1d68f4205c06124be, type: 2}
+  _pickupFovPunch: 1.5
+  _pickupFovPunchTime: 0.1
+  _killHeight: -5
+  _lostSeconds: 20
+  _respawnSfx: {fileID: 0}
 --- !u!136 &2980815583348175896
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -194,6 +187,26 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 1
+--- !u!114 &6120458837193254071
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1531457764762274690}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b1e8d3a7c2f4e90a6d4b2c8e0f17a36, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Fireplace.Sausage
+  _cookedAt: 15
+  _burntAt: 25
+  _resetDelay: 4
+  _eatSfx: {fileID: 11400000, guid: 4260266f5bb59b0be511ef6f7296ae8e, type: 2}
+  _visual: {fileID: 4737430231874366731}
+  _rawColor: {r: 0.9, g: 0.45, b: 0.45, a: 1}
+  _cookedColor: {r: 0.65, g: 0.3, b: 0.1, a: 1}
+  _burntColor: {r: 0.08, g: 0.06, b: 0.05, a: 1}
 --- !u!1 &4902709710574167354
 GameObject:
   m_ObjectHideFlags: 0
