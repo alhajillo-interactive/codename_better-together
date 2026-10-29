@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BetterTogether.Combat;
+using BetterTogether.Diagnostics;
 using BetterTogether.Fireplace;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
@@ -39,6 +40,9 @@ namespace BetterTogether.UI
         [SerializeField] private float _refreshInterval = 0.1f;
 
         private static readonly List<string> LineBuffer = new(4);
+
+        // Set by ResolveText when the text it returned explains why something cannot be done (usability telemetry).
+        private static bool _resolvedDenied;
 
         private object _lastFocused;
         private Carryable _lastCarried;
@@ -157,11 +161,13 @@ namespace BetterTogether.UI
 
             _shownText = text;
             _promptText.text = text;
+            if (Telemetry.Enabled && _resolvedDenied) Telemetry.Begin("prompt_denied").Str("text", text).Send();
         }
 
         private static string ResolveText(PlayerInteractor local)
         {
             string text = null;
+            _resolvedDenied = false;
             var carried = local.CarriedOrPredicted;
             if (local.TryGetComponent<Kickable>(out var kickable) && kickable.IsStunned)
             {
@@ -177,6 +183,7 @@ namespace BetterTogether.UI
                 text = stack.CanClimbAimed
                     ? $"[Clic] Subirte a {stack.Aimed.GetComponent<PlayerCharacter>().DisplayName}"
                     : stack.ClimbBlockReason;
+                _resolvedDenied = !stack.CanClimbAimed;
             }
             else if (local.Focused != null && local.Focused.CanInteract(local))
             {
@@ -235,7 +242,10 @@ namespace BetterTogether.UI
             else if (fire != null && fire.CanPour(local))
                 lines.Add("[E] ¡Apagar fogata!");
             else if (fire != null && fire.PourBlockedMessage(local) is { } pourBlocked)
+            {
                 lines.Add(pourBlocked);
+                _resolvedDenied = true;
+            }
             else
                 lines.Add(local.EdibleCarried != null ? "[E] Comer salchicha" : "[E] Soltar");
 
@@ -253,6 +263,7 @@ namespace BetterTogether.UI
             if (carried.CanHandOff(local, target.Interactor, out var reason))
                 return $"{key} Pasar {carried.DisplayName} {direction}";
 
+            _resolvedDenied |= reason != null;
             return reason;
         }
 

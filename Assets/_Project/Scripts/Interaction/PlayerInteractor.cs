@@ -1,4 +1,6 @@
+using BetterTogether.Diagnostics;
 using BetterTogether.Fireplace;
+using BetterTogether.Match;
 using BetterTogether.Player;
 using Fusion;
 using UnityEngine;
@@ -332,9 +334,19 @@ namespace BetterTogether.Interaction
                 return;
 
             if (Focused != null && Focused.CanInteract(this))
+            {
+                NoteInteraction();
                 Focused.Interact(this);
+            }
             else
                 UseCarried(Carried);
+        }
+
+        // Usability telemetry: seconds from the match start to this player's first interaction (once per match file).
+        private static void NoteInteraction()
+        {
+            if (Telemetry.Enabled && MatchManager.Instance != null && MatchManager.Instance.Phase == MatchPhase.Playing && Telemetry.FirstThisMatch("first_interaction"))
+                Telemetry.Begin("first_interaction").Float("seconds", Telemetry.T).Send();
         }
 
         /// <summary>Local player: how far the current "hold E" is, 0 to 1 (0 when nothing is being held).</summary>
@@ -392,6 +404,7 @@ namespace BetterTogether.Interaction
             if (HoldProgress >= 1f)
             {
                 ResetHold();
+                NoteInteraction();
                 hold.OnHoldComplete(this);
             }
 
@@ -405,6 +418,7 @@ namespace BetterTogether.Interaction
             if (carried == null)
                 return;
 
+            NoteInteraction();
             if (carried.TryGetComponent<ICarriedUse>(out var use) && use.TryUse(this))
                 return;
 

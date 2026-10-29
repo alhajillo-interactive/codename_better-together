@@ -6,7 +6,9 @@ Usage: python Tools/playtest-report.py <folder with playtest_*.csv> [--png-dir <
 Reads every playtest_*.csv in the folder (one file per match and per machine) and prints to the console:
 win rate by role, the objective funnel with the time of each milestone, kicks landed and missed, freezes per
 minute and mean duration, idle time per player and logs dropped by distance. If matplotlib is installed it also
-saves one position heat map per role as a PNG; if not, that step is skipped.
+saves one position heat map per role as a PNG; if not, that step is skipped. The Usability section (card C3.3) shows
+the median time to first interaction, the share of players who finish their first objective in 45 s and the
+"you can't" prompts per minute; the Survey section aggregates the post-match survey rows.
 
 Only the standard library (csv, statistics) is required. Row format, written by Telemetry.cs:
     matchId,t,event,playerId,role,x,z,phase,data      with data = key=value;key=value
@@ -23,6 +25,7 @@ import sys
 from collections import defaultdict
 
 TICK_TOLERANCE = 5
+FIRST_GOAL_SECONDS = 45.0  # usability target: first objective completed within this time (card C3.3)
 FUNNEL_LOGS = 5  # logs needed to build the fire (FireplaceManager Required Wood)
 
 
@@ -316,6 +319,84 @@ def report_voice(by_match):
     print("  Talking spells: {}, total {:.0f} s, mean {:.1f} s".format(len(durations), sum(durations), statistics.mean(durations)))
 
 
+def match_minutes(events):
+    """Duration of a match in minutes: match_end duration, else the last event time."""
+    end = next((e for e in events if e.name == "match_end"), None)
+    seconds = to_float(end.data.get("duration")) if end else max((e.t for e in events), default=0.0)
+    return seconds / 60.0
+
+
+def report_usability(by_match):
+    section("Usability (targets: first interaction < 15 s, >= 80% first goal in 45 s, < 2 denied prompts/min)")
+    # Players known per match: every actor id with a role (camper/gnome) on any event.
+    players = {}
+    for match, events in by_match.items():
+        for e in events:
+            if e.player not in ("", "-1") and e.role in ("camper", "gnome"):
+                players.setdefault((match, e.player), e.role)
+    if not players:
+        print("  No player events.")
+        return
+
+    firsts = []
+    for (match, player) in players:
+        times = [e.t for e in by_match[match] if e.name == "first_interaction" and e.player == player]
+        if times:
+            firsts.append(min(times))
+    if firsts:
+        print("  First interaction: median {:.1f} s (min {:.1f}, max {:.1f}, n={})".format(
+            statistics.median(firsts), min(firsts), max(firsts), len(firsts)))
+    else:
+        print("  First interaction: no data.")
+
+    for role, label, goal in (("camper", "first log placed", lambda e: e.name == "log_in_zone"),
+                              ("gnome", "first pickup/hide", lambda e: e.name in ("pickup", "hide"))):
+        total = done = 0
+        for (match, player), player_role in players.items():
+            if player_role != role:
+                continue
+            total += 1
+            times = [e.t for e in by_match[match] if e.player == player and e.role == role and goal(e)]
+            if times and min(times) <= FIRST_GOAL_SECONDS:
+                done += 1
+        if total:
+            print("  {:<6} {} within {:.0f} s: {}/{} ({:.0f}%)".format(role, label, FIRST_GOAL_SECONDS, done, total, 100.0 * done / total))
+
+    denied = sum(1 for events in by_match.values() for e in events if e.name == "prompt_denied")
+    minutes = 0.0
+    for match, _player in players:
+        minutes += match_minutes(by_match[match])
+    if minutes > 0:
+        print("  Denied prompts: {} over {:.1f} player-minutes = {:.2f} per minute".format(denied, minutes, denied / minutes))
+    else:
+        print("  Denied prompts: {} (no duration to normalise)".format(denied))
+
+
+def report_survey(by_match):
+    section("Survey")
+    rows = [e for events in by_match.values() for e in events if e.name == "survey"]
+    if not rows:
+        print("  No survey answers.")
+        return
+    print("  {} answers".format(len(rows)))
+    funs = [to_float(e.data["fun"]) for e in rows if "fun" in e.data]
+    if funs:
+        print("  Fun (1-5): mean {:.2f} (n={})".format(statistics.mean(funs), len(funs)))
+    for role in ("camper", "gnome"):
+        answers = [e.data["dizzy"] == "1" for e in rows if e.role == role and "dizzy" in e.data]
+        if answers:
+            print("  Dizzy as {}: {}/{} ({:.0f}%)".format(role, sum(answers), len(answers), 100.0 * sum(answers) / len(answers)))
+    understood = [e.data["understood"] == "1" for e in rows if "understood" in e.data]
+    if understood:
+        print("  Understood the objective: {}/{} ({:.0f}%, target >= 85%)".format(
+            sum(understood), len(understood), 100.0 * sum(understood) / len(understood)))
+    moments = [(e.role, e.data["moment"]) for e in rows if e.data.get("moment")]
+    if moments:
+        print("  Memorable moments:")
+        for role, text in moments:
+            print("    [{}] {}".format(role, text))
+
+
 def save_heatmaps(by_match, out_dir):
     try:
         import matplotlib
@@ -385,6 +466,8 @@ def main(argv):
     report_idle(by_match)
     report_drops(by_match)
     report_voice(by_match)
+    report_usability(by_match)
+    report_survey(by_match)
     save_heatmaps(by_match, out_dir)
     return 0
 
