@@ -1,4 +1,3 @@
-using BetterTogether.Player;
 using UnityEngine;
 
 namespace BetterTogether.Interaction

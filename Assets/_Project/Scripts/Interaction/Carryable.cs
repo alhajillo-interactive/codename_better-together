@@ -242,7 +242,6 @@ namespace BetterTogether.Interaction
         /// </summary>
         public bool Inert { get; set; }
 
-        /// <summary>Live holders, 0 to 2.</summary>
         /// <summary>True while two gnomes are carrying the item together.</summary>
         public bool IsPairCarry => IsMoving && HolderCount == 2;
 
@@ -267,6 +266,7 @@ namespace BetterTogether.Interaction
             return true;
         }
 
+        /// <summary>Live holders, 0 to 2.</summary>
         public int HolderCount => !_isSpawned ? 0 : (Valid(HolderA) != null ? 1 : 0) + (Valid(HolderB) != null ? 1 : 0);
         private bool HeldByGnomes => HolderCount > 0 && Holder(0).Role == PlayerRole.Gnome;
 
