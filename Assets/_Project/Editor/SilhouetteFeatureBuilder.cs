@@ -1,7 +1,7 @@
 // Editor-only tool (C2.7). Menu GnoMore/Construir siluetas por Renderer Feature: idempotently
 //  1. makes sure the "Silhouette" render layer exists (TagManager, written through the API),
 //  2. adds two RenderObjects features (stencil mask, then ink outline) to PC_Renderer and Mobile_Renderer,
-//  3. moves the visible character renderers (Camper/Gnome prefabs) to that layer and removes the baked/duplicated
+//  3. moves the visible character renderers (Gnome prefab; only those that had an ink hull) to that layer and removes the baked/duplicated
 //     ink hulls, so no mesh is duplicated any more.
 // Why a GameObject layer and not a rendering layer: URP 17 RenderObjects.FilterSettings only exposes LayerMask
 // (verified in Library/PackageCache); only renderer child objects change layer, never roots or colliders (C0.6 intact).
@@ -31,9 +31,11 @@ namespace BetterTogether.EditorTools
 
         private static readonly string[] PrefabPaths =
         {
-            "Assets/_Project/Prefabs/Camper.prefab",
             "Assets/_Project/Prefabs/Gnome.prefab",
         };
+
+        // The camper never had an outline: only the legacy component is removed there, no renderer is touched.
+        private const string CamperPath = "Assets/_Project/Prefabs/Camper.prefab";
 
         [MenuItem("GnoMore/Construir siluetas por Renderer Feature")]
         public static void Build()
@@ -53,6 +55,7 @@ namespace BetterTogether.EditorTools
             foreach (var path in RendererPaths)
                 EnsureFeatures(path, layer, mask, ink);
 
+            RemoveLegacyComponent(CamperPath);
             foreach (var path in PrefabPaths)
                 ConvertPrefab(path, layer, mask, ink);
 
@@ -179,47 +182,93 @@ namespace BetterTogether.EditorTools
             so.ApplyModifiedProperties();
         }
 
+        private static void RemoveLegacyComponent(string path)
+        {
+            var root = PrefabUtility.LoadPrefabContents(path);
+            try
+            {
+                var legacy = root.GetComponentsInChildren<WatercolorSilhouette>(true);
+                if (legacy.Length == 0)
+                    return;
+                foreach (var c in legacy)
+                    Object.DestroyImmediate(c);
+                PrefabUtility.SaveAsPrefabAsset(root, path);
+                Debug.Log($"{LogPrefix} {path}: legacy WatercolorSilhouette removed (no renderer touched).");
+            }
+            finally
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+        }
+
+        private static bool HasInk(Renderer r, Material mask, Material ink)
+        {
+            foreach (var m in r.sharedMaterials)
+                if (m == ink || m == mask)
+                    return true;
+            return false;
+        }
+
+        private static Mesh MeshOf(Renderer r) =>
+            r is SkinnedMeshRenderer s ? s.sharedMesh : r.GetComponent<MeshFilter>()?.sharedMesh;
+
+        // Pairing criterion: a renderer gets the outline only if it had an ink hull before this tool runs, i.e.
+        //  (a) it carries an ink slot itself (mixed renderer), or
+        //  (b) its mesh equals the mesh of an ink-carrying renderer, or
+        //  (c) its GameObject name equals the name of an ink-carrying renderer minus a trailing " (1)".
+        // Renderers without a hull (e.g. the Body MeshRenderer) are never moved, so the look stays identical.
         private static void ConvertPrefab(string path, int layer, Material mask, Material ink)
         {
             var root = PrefabUtility.LoadPrefabContents(path);
             try
             {
-                // The old runtime duplicator is replaced by the features; remove it so nothing is duplicated.
                 foreach (var legacy in root.GetComponentsInChildren<WatercolorSilhouette>(true))
                     Object.DestroyImmediate(legacy);
 
-                int moved = 0, hullsRemoved = 0, skipped = 0, fixedSlots = 0;
                 var renderers = new List<Renderer>(root.GetComponentsInChildren<Renderer>(true));
+                var hullMeshes = new HashSet<Mesh>();
+                var hullNames = new HashSet<string>();
+                foreach (var r in renderers)
+                {
+                    if (!(r is SkinnedMeshRenderer || r is MeshRenderer) || !HasInk(r, mask, ink))
+                        continue;
+                    var hullMesh = MeshOf(r);
+                    if (hullMesh != null) hullMeshes.Add(hullMesh);
+                    string n = r.gameObject.name;
+                    hullNames.Add(n.EndsWith(" (1)") ? n.Substring(0, n.Length - 4) : n);
+                }
+
+                int moved = 0, hullsRemoved = 0, skipped = 0, slotsFixed = 0;
                 foreach (var renderer in renderers)
                 {
                     if (renderer == null || !(renderer is SkinnedMeshRenderer || renderer is MeshRenderer))
                         continue;
 
                     var materials = renderer.sharedMaterials;
-                    Material replacement = null;
-                    bool hasInk = false;
+                    bool hasNormal = false;
+                    bool hasInk = HasInk(renderer, mask, ink);
                     foreach (var m in materials)
-                    {
-                        if (m == ink || m == mask) hasInk = true;
-                        else if (m != null && replacement == null) replacement = m;
-                    }
+                        if (m != null && m != ink && m != mask) hasNormal = true;
 
                     var go = renderer.gameObject;
-                    if (replacement == null)
+                    if (hasInk && !hasNormal)
                     {
-                        // Baked ink hull: the feature draws the ink now.
-                        if (hasInk && RemoveHull(renderer))
+                        if (RemoveHull(renderer))
                             hullsRemoved++;
                         continue;
                     }
 
+                    var mesh = MeshOf(renderer);
+                    bool paired = hasInk
+                        || (mesh != null && hullMeshes.Contains(mesh))
+                        || hullNames.Contains(go.name);
+                    if (!paired)
+                        continue;
+
                     if (hasInk)
                     {
-                        for (int i = 0; i < materials.Length; i++)
-                            if (materials[i] == ink || materials[i] == mask)
-                                materials[i] = replacement;
-                        renderer.sharedMaterials = materials;
-                        fixedSlots++;
+                        RemoveInkSlots(renderer, materials, mask, ink, path);
+                        slotsFixed++;
                     }
 
                     if (go.layer == layer)
@@ -237,12 +286,35 @@ namespace BetterTogether.EditorTools
                 }
 
                 PrefabUtility.SaveAsPrefabAsset(root, path);
-                Debug.Log($"{LogPrefix} {path}: {moved} renderer(s) on '{LayerName}', {hullsRemoved} hull(s) removed, {fixedSlots} ink slot(s) replaced, {skipped} skipped.");
+                Debug.Log($"{LogPrefix} {path}: {moved} renderer(s) on '{LayerName}', {hullsRemoved} hull(s) removed, {slotsFixed} mixed ink slot(s) removed, {skipped} skipped.");
             }
             finally
             {
                 PrefabUtility.UnloadPrefabContents(root);
             }
+        }
+
+        // Ink slots are dropped, not replaced. Trailing ink slots shorten the array; an ink slot in the middle
+        // cannot be removed without shifting submesh indices, so it is set to null (submesh not drawn) and logged.
+        private static void RemoveInkSlots(Renderer renderer, Material[] materials, Material mask, Material ink, string path)
+        {
+            for (int i = 0; i < materials.Length; i++)
+                if (materials[i] == ink || materials[i] == mask)
+                    materials[i] = null;
+
+            int length = materials.Length;
+            while (length > 0 && materials[length - 1] == null)
+                length--;
+
+            for (int i = 0; i < length; i++)
+            {
+                if (materials[i] == null)
+                    Debug.LogWarning($"{LogPrefix} {path}: '{renderer.name}' ink slot {i} is not last; set to null (submesh not drawn). Verify in V2.", renderer);
+            }
+
+            var kept = new Material[length];
+            System.Array.Copy(materials, kept, length);
+            renderer.sharedMaterials = kept;
         }
 
         // Destroys a leaf hull object when it is an added override (safe); otherwise only disables the renderer.
