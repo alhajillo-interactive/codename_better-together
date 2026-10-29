@@ -166,6 +166,55 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &47379300
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 47379302}
+  - component: {fileID: 47379301}
+  m_Layer: 0
+  m_Name: NightVolume
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &47379301
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 47379300}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 172515602e62fb746b5d573b38a5fe58, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Core.Runtime::UnityEngine.Rendering.Volume
+  m_IsGlobal: 1
+  priority: 10
+  blendDistance: 0
+  weight: 0
+  sharedProfile: {fileID: 11400000, guid: 39931dd3cbe725d48bcd1a0c275ce8b0, type: 2}
+--- !u!4 &47379302
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 47379300}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &260571832
 GameObject:
   m_ObjectHideFlags: 0
@@ -4669,6 +4718,7 @@ GameObject:
   - component: {fileID: 8120500014}
   - component: {fileID: 8120500015}
   - component: {fileID: 8120500099}
+  - component: {fileID: 8120500100}
   m_Layer: 0
   m_Name: DayNightCycle
   m_TagString: Untagged
@@ -4705,6 +4755,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Environment.DayNightCycle
   _startTimeOfDay: 0.02
   _endTimeOfDay: 0.6
+  _nightSeconds: 90
+  _duskSeconds: 60
+  _nightFadeSeconds: 20
   _loopDuration: 240
   _loopWithoutMatch: 0
 --- !u!114 &8120500015
@@ -4742,6 +4795,24 @@ MonoBehaviour:
   _night: {fileID: 11400000, guid: 6c429873881a4b2f84fe74996c192cac, type: 2}
   _startFade: 2
   _sunsetFade: 6
+--- !u!114 &8120500100
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8120500011}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c1e9a7d3b2f4e6a8d0c4f7b1a9e3d52, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Environment.DayNightFeel
+  _volume: {fileID: 47379301}
+  _duskVolumeWeight: 0.5
+  _dayFogColor: {r: 0.7, g: 0.75, b: 0.85, a: 1}
+  _nightFogColor: {r: 0.04, g: 0.06, b: 0.12, a: 1}
+  _nightFogDensity: 0.1
+  _duskFogDensity: 0.01
 --- !u!1001 &8130500021
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -5403,3 +5474,4 @@ SceneRoots:
   - {fileID: 350609546}
   - {fileID: 1483648773}
   - {fileID: 344411545}
+  - {fileID: 47379302}
