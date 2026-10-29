@@ -170,6 +170,14 @@ namespace BetterTogether.Diagnostics
 
         private void OnGUI()
         {
+            var previousMatrix = GUI.matrix;
+            GUI.matrix = DebugGuiScale.Matrix;
+            DrawGui();
+            GUI.matrix = previousMatrix;
+        }
+
+        private void DrawGui()
+        {
             if (!_active)
                 return;
 
@@ -183,7 +191,7 @@ namespace BetterTogether.Diagnostics
             // Bottom left, so it does not cover the bottom right overlay of the performance probe (F3).
             const float width = 460f;
             const float height = 260f;
-            GUI.Label(new Rect(10f, Screen.height - height - 10f, width, height), _overlayText, _overlayStyle);
+            GUI.Label(new Rect(10f, DebugGuiScale.Height - height - 10f, width, height), _overlayText, _overlayStyle);
         }
 
         /// <summary>One full pass over the loose items, the pinned items and the characters.</summary>

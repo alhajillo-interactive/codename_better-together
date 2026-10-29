@@ -323,6 +323,14 @@ namespace BetterTogether.Diagnostics
 
         private void OnGUI()
         {
+            var previousMatrix = GUI.matrix;
+            GUI.matrix = DebugGuiScale.Matrix;
+            DrawGui();
+            GUI.matrix = previousMatrix;
+        }
+
+        private void DrawGui()
+        {
             if (!_overlayVisible || !_hasSample)
                 return;
 
@@ -336,7 +344,7 @@ namespace BetterTogether.Diagnostics
             // Bottom right, so it does not cover the top-right role panel (F1).
             const float width = 380f;
             const float height = 130f;
-            GUI.Label(new Rect(Screen.width - width - 10f, Screen.height - height - 10f, width, height), _overlayText, _overlayStyle);
+            GUI.Label(new Rect(DebugGuiScale.Width - width - 10f, DebugGuiScale.Height - height - 10f, width, height), _overlayText, _overlayStyle);
         }
 
         /// <summary>Value for the overlay: the number with its unit, or <see cref="Missing"/> when it is -1.</summary>

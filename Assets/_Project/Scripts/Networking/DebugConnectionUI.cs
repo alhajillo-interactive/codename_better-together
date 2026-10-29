@@ -1,6 +1,7 @@
 #if FUSION_WEAVER
 using System.Linq;
 using BetterTogether.Audio;
+using BetterTogether.Diagnostics;
 using BetterTogether.Gaze;
 using BetterTogether.Match;
 using BetterTogether.Player;
@@ -53,6 +54,14 @@ namespace BetterTogether.Networking
         private void OnDisable() => SetRolePanelOpen(false);
 
         private void OnGUI()
+        {
+            var previousMatrix = GUI.matrix;
+            GUI.matrix = DebugGuiScale.Matrix;
+            DrawGui();
+            GUI.matrix = previousMatrix;
+        }
+
+        private void DrawGui()
         {
             var manager = ConnectionManager.Instance;
             if (manager == null)
@@ -150,7 +159,7 @@ namespace BetterTogether.Networking
                 .ToList();
 
             var height = 230f + players.Count * 28f;
-            GUILayout.BeginArea(new Rect(Screen.width - RolePanelWidth - 10f, 10f, RolePanelWidth, height), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(DebugGuiScale.Width - RolePanelWidth - 10f, 10f, RolePanelWidth, height), GUI.skin.box);
             GUILayout.Label("Debug — F1 para cerrar");
             DrawGazeToggle();
             DrawVolumeSliders();
