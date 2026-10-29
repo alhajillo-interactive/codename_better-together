@@ -114,11 +114,13 @@ namespace BetterTogether.EditorTools
                 Add(source, land, 0.05f).AddCondition(AnimatorConditionMode.IfNot, 0f, JumpParam);
             }
 
-            // Back to Locomotion near the end of the clip (the exit time includes the cycle offset).
-            var exitTime = Mathf.Max(landStart + 0.5f * (1f - landStart), 1f - BlendSeconds / length);
+            // Back to Locomotion near the end of the clip. Normalized time starts at 0 in the state whatever the cycle
+            // offset, so the exit time is measured from landStart: the remaining fraction minus the blend.
+            var remaining = 1f - landStart;
+            var exitTime = Mathf.Max(remaining * 0.5f, remaining - BlendSeconds / length);
             var exit = land.AddTransition(locomotion);
             exit.hasExitTime = true;
-            exit.exitTime = Mathf.Clamp(exitTime, landStart, 1f);
+            exit.exitTime = Mathf.Clamp(exitTime, 0.05f, 1f);
             exit.hasFixedDuration = true;
             exit.duration = BlendSeconds;
 
