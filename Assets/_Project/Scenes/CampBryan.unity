@@ -1309,6 +1309,37 @@ Transform:
   m_Children: []
   m_Father: {fileID: 260571833}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &855676680
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 855676681}
+  m_Layer: 0
+  m_Name: GnomeSpawn3
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &855676681
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 855676680}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.18280134, z: -0, w: 0.9831499}
+  m_LocalPosition: {x: -4, y: 2.7152414, z: -14}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 3641603983383516983}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &875164784
 GameObject:
   m_ObjectHideFlags: 0
@@ -1533,6 +1564,37 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 882326571}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &895357905
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 895357906}
+  m_Layer: 0
+  m_Name: GnomeSpawn2
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &895357906
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 895357905}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.973453, z: -0, w: 0.22888696}
+  m_LocalPosition: {x: -10, y: 0.13817987, z: 22}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 3641603983383516983}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &908135726
 GameObject:
   m_ObjectHideFlags: 0
@@ -2001,6 +2063,37 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1020174218}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1026147910
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1026147911}
+  m_Layer: 0
+  m_Name: GnomeSpawn1
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1026147911
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1026147910}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.5279738, z: -0, w: 0.8492607}
+  m_LocalPosition: {x: -14, y: -0.16261974, z: -8}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 3641603983383516983}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1059208936
 GameObject:
   m_ObjectHideFlags: 0
@@ -3780,6 +3873,37 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 8680139316407262037, guid: 7f875925aabf212f88518e4009d57f4d, type: 3}
   m_PrefabInstance: {fileID: 4963555192304156663}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1768700488
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1768700489}
+  m_Layer: 0
+  m_Name: CamperSpawn
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1768700489
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1768700488}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 1.2, y: -0.3013002, z: -3.5}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 3641603983383516983}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1775655000
 GameObject:
   m_ObjectHideFlags: 0
@@ -4939,6 +5063,10 @@ Transform:
   - {fileID: 1980241223855773941}
   - {fileID: 3856957381441106266}
   - {fileID: 5082513833886728665}
+  - {fileID: 1768700489}
+  - {fileID: 1026147911}
+  - {fileID: 895357906}
+  - {fileID: 855676681}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!4 &3856957381441106266
@@ -5159,6 +5287,11 @@ MonoBehaviour:
   - {fileID: 1980241223855773941}
   - {fileID: 3856957381441106266}
   - {fileID: 5082513833886728665}
+  _camperSpawn: {fileID: 1768700489}
+  _gnomeSpawns:
+  - {fileID: 1026147911}
+  - {fileID: 895357906}
+  - {fileID: 855676681}
   _overflowSpacing: 0.9
 --- !u!1 &8390539027135319669
 GameObject:
