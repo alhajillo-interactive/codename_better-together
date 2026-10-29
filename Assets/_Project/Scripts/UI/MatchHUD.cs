@@ -431,8 +431,14 @@ namespace BetterTogether.UI
             var previous = _prevSecondsUntilNight;
             _prevSecondsUntilNight = now;
 
-            if (previous > 30f && now <= 30f && playing)
-                Announce("¡Se acerca la noche!", new Color(0.6f, 0.7f, 1f));
+            // previous is -1 on the first frame seen, so a late joiner never gets past warnings.
+            if (!playing)
+                return;
+
+            if (previous > 30f && now <= 30f)
+                Announce("Se acerca la noche…", new Color(0.6f, 0.7f, 1f));
+            else if (previous > 10f && now <= 10f)
+                Announce("¡10 segundos para la noche!", _urgentColor);
         }
 
         private void DetectLastSeconds(MatchManager match, bool playing)
