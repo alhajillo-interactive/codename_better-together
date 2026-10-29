@@ -206,7 +206,7 @@ namespace BetterTogether.Player
             var crouching = Crouching;
             var hasRiders = _stack != null && _stack.RidersAbove > 0;
             // Blocked (stunned, frozen, match locked) keeps the current state, so a statue doesn't stand up by itself.
-            var wants = blocked ? crouching : _crouch != null && _crouch.IsPressed();
+            bool wants = blocked ? (bool)crouching : _crouch != null && _crouch.IsPressed();
             if (hasRiders)
                 wants = false;
             if (!crouching && wants && (_stack == null || !_stack.IsRiding))
