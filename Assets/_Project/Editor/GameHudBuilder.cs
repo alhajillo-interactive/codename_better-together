@@ -84,6 +84,7 @@ namespace BetterTogether.EditorTools
             var threat = BuildThreatGlint(rootRect, theme);
             var frozen = BuildFrozenView(rootRect, theme, font);
             var album = BuildAlbumSlot(rootRect, theme);
+            BuildTeammates(rootRect, theme, font);
 
             // Front layer: crosshair, prompt, warnings, badges.
             var crosshair = BuildCrosshair(rootRect);
@@ -525,6 +526,88 @@ namespace BetterTogether.EditorTools
                 frame.gameObject.SetActive(false);
 
             return new AlbumParts(frame, group, raw);
+        }
+
+        // Teammates (C8.5): top-right row inside the safe zone (64 px from the right, 40 from the top) with 2 fixed slots,
+        // each an Icon (48x48) with the teammate's name under it. TeammatesHUD shows and fills the slots at runtime.
+        private const int TeammateSlots = 2;
+        private const float TeammateSlotWidth = 110f;
+        private const float TeammateSlotGap = 16f;
+        private const float TeammateIconSize = 48f;
+        private const float TeammateNameHeight = 30f;
+
+        private static void BuildTeammates(RectTransform parent, UiTheme theme, TMP_FontAsset font)
+        {
+            var top = Child(parent, "Teammates", out var created);
+            if (created)
+            {
+                var width = TeammateSlots * TeammateSlotWidth + (TeammateSlots - 1) * TeammateSlotGap;
+                Place(top, Vector2.one, Vector2.one, Vector2.one, new Vector2(-64f, -40f),
+                    new Vector2(width, TeammateIconSize + TeammateNameHeight));
+                top.SetSiblingIndex(3);
+            }
+
+            var roots = new Object[TeammateSlots];
+            var icons = new Object[TeammateSlots];
+            var names = new Object[TeammateSlots];
+            for (var i = 0; i < TeammateSlots; i++)
+            {
+                var slot = Child(top, $"Slot{i + 1}", out var slotCreated);
+                if (slotCreated)
+                {
+                    // Slot 1 sits on the right edge, slot 2 to its left, so one teammate alone hugs the corner.
+                    var x = -i * (TeammateSlotWidth + TeammateSlotGap);
+                    Place(slot, Vector2.one, Vector2.one, Vector2.one, new Vector2(x, 0f),
+                        new Vector2(TeammateSlotWidth, TeammateIconSize + TeammateNameHeight));
+                    slot.gameObject.SetActive(false);
+                }
+
+                var icon = Child(slot, "Icon", out var iconCreated);
+                var image = GetOrAdd<Image>(icon.gameObject);
+                if (iconCreated)
+                {
+                    Place(icon, TopCenter, TopCenter, Center, new Vector2(0f, -TeammateIconSize * 0.5f),
+                        new Vector2(TeammateIconSize, TeammateIconSize));
+                    image.preserveAspect = true;
+                    image.raycastTarget = false;
+                }
+
+                var label = Text(slot, "Name", "Gnomo", theme.hintSize, theme.cream, TextAlignmentOptions.Top, font, false,
+                    out var nameRect, out var nameCreated);
+                if (nameCreated)
+                {
+                    Place(nameRect, BottomCenter, BottomCenter, new Vector2(0.5f, 0f), Vector2.zero,
+                        new Vector2(TeammateSlotWidth, TeammateNameHeight));
+                    label.overflowMode = TextOverflowModes.Ellipsis;
+                    ApplyTitleFont(label, theme, true);
+                }
+
+                roots[i] = slot;
+                icons[i] = image;
+                names[i] = label;
+            }
+
+            var hud = GetOrAdd<TeammatesHUD>(top.gameObject);
+            var serialized = new SerializedObject(hud);
+            SetArray(serialized.FindProperty("_slotRoots"), roots);
+            SetArray(serialized.FindProperty("_icons"), icons);
+            SetArray(serialized.FindProperty("_names"), names);
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void SetArray(SerializedProperty array, Object[] values)
+        {
+            if (array == null)
+            {
+                Debug.LogError($"{LogPrefix} TeammatesHUD is missing a serialized array.");
+                return;
+            }
+
+            if (array.arraySize != values.Length)
+                array.arraySize = values.Length;
+
+            for (var i = 0; i < values.Length; i++)
+                array.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
         }
 
         // Lilita title font with the ink outline, only when the text is created (later editor tweaks survive).
