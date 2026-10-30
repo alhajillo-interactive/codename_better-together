@@ -185,7 +185,10 @@ namespace BetterTogether.Fireplace
             _hadHolder = held;
 
             // The water leaks out on its own, held or not. Master change: the new authority keeps counting from FilledTick.
-            if (Full && _leakSeconds > 0f && NetAnchor.Elapsed(Runner, FilledTick) >= _leakSeconds)
+            // A pour in progress is left alone: it was accepted, and finishing or cancelling it already empties the bucket.
+            var fire = FireplaceManager.Instance;
+            var pouring = fire != null && fire.TryGetPour(this, out _);
+            if (Full && !pouring && _leakSeconds > 0f && NetAnchor.Elapsed(Runner, FilledTick) >= _leakSeconds)
             {
                 Full = false;
                 if (Telemetry.Enabled) Telemetry.Begin("bucket_spill").Str("reason", "leaked").Send();
