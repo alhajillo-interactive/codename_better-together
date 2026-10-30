@@ -18,7 +18,7 @@ using UnityEngine.SceneManagement;
 
 namespace BetterTogether.EditorTools
 {
-    public static class AbrazoLevelBuilder
+    public static partial class AbrazoLevelBuilder
     {
         private const string LogPrefix = "[AbrazoLevelBuilder]";
 
@@ -37,8 +37,8 @@ namespace BetterTogether.EditorTools
         private const float TerrainBaseY = -2f;
         private const float TerrainHeightRange = 4f;
         private const int HeightmapResolution = 257;
-        private const int AlphamapResolution = 128;
-        private const float TerrainTileSize = 6f;
+        private const int AlphamapResolution = 256;
+        private const float TerrainTileSize = 17f;
         private static readonly Vector2 HondonadaCenter = new(0f, 26f);
         private const float HondonadaFlatRadius = 9f;
         private const float HondonadaFalloff = 8f;
@@ -63,10 +63,6 @@ namespace BetterTogether.EditorTools
         private const float InvisibleWallZ = 36f;
         private const float InvisibleWallThickness = 2f;
         private const float InvisibleWallHeight = 30f;
-        private const float TreeRingX = 41f;
-        private const float TreeRingZ = 38f;
-        private const float TreeSpacing = 6.5f;
-        private const float TreeRowGap = 4f;
         private static readonly Vector3 BoundsCenter = new(0f, 5f, 0f);
         private static readonly Vector3 BoundsSize = new(80f, 30f, 80f);
 
@@ -82,6 +78,7 @@ namespace BetterTogether.EditorTools
         private const float SlitRoofThickness = 0.4f;
         private const float SlitWallThickness = 0.4f;
         private const float SlitWallHeight = 1.2f;
+        private const float SlitExitOpening = 1.6f;
         private const int RibbonCount = 3;
         private const int RibbonSegments = 44;
         private const float RibbonTurns = 2f;
@@ -103,7 +100,7 @@ namespace BetterTogether.EditorTools
         private const float FireU_FrontZ = -12f;
         private const float FireU_BackZ = -8f;
         private const float FireU_BackOuterZ = -7.5f;
-        private const float PeepholeCenterZ = -9.85f;
+        private const float PeepholeCenterZ = -10f;
         private const float PeepholeSize = 0.4f;
         private const float PeepholeSillY = 0.15f;
 
@@ -212,7 +209,6 @@ namespace BetterTogether.EditorTools
         };
 
         private static readonly Vector2[] HollowDecoyAnchors = { new(-4f, 24f), new(5f, 28f), new(0f, 20f), new(-10f, 31f) };
-        private static readonly Vector2[] ShoulderDecoyAnchors = { new(-4.6f, -8.2f), new(-7.3f, -8.2f), new(-4.4f, -6f), new(-6.2f, -9f) };
         private const int OrchardDecoys = 10;
         private const int HollowDecoys = 3;
         private const int ShoulderDecoys = 2;
@@ -225,7 +221,7 @@ namespace BetterTogether.EditorTools
         private const float CoverLimitZ = 34f;
         private const float CoverClearRadius = 1.1f;
         private const float CoverKeepAway = 3f;
-        private const float CoverMinGroundY = -0.9f;
+        private const float CoverMinGroundY = -1.2f;
         private const float CoverMinNormalY = 0.85f;
         private const float CoverTrunkExclusion = 13f;
         private const float CoverSlitExclusion = 3f;
@@ -356,6 +352,7 @@ namespace BetterTogether.EditorTools
             Materials.Clear();
             KeyPoints.Clear();
             DecoyPoints.Clear();
+            ResetAmbience();
             _bushCount = 0;
             _layerEnv = LayerMask.NameToLayer("Environment");
             _layerGnomeOnly = LayerMask.NameToLayer("GnomeOnly");
@@ -378,10 +375,13 @@ namespace BetterTogether.EditorTools
             BuildSectors(Group("Sectores"));
             Physics.SyncTransforms();
             PlaceGameplay(Group("Items"));
+            BuildAmbience(Group("Ambiente"));
             ScatterCover(Group("Cobertura"));
             BuildHidingSpots(Group("Escondites"));
             BuildDecoys(Group("Senuelos"));
+            FillSightLines(Group("Relleno"));
             ConfigureLevelBounds();
+            MarkStaticScenery();
             Validate();
 
             Lightmapping.lightingDataAsset = null;
@@ -390,6 +390,7 @@ namespace BetterTogether.EditorTools
             EditorSceneManager.SaveScene(_scene);
             AssetDatabase.SaveAssets();
             Debug.Log($"{LogPrefix} Built {AbrazoPath}: {_bushCount} cover bushes, {DecoyPoints.Count} decoys.");
+            LogSceneWeight();
         }
 
         [MenuItem("GnoMore/Usar El Abrazo como nivel de juego")]
@@ -878,7 +879,8 @@ namespace BetterTogether.EditorTools
             h = Mathf.Min(h, Basin(x, z, PozaCenter, PozaFlatRadius, PozaFalloff, PozaDepth));
             var stream = DistanceToSegment(new Vector2(x, z), StreamStart, StreamEnd);
             var channel = StreamDepth * (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(StreamInnerHalfWidth, StreamOuterHalfWidth, stream)));
-            return Mathf.Min(h, channel);
+            h = Mathf.Min(h, channel);
+            return Mathf.Max(h, FireMound(x, z));
         }
 
         private static TerrainLayer LoadLayer(int index)
@@ -942,10 +944,18 @@ namespace BetterTogether.EditorTools
                     foreach (var patch in Patches)
                     {
                         var d = Vector2.Distance(new Vector2(x, z), patch.Center);
-                        var a = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(patch.Radius * 0.55f, patch.Radius, d));
+                        var a = (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(patch.Radius * PatchInner, patch.Radius, d))) * PatchStrength(patch.Layer);
                         for (var i = 0; i < weights.Length; i++)
                             weights[i] *= 1f - a;
                         weights[patch.Layer] += a;
+                    }
+
+                    var pathAmount = PathWeight(x, z);
+                    if (pathAmount > 0f)
+                    {
+                        for (var i = 0; i < weights.Length; i++)
+                            weights[i] *= 1f - pathAmount;
+                        weights[LayerDirt] += pathAmount;
                     }
 
                     for (var i = 0; i < weights.Length; i++)
@@ -959,6 +969,7 @@ namespace BetterTogether.EditorTools
             var terrainObject = Terrain.CreateTerrainGameObject(data);
             terrainObject.name = "Terreno";
             terrainObject.layer = _layerEnv;
+            _terrain = terrainObject.GetComponent<Terrain>();
             terrainObject.transform.SetParent(parent, false);
             terrainObject.transform.position = new Vector3(-half, TerrainBaseY, -half);
             Physics.SyncTransforms();
@@ -984,44 +995,7 @@ namespace BetterTogether.EditorTools
             Box(invisible, "MuroNorte", new Vector3(0f, halfHeight - 3f, InvisibleWallZ + InvisibleWallThickness * 0.5f), new Vector3(spanX, InvisibleWallHeight, InvisibleWallThickness), clear, _layerEnv, true).GetComponent<MeshRenderer>().enabled = false;
             Box(invisible, "MuroSur", new Vector3(0f, halfHeight - 3f, -InvisibleWallZ - InvisibleWallThickness * 0.5f), new Vector3(spanX, InvisibleWallHeight, InvisibleWallThickness), clear, _layerEnv, true).GetComponent<MeshRenderer>().enabled = false;
 
-            // Ring of trees just outside the walls, in two staggered rows.
-            var trees = Group("Arboles");
-            trees.SetParent(parent, false);
-            var index = 0;
-            for (var row = 0; row < 2; row++)
-            {
-                var offset = row * TreeRowGap;
-                var halfX = TreeRingX + offset;
-                var halfZ = TreeRingZ + offset;
-                for (var x = -halfX; x <= halfX; x += TreeSpacing)
-                {
-                    PlaceRingTree(trees, x, halfZ, index++);
-                    PlaceRingTree(trees, x + TreeSpacing * 0.5f, -halfZ, index++);
-                }
-
-                for (var z = -halfZ + TreeSpacing; z < halfZ; z += TreeSpacing)
-                {
-                    PlaceRingTree(trees, halfX, z, index++);
-                    PlaceRingTree(trees, -halfX, z + TreeSpacing * 0.5f, index++);
-                }
-            }
-        }
-
-        private static void PlaceRingTree(Transform parent, float x, float z, int index)
-        {
-            var jitterX = (Hash01(x, z) - 0.5f) * 2.5f;
-            var jitterZ = (Hash01(z, x) - 0.5f) * 2.5f;
-            var kind = 1 + Mathf.FloorToInt(Hash01(x + 3f, z + 7f) * 4f) % 4;
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{PrefabDir}Arbol_0{kind}.prefab");
-            if (prefab == null)
-                return;
-
-            var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
-            go.name = $"Arbol_{index:000}";
-            var scale = 0.9f + Hash01(z + 1f, x + 2f) * 0.35f;
-            go.transform.localScale *= scale;
-            var height = HeightAt(x + jitterX, z + jitterZ);
-            go.transform.SetPositionAndRotation(new Vector3(x + jitterX, height, z + jitterZ), Quaternion.Euler(0f, Hash01(x, z + 5f) * 360f, 0f));
+            BuildForest(parent);
         }
 
         // ================================================================== Twin trees
@@ -1127,24 +1101,7 @@ namespace BetterTogether.EditorTools
         // Half of the round trunk on one side of the slit band: side +1 is the pale one (north-east), -1 the dark one.
         private static List<Vector2> TrunkHalf(float side)
         {
-            var dir = Dir2;
-            var normal = new Vector2(-dir.y, dir.x);
-            var along = Mathf.Sqrt(TrunkRadius * TrunkRadius - SlitHalfWidth * SlitHalfWidth);
-            var e1 = normal * (side * SlitHalfWidth) + dir * along;
-            var e2 = normal * (side * SlitHalfWidth) - dir * along;
-            var a1 = Mathf.Atan2(e1.y, e1.x);
-            var a2 = Mathf.Atan2(e2.y, e2.x);
-            if (side > 0f)
-            {
-                while (a2 < a1)
-                    a2 += Mathf.PI * 2f;
-            }
-            else
-            {
-                while (a2 > a1)
-                    a2 -= Mathf.PI * 2f;
-            }
-
+            TrunkArc(side, out var a1, out var a2);
             var polygon = new List<Vector2>();
             for (var i = 0; i <= TrunkArcSegments; i++)
             {
@@ -1173,6 +1130,7 @@ namespace BetterTogether.EditorTools
             BuildSlit(parent);
             BuildRibbons(parent);
             BuildCanopy(parent);
+            BuildTrunkDetails(parent);
         }
 
         // The slit: roof at 0.8 m over its whole length, plus low side walls where the trunks do not form them.
@@ -1194,24 +1152,30 @@ namespace BetterTogether.EditorTools
             var closest = Vector2.Dot(-SlitStart, dir);
             var onLine = SlitStart + dir * closest;
             var halfChord = Mathf.Sqrt(Mathf.Max(0f, TrunkRadius * TrunkRadius - onLine.sqrMagnitude));
-            BuildSlitWalls(slit, rotation, 0f, closest - halfChord);
-            BuildSlitWalls(slit, rotation, closest + halfChord, length);
+            BuildSlitWalls(slit, rotation, 0f, closest - halfChord, 0f);
+            BuildSlitWalls(slit, rotation, closest + halfChord, length, SlitExitOpening);
         }
 
-        private static void BuildSlitWalls(Transform parent, Quaternion rotation, float from, float to)
+        // The dark (south-west) wall of the south part stops 'darkTrim' short of the exit: from the exit a gnome sees the peephole.
+        private static void BuildSlitWalls(Transform parent, Quaternion rotation, float from, float to, float darkTrim)
         {
             if (to - from < 0.05f)
                 return;
 
             var dir = Dir2;
             var normal = new Vector2(-dir.y, dir.x);
-            var middle = SlitStart + dir * ((from + to) * 0.5f);
             var offset = SlitHalfWidth + SlitWallThickness * 0.5f;
+            var middle = SlitStart + dir * ((from + to) * 0.5f);
             var pale = middle + normal * offset;
-            var dark = middle - normal * offset;
-            var size = new Vector3(SlitWallThickness, SlitWallHeight, to - from);
-            Box(parent, "ParedPalida", new Vector3(pale.x, SlitWallHeight * 0.5f - StairSink * 0.5f, pale.y), size, Mat("RaizPalida", RootPaleHex), _layerEnv, true, rotation);
-            Box(parent, "ParedOscura", new Vector3(dark.x, SlitWallHeight * 0.5f - StairSink * 0.5f, dark.y), size, Mat("RaizOscura", RootDarkHex), _layerEnv, true, rotation);
+            Box(parent, "ParedPalida", new Vector3(pale.x, SlitWallHeight * 0.5f - StairSink * 0.5f, pale.y), new Vector3(SlitWallThickness, SlitWallHeight, to - from), Mat("RaizPalida", RootPaleHex), _layerEnv, true, rotation);
+
+            var darkTo = to - darkTrim;
+            if (darkTo - from < 0.05f)
+                return;
+
+            var darkMiddle = SlitStart + dir * ((from + darkTo) * 0.5f);
+            var dark = darkMiddle - normal * offset;
+            Box(parent, "ParedOscura", new Vector3(dark.x, SlitWallHeight * 0.5f - StairSink * 0.5f, dark.y), new Vector3(SlitWallThickness, SlitWallHeight, darkTo - from), Mat("RaizOscura", RootDarkHex), _layerEnv, true, rotation);
         }
 
         // Visual braid: helical ribbons around both trunks, no colliders.
@@ -1269,8 +1233,8 @@ namespace BetterTogether.EditorTools
         {
             var darkRoot = Mat("RaizOscura", RootDarkHex);
             var paleRoot = Mat("RaizPalida", RootPaleHex);
-            RootWall(parent, "RaizOeste", -RootTipX, -RootWestStartX, -TunnelX, darkRoot);
-            RootWall(parent, "RaizEste", RootEastStartX, RootTipX, TunnelX, paleRoot);
+            RootWall(parent, "RaizOeste", -1f, -TunnelX, darkRoot);
+            RootWall(parent, "RaizEste", 1f, TunnelX, paleRoot);
 
             // The fire's U: open to the south, with a 0.4 m peephole in the east wall that faces the slit's south exit.
             var u = Group("UFogata");
@@ -1286,18 +1250,34 @@ namespace BetterTogether.EditorTools
             MarkFloating(Solid(u, "UEsteMirillaDintel", FireU_InnerX, FireU_OuterX, holeFrom, holeTo, RootHeight, paleRoot, _layerEnv, PeepholeSillY + PeepholeSize));
         }
 
-        // A root wall along x between x0 and x1 (thickness 2 m in z) with a gnome tunnel at tunnelX.
-        private static void RootWall(Transform parent, string name, float x0, float x1, float tunnelX, Material material)
+        // A root wall along x on one side of the trunks: three stepped prisms (thicker and taller near the trunk, still above 2.4 m
+        // at the tip so a tower of gnomes cannot cross), a gnome tunnel at tunnelX and a few knuckles on its sides.
+        private static void RootWall(Transform parent, string name, float side, float tunnelX, Material material)
         {
             var wall = Group(name);
             wall.SetParent(parent, false);
             var half = TunnelWidth * 0.5f;
-            var left = Mathf.Min(tunnelX - half, x1);
-            Solid(wall, "TramoA", x0, Mathf.Min(x1, tunnelX - half), -RootHalfThickness, RootHalfThickness, RootHeight, material, _layerEnv);
-            Solid(wall, "TramoB", Mathf.Max(x0, tunnelX + half), x1, -RootHalfThickness, RootHalfThickness, RootHeight, material, _layerEnv);
-            MarkFloating(Solid(wall, "Dintel", tunnelX - half, tunnelX + half, -RootHalfThickness, RootHalfThickness, RootHeight, material, _layerEnv, TunnelHeight));
-            if (left < x0)
-                Debug.LogWarning($"{LogPrefix} Tunnel of {name} lies outside the wall.");
+            for (var i = 0; i < RootStepHeight.Length; i++)
+            {
+                var a = side * RootStepEdges[i];
+                var b = side * RootStepEdges[i + 1];
+                var x0 = Mathf.Min(a, b);
+                var x1 = Mathf.Max(a, b);
+                var t = RootStepHalfThickness[i];
+                var h = RootStepHeight[i];
+                if (tunnelX - half > x0 && tunnelX + half < x1)
+                {
+                    Solid(wall, $"Tramo{i}A", x0, tunnelX - half, -t, t, h, material, _layerEnv);
+                    Solid(wall, $"Tramo{i}B", tunnelX + half, x1, -t, t, h, material, _layerEnv);
+                    MarkFloating(Solid(wall, $"Dintel{i}", tunnelX - half, tunnelX + half, -t, t, h, material, _layerEnv, TunnelHeight));
+                }
+                else
+                {
+                    Solid(wall, $"Tramo{i}", x0, x1, -t, t, h, material, _layerEnv);
+                }
+            }
+
+            RootBumps(wall, side, material);
         }
 
         // ================================================================== Ramp
@@ -1577,12 +1557,12 @@ namespace BetterTogether.EditorTools
 
             var signs = Group("Rotulos");
             signs.SetParent(parent, false);
-            Sign(signs, "Campamento", new Vector2(0f, -19f), "#E0903A");
-            Sign(signs, "Serreria", new Vector2(24f, -10f), "#D9C24A");
-            Sign(signs, "Huerto", new Vector2(-24f, -16f), "#D874A8");
-            Sign(signs, "Risco", new Vector2(-22f, 8f), "#7C8FA8");
-            Sign(signs, "Hondonada", new Vector2(0f, 18f), "#5E9E52");
-            Sign(signs, "Poza", new Vector2(22f, 16f), "#D8C48A");
+            Sign(signs, "Campamento", "Campamento", new Vector2(0f, -19f), "#E0903A");
+            Sign(signs, "Serreria", "Serrería", new Vector2(24f, -10f), "#D9C24A");
+            Sign(signs, "Huerto", "Huerto", new Vector2(-24f, -16f), "#D874A8");
+            Sign(signs, "Risco", "Risco", new Vector2(-22f, 8f), "#7C8FA8");
+            Sign(signs, "Hondonada", "Hondonada", new Vector2(4.6f, 17.2f), "#5E9E52");
+            Sign(signs, "Poza", "La Poza", new Vector2(24f, 10f), "#D8C48A");
         }
 
         private static Transform Sector(Transform parent, string name)
@@ -1592,20 +1572,22 @@ namespace BetterTogether.EditorTools
             return group;
         }
 
-        private static void Sign(Transform parent, string sector, Vector2 spot, string hex)
+        private static void Sign(Transform parent, string sector, string title, Vector2 spot, string hex)
         {
-            var ground = GroundPoint(spot);
-            var post = Box(parent, $"Rotulo_{sector}", new Vector3(spot.x, ground.y + 1.1f - StairSink * 0.5f, spot.y), new Vector3(0.15f, 2.2f + StairSink, 0.15f), Mat("PosteRotulo", SignPostHex), _layerEnv);
-            var board = Box(post.transform, "Tablero", new Vector3(spot.x, ground.y + 1.9f, spot.y), new Vector3(1.4f, 0.5f, 0.1f), Mat($"Rotulo{sector}", hex), _layerEnv, false);
-            board.transform.localScale = new Vector3(1.4f / 0.15f, 0.5f / 2.2f, 0.1f / 0.15f);
-            MarkFloating(board);
-            KeyPoints.Add(spot);
+            BuildSign(parent, sector, title, spot, hex);
         }
 
         private static void BuildCamp(Transform group)
         {
-            for (var i = 0; i < TentSpots.Length; i++)
-                PlacePrefab("Tent.prefab", group, $"Tienda_{i + 1}", TentSpots[i], i == 0 ? 20f : -35f);
+            // Upright tents with a collider, each of its own colour.
+            var models = new[] { "SM_Tent", "SM_Tent_Blue", "SM_Tent_Green" };
+            var spots = new[] { TentSpots[0], TentSpots[1], new Vector2(-14f, -31f) };
+            var yaws = new[] { 20f, -35f, 65f };
+            for (var i = 0; i < models.Length; i++)
+            {
+                Spawn(models[i], group, $"Tienda_{i + 1}", spots[i], yaws[i], 3.6f, Body.Box, _layerEnv, false);
+                KeyPoints.Add(spots[i]);
+            }
         }
 
         private static void BuildSawmill(Transform group)
@@ -1662,7 +1644,7 @@ namespace BetterTogether.EditorTools
 
         private static void BuildCrag(Transform group)
         {
-            var rock = Mat("Piedra", RockHex);
+            var rock = Mat("PiedraFria", ColdRockHex);
             Solid(group, "TerrazaBaja", -34f, -22f, 10f, 18f, CragTerraceLowY, rock, _layerEnv);
             Solid(group, "TerrazaMedia", -37f, -27f, 17f, 23f, CragTerraceMidY, rock, _layerEnv);
             Solid(group, "TerrazaAlta", -34f, -26f, 24f, 30f, CragTerraceHighY, rock, _layerEnv);
@@ -1703,7 +1685,9 @@ namespace BetterTogether.EditorTools
             // The fire, the bucket, the water, the cage: existing objects of the scene, moved onto the new ground.
             // The ramp passes above the fire: probe from below it.
             _probeTop = BelowRampProbeTop;
-            MoveExisting("Fireplace", FireplaceSpot, 0f);
+            var fire = MoveExisting("Fireplace", FireplaceSpot, 0f);
+            if (fire != null)
+                SeatOnVisualBase(fire, FireplaceSpot);
             _probeTop = GroundProbeTop;
             MoveExisting("Bucket", BucketSpot, 0f);
             MoveExisting("GnomeCage", CageSpot, 90f);
@@ -1829,49 +1813,6 @@ namespace BetterTogether.EditorTools
             return false;
         }
 
-        private static void ScatterCover(Transform parent)
-        {
-            var min = new Vector2(-CoverLimitX, -CoverLimitZ);
-            var max = new Vector2(CoverLimitX, CoverLimitZ);
-            Lattice(parent, min, max, CoverSpacing, CoverJitter, 0);
-            // Dense cover in the hollow.
-            Lattice(parent, new Vector2(-14f, 12f), new Vector2(14f, CoverLimitZ), HollowCoverSpacing, CoverJitter * 0.5f, 11);
-        }
-
-        private static void Lattice(Transform parent, Vector2 min, Vector2 max, float spacing, float jitter, int seed)
-        {
-            for (var x = min.x; x <= max.x; x += spacing)
-            {
-                for (var z = min.y; z <= max.y; z += spacing)
-                {
-                    var px = x + (Hash01(x + seed, z) - 0.5f) * 2f * jitter;
-                    var pz = z + (Hash01(z, x + seed) - 0.5f) * 2f * jitter;
-                    TryBush(parent, px, pz);
-                }
-            }
-        }
-
-        private static void TryBush(Transform parent, float x, float z)
-        {
-            if (Mathf.Abs(x) > CoverLimitX || Mathf.Abs(z) > CoverLimitZ || CoverExcluded(x, z) || NearKeyPoint(x, z, CoverKeepAway))
-                return;
-
-            // Only bare terrain: not on top of a structure, not in the pool, not on a steep slope.
-            if (!TryGround(x, z, null, out var hit) || !(hit.collider is TerrainCollider) || hit.normal.y < CoverMinNormalY || hit.point.y < CoverMinGroundY)
-                return;
-
-            var scale = 1.8f + Hash01(x + 9f, z + 4f) * 0.8f;
-            var height = 2f + Hash01(x + 2f, z + 8f) * 0.6f;
-            var center = new Vector3(x, hit.point.y + height * 0.5f - 0.2f, z);
-            if (Physics.CheckSphere(center, CoverClearRadius, _groundMask | (1 << _layerOccluder), QueryTriggerInteraction.Ignore))
-                return;
-
-            var bush = Sphere(parent, $"Arbusto_{_bushCount:000}", center, new Vector3(scale, height, scale), Mat("Arbusto", BushHex), _layerOccluder, true);
-            bush.transform.rotation = Quaternion.Euler(0f, Hash01(x, z) * 360f, 0f);
-            Physics.SyncTransforms();
-            _bushCount++;
-        }
-
         // Eight bushes that become hiding spots (child with NetworkObject + HidingSpot, built by HidingSpotTools).
         private static void BuildHidingSpots(Transform parent)
         {
@@ -1903,7 +1844,7 @@ namespace BetterTogether.EditorTools
 
             PlaceDecoys(parent, prefab, OrchardDecoyAnchors, OrchardDecoys);
             PlaceDecoys(parent, prefab, HollowDecoyAnchors, HollowDecoys);
-            PlaceDecoys(parent, prefab, ShoulderDecoyAnchors, ShoulderDecoys);
+            PlaceDecoys(parent, prefab, ShoulderAnchors(), ShoulderDecoys);
         }
 
         private static void PlaceDecoys(Transform parent, GameObject prefab, Vector2[] anchors, int count)
@@ -1915,18 +1856,32 @@ namespace BetterTogether.EditorTools
                 if (placed >= count)
                     break;
 
-                if (!TryDecoySpot(anchor, blockers, out var spot))
+                var done = false;
+                for (var attempt = 0; attempt < 6 && !done; attempt++)
                 {
-                    Debug.LogWarning($"{LogPrefix} No free decoy spot near ({anchor.x}, {anchor.y}).");
-                    continue;
-                }
+                    if (!TryDecoySpot(anchor, blockers, out var spot))
+                    {
+                        Debug.LogWarning($"{LogPrefix} No free decoy spot near ({anchor.x}, {anchor.y}).");
+                        break;
+                    }
 
-                var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
-                instance.name = $"Senuelo_{DecoyPoints.Count + 1:00}";
-                var yaw = Mathf.Repeat(spot.x * 53f + spot.z * 97f, 360f);
-                instance.transform.SetPositionAndRotation(spot, Quaternion.Euler(0f, yaw, 0f));
-                DecoyPoints.Add(new Vector2(spot.x, spot.z));
-                placed++;
+                    var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
+                    instance.name = $"Senuelo_{DecoyPoints.Count + 1:00}";
+                    var yaw = Mathf.Repeat(spot.x * 53f + spot.z * 97f, 360f);
+                    instance.transform.SetPositionAndRotation(spot, Quaternion.Euler(0f, yaw, 0f));
+                    Physics.SyncTransforms();
+                    if (!FootprintSupported(instance))
+                    {
+                        // Not fully on one flat surface (edge of a platform, a deck): try another spot.
+                        Object.DestroyImmediate(instance);
+                        DecoyRejects.Add(new Vector2(spot.x, spot.z));
+                        continue;
+                    }
+
+                    DecoyPoints.Add(new Vector2(spot.x, spot.z));
+                    placed++;
+                    done = true;
+                }
             }
         }
 
@@ -1941,7 +1896,7 @@ namespace BetterTogether.EditorTools
                     var angle = i * Mathf.PI * 2f / steps;
                     var x = anchor.x + Mathf.Cos(angle) * ring * DecoyRingStep;
                     var z = anchor.y + Mathf.Sin(angle) * ring * DecoyRingStep;
-                    if (!TryGround(x, z, null, out var hit) || hit.normal.y < DecoyMinNormalY || NearKeyPoint(x, z, DecoyKeepAway))
+                    if (!TryGround(x, z, null, out var hit) || hit.normal.y < DecoyMinNormalY || NearKeyPoint(x, z, DecoyKeepAway) || RejectedDecoy(x, z))
                         continue;
 
                     var feet = hit.point;
@@ -2033,7 +1988,9 @@ namespace BetterTogether.EditorTools
                 Debug.LogWarning($"{LogPrefix} The peephole does not give a view of the fire from the slit exit.");
             }
 
-            Debug.Log($"{LogPrefix} Passage check: {(failures == 0 ? "slit and tunnels admit the gnome and refuse the camper" : failures + " failure(s)")}.");
+            failures += ValidateCamperRamp(mask);
+            failures += ValidateGates(mask);
+            Debug.Log($"{LogPrefix} Passage check: {(failures == 0 ? "slit and tunnels admit the gnome and refuse the camper, the camper walks the ramp, gates are at least 3 m wide" : failures + " failure(s)")}.");
         }
 
         private static bool GnomeBlocked(Vector3 ground, int mask, out Vector3 where)
