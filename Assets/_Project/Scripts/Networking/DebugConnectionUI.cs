@@ -110,7 +110,7 @@ namespace BetterTogether.Networking
                 if (inLobby)
                     DrawNameField();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-                GUILayout.Label("[F1] Debug: roles y mirada");
+                GUILayout.Label("[F1] Debug: roles y cámara");
 #endif
                 if (GUILayout.Button("Salir al menú"))
                     _ = manager.ReturnToMenu();
@@ -158,10 +158,11 @@ namespace BetterTogether.Networking
                 .OrderBy(p => p.Object.StateAuthority.PlayerId)
                 .ToList();
 
-            var height = 230f + players.Count * 28f;
+            var height = 258f + players.Count * 28f;
             GUILayout.BeginArea(new Rect(DebugGuiScale.Width - RolePanelWidth - 10f, 10f, RolePanelWidth, height), GUI.skin.box);
             GUILayout.Label("Debug — F1 para cerrar");
             DrawGazeToggle();
+            DrawShutterModeToggle();
             DrawVolumeSliders();
             GUILayout.Space(6f);
 
@@ -210,12 +211,12 @@ namespace BetterTogether.Networking
             GUILayout.BeginHorizontal();
             if (gazes.Count == 0)
             {
-                GUILayout.Label("Mirada petrificante: (no hay campista)");
+                GUILayout.Label("Cámara: (no hay campista)");
             }
             else
             {
                 var enabled = gazes.Any(g => g.IsGazeEnabled);
-                GUILayout.Label($"Mirada petrificante: {(enabled ? "ON" : "OFF")}", GUILayout.Width(170f));
+                GUILayout.Label($"Cámara: {(enabled ? "ON" : "OFF")}", GUILayout.Width(170f));
                 if (GUILayout.Button(enabled ? "Desactivar" : "Activar"))
                 {
                     foreach (var gaze in gazes)
@@ -223,6 +224,21 @@ namespace BetterTogether.Networking
                 }
             }
             GUILayout.EndHorizontal();
+        }
+
+        /// <summary>Switches the shutter of every camper between Auto (variant A) and Clic (variant B).</summary>
+        private static void DrawShutterModeToggle()
+        {
+            var gazes = CamperGaze.All.Where(g => g != null && g.Object != null && g.Object.IsValid).ToList();
+            if (gazes.Count == 0)
+                return;
+
+            var auto = gazes[0].Mode == ShutterMode.Auto;
+            if (GUILayout.Button(auto ? "Disparo: Auto (pulsa para Clic)" : "Disparo: Clic (pulsa para Auto)"))
+            {
+                foreach (var gaze in gazes)
+                    gaze.RPC_SetShutterMode(auto ? ShutterMode.Click : ShutterMode.Auto);
+            }
         }
 
         private void RoleButton(PlayerCharacter player, PlayerRole role)

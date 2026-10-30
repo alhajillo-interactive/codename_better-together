@@ -31,7 +31,7 @@ namespace BetterTogether.UI
         {
             new("interact", "usar", "Player/Interact"),
             new("attack", "patear", "Player/Attack"),
-            new("focus", "mirada", "Player/Focus"),
+            new("focus", "cámara", "Player/Focus"),
             new("crouch", "agacharte", "Player/Crouch"),
         };
 

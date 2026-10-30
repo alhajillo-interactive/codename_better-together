@@ -33,15 +33,15 @@ namespace BetterTogether.UI
         [SerializeField] private Image _coneVignette;
         [Tooltip("Root of the stamina bar; active only while the gaze is on.")]
         [SerializeField] private GameObject _staminaRoot;
-        [Tooltip("Stretched child of the stamina bar background; its right anchor is the stamina.")]
+        [Tooltip("Stretched child of the bar background; its right anchor is Plates / MaxPlates.")]
         [SerializeField] private RectTransform _staminaFill;
-        [Tooltip("Image of the stamina fill, tinted normal/exhausted.")]
+        [Tooltip("Image of the plates fill, tinted normal/empty.")]
         [SerializeField] private Image _staminaFillImage;
-        [Tooltip("Tick that marks the stamina fraction needed to use the gaze again.")]
+        [Tooltip("Old reuse-threshold tick; hidden now that the camera has no stamina.")]
         [SerializeField] private RectTransform _staminaThreshold;
-        [Tooltip("'Mirada agotada' label above the bar, shown while exhausted.")]
+        [Tooltip("'Sin placas' label above the bar, shown while no plate is loaded.")]
         [SerializeField] private TMP_Text _exhaustedLabel;
-        [Tooltip("'[Clic der.] Mirada' hint next to the bar, shown when the stamina is full and idle.")]
+        [Tooltip("'[Clic der.] Cámara' hint next to the bar, shown when every plate is loaded and the camera is down.")]
         [SerializeField] private TMP_Text _hintLabel;
 
         [Header("Gnome")]
@@ -75,7 +75,7 @@ namespace BetterTogether.UI
         [Header("Stamina bar")]
         [SerializeField] private Color _staminaColor = new(0.6f, 0.5f, 1f, 0.95f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
         [SerializeField] private Color _exhaustedColor = new(1f, 0.2f, 0.2f, 0.95f); // ui-color-ok: serialized default for a world/scene-space graphic (tunable in the prefab), not themed text
-        [Tooltip("Blinks per second of the bar while exhausted.")]
+        [Tooltip("Blinks per second of the bar while no plate is loaded.")]
         [SerializeField] private float _exhaustedBlinkHz = 3f;
 
         private RectTransform _canvasRect;
@@ -88,7 +88,7 @@ namespace BetterTogether.UI
         private float _lastConeFov = -1f;
         private float _lastBreakFill = -1f;
         private float _lastStaminaFill = -1f;
-        private float _lastThreshold = -1f;
+        private bool _labelsSet;
 
         private float _pulseTime = float.MaxValue;
         private Petrifiable _trackedGnome;
@@ -312,6 +312,7 @@ namespace BetterTogether.UI
             HudSupport.SetEnabled(_coneVignette, true);
         }
 
+        // The old stamina bar now shows the plates (Plates / MaxPlates); the real viewfinder is C8.2.
         private void UpdateStamina(CamperGaze gaze)
         {
             var gazeOn = gaze.IsGazeOn;
@@ -319,9 +320,17 @@ namespace BetterTogether.UI
             if (!gazeOn)
                 return;
 
-            var exhausted = gaze.Exhausted;
+            if (!_labelsSet)
+            {
+                _labelsSet = true;
+                _exhaustedLabel.text = "Sin placas";
+                _hintLabel.text = "[Clic der.] Cámara";
+            }
+
+            var plates = gaze.Plates;
+            var empty = plates < 1f;
             var color = _staminaColor;
-            if (exhausted)
+            if (empty)
             {
                 var on = Mathf.Repeat(Time.time * _exhaustedBlinkHz, 1f) < 0.5f;
                 color = _exhaustedColor;
@@ -330,27 +339,16 @@ namespace BetterTogether.UI
 
             _staminaFillImage.color = color;
 
-            var fraction = gaze.StaminaFraction;
+            var fraction = gaze.MaxPlates > 0 ? plates / gaze.MaxPlates : 0f;
             if (!Mathf.Approximately(fraction, _lastStaminaFill))
             {
                 _lastStaminaFill = fraction;
                 HudSupport.SetFill(_staminaFill, fraction);
             }
 
-            var threshold = gaze.ReuseThreshold;
-            if (!Mathf.Approximately(threshold, _lastThreshold))
-            {
-                _lastThreshold = threshold;
-                var min = _staminaThreshold.anchorMin;
-                var max = _staminaThreshold.anchorMax;
-                min.x = threshold;
-                max.x = threshold;
-                _staminaThreshold.anchorMin = min;
-                _staminaThreshold.anchorMax = max;
-            }
-
-            HudSupport.SetActive(_exhaustedLabel.gameObject, exhausted);
-            HudSupport.SetActive(_hintLabel.gameObject, !exhausted && !gaze.Focusing && fraction >= 0.999f);
+            HudSupport.SetActive(_staminaThreshold.gameObject, false);
+            HudSupport.SetActive(_exhaustedLabel.gameObject, empty);
+            HudSupport.SetActive(_hintLabel.gameObject, !empty && !gaze.Focusing && plates >= gaze.MaxPlates - 0.001f);
         }
     }
 }
