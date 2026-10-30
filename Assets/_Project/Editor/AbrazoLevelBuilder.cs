@@ -212,7 +212,7 @@ namespace BetterTogether.EditorTools
         };
 
         private static readonly Vector2[] HollowDecoyAnchors = { new(-4f, 24f), new(5f, 28f), new(0f, 20f), new(-10f, 31f) };
-        private static readonly Vector2[] ShoulderDecoyAnchors = { new(-4.2f, -8.3f), new(-7.6f, -8.4f), new(-3.8f, -6.3f), new(-8f, -6.5f) };
+        private static readonly Vector2[] ShoulderDecoyAnchors = { new(-4.6f, -8.2f), new(-7.3f, -8.2f), new(-4.4f, -6f), new(-6.2f, -9f) };
         private const int OrchardDecoys = 10;
         private const int HollowDecoys = 3;
         private const int ShoulderDecoys = 2;
@@ -237,12 +237,16 @@ namespace BetterTogether.EditorTools
         private const float DecoySpacing = 1f;
         private const float DecoyKeepAway = 1.5f;
         private const float DecoyMinNormalY = 0.85f;
+        private const float RockSink = 0.1f;
+        private const float DecoyRimRadius = 0.2f;
+        private const float DecoyRimMaxGap = 0.05f;
         private const float DecoyRingStep = 0.6f;
         private const int DecoyRings = 3;
         private const int DecoySteps = 12;
 
         // ---- Probes ----
         private const float GroundProbeTop = 40f;
+        private const float BelowRampProbeTop = 3f;
         private const float GroundProbeDistance = 80f;
         private const float CamperRadius = 0.3f;
         private const float CamperCrouchHeight = 1f;
@@ -337,6 +341,7 @@ namespace BetterTogether.EditorTools
         private static readonly List<Vector2> KeyPoints = new();
         private static readonly List<Vector2> DecoyPoints = new();
         private static readonly RaycastHit[] Hits = new RaycastHit[64];
+        private static float _probeTop = GroundProbeTop;
         private static int _bushCount;
         private static Vector3 _canopyCenter;
 
@@ -399,7 +404,7 @@ namespace BetterTogether.EditorTools
             if (!OpenAbrazo())
                 return;
 
-            var dir = Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Temp", "abrazo");
+            var dir = Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Docs", "plan", "fase-9", "capturas");
             Directory.CreateDirectory(dir);
             var cameraObject = new GameObject("TmpCaptureCamera") { hideFlags = HideFlags.HideAndDontSave };
             var camera = cameraObject.AddComponent<Camera>();
@@ -701,7 +706,7 @@ namespace BetterTogether.EditorTools
         {
             best = default;
             var found = false;
-            var count = Physics.RaycastNonAlloc(new Vector3(x, GroundProbeTop, z), Vector3.down, Hits, GroundProbeDistance, _groundMask, QueryTriggerInteraction.Ignore);
+            var count = Physics.RaycastNonAlloc(new Vector3(x, _probeTop, z), Vector3.down, Hits, GroundProbeDistance, _groundMask, QueryTriggerInteraction.Ignore);
             for (var i = 0; i < count; i++)
             {
                 var hit = Hits[i];
@@ -763,6 +768,48 @@ namespace BetterTogether.EditorTools
                 t.position += Vector3.up * (hit.point.y - minY + lift);
             Physics.SyncTransforms();
             return true;
+        }
+
+        // Rocks have no colliders of their own, and on a slope their base must reach the lowest ground under them.
+        private static void PlaceRock(string relativePath, Transform parent, string name, Vector2 spot, float yaw)
+        {
+            var rock = PlacePrefab(relativePath, parent, name, spot, yaw);
+            if (rock == null)
+                return;
+
+            var lowest = float.MaxValue;
+            var bounds = default(Bounds);
+            var hasBounds = false;
+            foreach (var filter in rock.GetComponentsInChildren<MeshFilter>())
+            {
+                if (filter.GetComponent<Collider>() == null)
+                    filter.gameObject.AddComponent<MeshCollider>();
+
+                var renderer = filter.GetComponent<Renderer>();
+                if (renderer == null)
+                    continue;
+
+                if (hasBounds)
+                    bounds.Encapsulate(renderer.bounds);
+                else
+                    bounds = renderer.bounds;
+                hasBounds = true;
+            }
+
+            if (!hasBounds)
+                return;
+
+            for (var i = 0; i < 4; i++)
+            {
+                var x = bounds.center.x + ((i & 1) == 0 ? -1f : 1f) * bounds.extents.x;
+                var z = bounds.center.z + ((i & 2) == 0 ? -1f : 1f) * bounds.extents.z;
+                if (TryGround(x, z, rock.transform, out var hit))
+                    lowest = Mathf.Min(lowest, hit.point.y);
+            }
+
+            if (lowest < float.MaxValue)
+                rock.transform.position += Vector3.up * (lowest - RockSink - bounds.min.y);
+            Physics.SyncTransforms();
         }
 
         private static GameObject PlacePrefab(string relativePath, Transform parent, string name, Vector2 spot, float yaw)
@@ -1533,7 +1580,7 @@ namespace BetterTogether.EditorTools
             Sign(signs, "Campamento", new Vector2(0f, -19f), "#E0903A");
             Sign(signs, "Serreria", new Vector2(24f, -10f), "#D9C24A");
             Sign(signs, "Huerto", new Vector2(-24f, -16f), "#D874A8");
-            Sign(signs, "Risco", new Vector2(-26f, 12f), "#7C8FA8");
+            Sign(signs, "Risco", new Vector2(-22f, 8f), "#7C8FA8");
             Sign(signs, "Hondonada", new Vector2(0f, 18f), "#5E9E52");
             Sign(signs, "Poza", new Vector2(22f, 16f), "#D8C48A");
         }
@@ -1628,14 +1675,14 @@ namespace BetterTogether.EditorTools
             Stairs(group, "EscaleraC", new Vector3(-31f, CragTerraceMidY, 20.5f), Vector3.forward, 2f, CragTerraceHighY - CragTerraceMidY, CamperStepHeight, _layerEnv, rock);
             Stairs(group, "EscaleraGnomoC", new Vector3(-28f, CragTerraceMidY, 21.2f), Vector3.forward, 1.2f, CragTerraceHighY - CragTerraceMidY, GnomeStepHeight, _layerGnomeOnly, rock);
 
-            PlacePrefab("Rock_01.prefab", group, "Roca_1", new Vector2(-24f, 25f), 30f);
-            PlacePrefab("Rock_02.prefab", group, "Roca_2", new Vector2(-37f, 5f), 100f);
-            PlacePrefab("Rock_03.prefab", group, "Roca_3", new Vector2(-21f, 12f), 200f);
+            PlaceRock("Rock_01.prefab", group, "Roca_1", new Vector2(-24f, 25f), 30f);
+            PlaceRock("Rock_02.prefab", group, "Roca_2", new Vector2(-37f, 5f), 100f);
+            PlaceRock("Rock_03.prefab", group, "Roca_3", new Vector2(-21f, 12f), 200f);
         }
 
         private static void BuildHollow(Transform group)
         {
-            PlacePrefab("Rock_02.prefab", group, "Roca_Hondonada", new Vector2(14f, 33f), 60f);
+            PlaceRock("Rock_02.prefab", group, "Roca_Hondonada", new Vector2(14f, 33f), 60f);
         }
 
         private static void BuildPool(Transform group)
@@ -1646,7 +1693,7 @@ namespace BetterTogether.EditorTools
             Box(group, "Muelle", new Vector3(34.5f, DockTopY - DockThickness * 0.5f, 28f), new Vector3(8f, DockThickness, 2f), wood, _layerEnv);
             foreach (var x in new[] { 31f, 33f, 34.5f, 36f, 38f })
                 Post(group, "PosteMuelle", new Vector2(x, 28f), DockTopY - DockThickness, old);
-            PlacePrefab("Rock_03.prefab", group, "Roca_Poza", new Vector2(20f, 18f), 300f);
+            PlaceRock("Rock_03.prefab", group, "Roca_Poza", new Vector2(20f, 18f), 300f);
         }
 
         // ================================================================== Gameplay objects
@@ -1654,7 +1701,10 @@ namespace BetterTogether.EditorTools
         private static void PlaceGameplay(Transform items)
         {
             // The fire, the bucket, the water, the cage: existing objects of the scene, moved onto the new ground.
+            // The ramp passes above the fire: probe from below it.
+            _probeTop = BelowRampProbeTop;
             MoveExisting("Fireplace", FireplaceSpot, 0f);
+            _probeTop = GroundProbeTop;
             MoveExisting("Bucket", BucketSpot, 0f);
             MoveExisting("GnomeCage", CageSpot, 90f);
             var water = MoveExisting("WaterSource", WaterSourceSpot, 0f);
@@ -1895,6 +1945,9 @@ namespace BetterTogether.EditorTools
                         continue;
 
                     var feet = hit.point;
+                    if (!RimIsFlat(feet))
+                        continue;
+
                     var bottom = feet + Vector3.up * (DecoyRadius + 0.03f);
                     var top = feet + Vector3.up * Mathf.Max(DecoyRadius + 0.03f, DecoyHeight - DecoyRadius);
                     if (Physics.CheckCapsule(bottom, top, DecoyRadius, blockers, QueryTriggerInteraction.Ignore) || DecoyTooClose(feet))
@@ -1907,6 +1960,19 @@ namespace BetterTogether.EditorTools
 
             spot = default;
             return false;
+        }
+
+        private static bool RimIsFlat(Vector3 feet)
+        {
+            for (var i = 0; i < 4; i++)
+            {
+                var x = feet.x + (i < 2 ? (i == 0 ? DecoyRimRadius : -DecoyRimRadius) : 0f);
+                var z = feet.z + (i >= 2 ? (i == 2 ? DecoyRimRadius : -DecoyRimRadius) : 0f);
+                if (!TryGround(x, z, null, out var hit) || Mathf.Abs(hit.point.y - feet.y) > DecoyRimMaxGap)
+                    return false;
+            }
+
+            return true;
         }
 
         private static bool DecoyTooClose(Vector3 feet)
