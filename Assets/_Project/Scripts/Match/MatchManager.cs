@@ -518,7 +518,7 @@ namespace BetterTogether.Match
 
         private void UpdatePlaying()
         {
-            if (Sausage.Instance != null && Sausage.Instance.Eaten)
+            if (Sausage.AnyEaten)
                 End(MatchResult.CamperWins);
             else if (MatchTimer.Expired(Runner))
                 End(MatchResult.GnomesWin);

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using BetterTogether.Audio;
 using BetterTogether.Diagnostics;
 using BetterTogether.Interaction;
@@ -104,7 +105,49 @@ namespace BetterTogether.Fireplace
         [Networked] private NetworkBool IsEaten { get; set; }
         [Networked] private TickTimer ResetTimer { get; set; }
 
-        public static Sausage Instance { get; private set; }
+        // The level can hold several sausages (Interactuables has three): every rule asks about all of them.
+        private static readonly List<Sausage> _all = new();
+
+        /// <summary>Every spawned sausage.</summary>
+        public static IReadOnlyList<Sausage> All => _all;
+
+        /// <summary>True once any sausage has been eaten (the camper's win condition).</summary>
+        public static bool AnyEaten
+        {
+            get
+            {
+                foreach (var sausage in _all)
+                {
+                    if (sausage.Eaten)
+                        return true;
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// The sausage the HUD talks about: an eaten one, else a cooked one, else one resting on a spot (the grill),
+        /// else the first. Null when there is none. Replicated state only, no allocation.
+        /// </summary>
+        public static Sausage Featured
+        {
+            get
+            {
+                Sausage cooked = null, placed = null;
+                foreach (var sausage in _all)
+                {
+                    if (sausage.Eaten)
+                        return sausage;
+                    if (cooked == null && sausage.State == CookState.Cooked)
+                        cooked = sausage;
+                    if (placed == null && sausage._carryable.IsPinned)
+                        placed = sausage;
+                }
+
+                return cooked != null ? cooked : placed != null ? placed : _all.Count > 0 ? _all[0] : null;
+            }
+        }
 
         public Carryable Carryable => _carryable;
 
@@ -157,7 +200,8 @@ namespace BetterTogether.Fireplace
         public override void Spawned()
         {
             _isSpawned = true;
-            Instance = this;
+            if (!_all.Contains(this))
+                _all.Add(this);
             _spawnPosition = transform.position;
             _spawnRotation = transform.rotation;
             _lastEaten = IsEaten; // Late joiners don't hear a bite that already happened.
@@ -174,8 +218,7 @@ namespace BetterTogether.Fireplace
         {
             _isSpawned = false;
             StopFeel();
-            if (Instance == this)
-                Instance = null;
+            _all.Remove(this);
         }
 
         /// <summary>Authority only: called by the grill every tick the sausage cooks.</summary>

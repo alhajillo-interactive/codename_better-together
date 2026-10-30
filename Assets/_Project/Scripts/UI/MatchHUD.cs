@@ -127,8 +127,8 @@ namespace BetterTogether.UI
         private bool _prevDoused;
         private float _nextDouseWarning;
         private int _titleVariant = -1;
-        private bool _hasSausageState;
-        private Sausage.CookState _prevCook;
+        // Last cook state seen per sausage (the level has several); a sausage seen for the first time is not announced.
+        private readonly Dictionary<Sausage, Sausage.CookState> _prevCook = new();
         private bool _endShown;
         private float _endElapsed;
         private int _lastRematch = -1;
@@ -316,7 +316,7 @@ namespace BetterTogether.UI
             SetTitle(variant);
 
             var fire = FireplaceManager.Instance;
-            var sausage = Sausage.Instance;
+            var sausage = Sausage.Featured;
             var wood = fire != null ? fire.WoodCount : 0;
             var required = fire != null ? fire.RequiredWood : 0;
             var cook = sausage != null ? sausage.State : Sausage.CookState.Raw;
@@ -616,24 +616,19 @@ namespace BetterTogether.UI
 
         private void DetectSausage(bool playing)
         {
-            var sausage = Sausage.Instance;
-            if (sausage == null)
+            foreach (var sausage in Sausage.All)
             {
-                _hasSausageState = false;
-                return;
-            }
+                var state = sausage.State;
+                if (_prevCook.TryGetValue(sausage, out var previous) && playing && state != previous)
+                {
+                    if (state == Sausage.CookState.Cooked)
+                        Announce("¡La salchicha está lista!", Theme.leafDark);
+                    else if (state == Sausage.CookState.Burnt)
+                        Announce("¡Se quemó la salchicha!", Theme.hatDark);
+                }
 
-            var state = sausage.State;
-            if (_hasSausageState && playing && state != _prevCook)
-            {
-                if (state == Sausage.CookState.Cooked)
-                    Announce("¡La salchicha está lista!", Theme.leafDark);
-                else if (state == Sausage.CookState.Burnt)
-                    Announce("¡Se quemó la salchicha!", Theme.hatDark);
+                _prevCook[sausage] = state;
             }
-
-            _prevCook = state;
-            _hasSausageState = true;
         }
 
         private void Announce(string text, Color color, bool interrupt = false, float hold = -1f)
