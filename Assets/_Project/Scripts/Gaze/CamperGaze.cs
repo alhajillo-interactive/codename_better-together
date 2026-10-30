@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BetterTogether.Audio;
 using BetterTogether.Fireplace;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
@@ -11,13 +12,23 @@ using UnityEngine.InputSystem;
 
 namespace BetterTogether.Gaze
 {
+    /// <summary>How the camera shutter fires: on its own when the focus completes, or on the camper's click.</summary>
+    public enum ShutterMode : byte
+    {
+        /// <summary>Variant A: the photo is taken by itself when the focus completes.</summary>
+        Auto,
+        /// <summary>Variant B: focusing only prepares the shot; the click takes it (a click made too early is kept).</summary>
+        Click,
+    }
+
     /// <summary>
-    /// The camper's petrifying gaze. Only one <see cref="Petrifiable"/> at a time is locked: the camper (state authority)
+    /// The camper's petrifying camera (class name kept from the old gaze). Only one <see cref="Petrifiable"/> at a time is locked: the camper (state authority)
     /// picks the gnome closest to the view axis, keeps it while it stays inside a slightly wider cone, and the lock
     /// fills up during a short grace. Once full, the gnome's owner freezes it and the camper drops the lock to look for a free gnome (a statue stays
     /// stone until its player breaks free). The screen edges stay outside the cone,
     /// so gnomes can still move in the camper's peripheral vision.
-    /// The gaze only works while the camper holds the focus button; focusing drains a stamina bar and slows the camper.
+    /// The camera only works while the camper holds the focus button (raising it is free but slows the camper). Shots spend
+    /// plates that recharge on their own; in <see cref="ShutterMode.Click"/> only the click freezes the focused gnome.
     /// </summary>
     public class CamperGaze : NetworkBehaviour
     {
@@ -56,18 +67,32 @@ namespace BetterTogether.Gaze
         [SerializeField] private float _distanceWeight = 0.5f;
 
         [Header("Focus")]
-        [Tooltip("Seconds of continuous focus from a full bar to empty.")]
-        [SerializeField] private float _staminaSeconds = 4f;
-        [Tooltip("Seconds after releasing focus before the bar starts to refill.")]
-        [SerializeField] private float _regenDelay = 1f;
-        [Tooltip("Seconds to refill the bar from empty to full.")]
-        [SerializeField] private float _regenSeconds = 6f;
-        [Tooltip("After running dry, the gaze can't be used again until the bar reaches this fraction.")]
-        [Range(0f, 1f)]
-        [SerializeField] private float _reuseThreshold = 0.35f;
         [Tooltip("Walk and sprint speed multiplier while focusing.")]
         [Range(0.1f, 1f)]
         [SerializeField] private float _focusMoveMultiplier = 0.5f;
+
+        [Header("Plates and shutter")]
+        [Tooltip("Plates a full camera holds; every shot spends one.")]
+        [Min(1)]
+        [SerializeField] private int _maxPlates = 3;
+        [Tooltip("Seconds to recharge one plate.")]
+        [SerializeField] private float _plateRechargeSeconds = 4f;
+        [Tooltip("Seconds after a shot before plates start recharging.")]
+        [SerializeField] private float _plateRegenDelay = 1f;
+        [Tooltip("Minimum seconds between two shots (max 3 flashes per second at 0.4).")]
+        [SerializeField] private float _minShotInterval = 0.4f;
+        [Tooltip("Shutter mode the camper starts with: Click = variant B (default), Auto = variant A.")]
+        [SerializeField] private ShutterMode _defaultMode = ShutterMode.Click;
+
+        [Header("Audio (empty cues are skipped; for the audio team)")]
+        [Tooltip("Wood creak when the camera is raised. Heard by everyone, from the camper's eye. For the audio team.")]
+        [SerializeField] private SoundCue _raiseSfx;
+        [Tooltip("Shutter click of a shot. Heard by everyone, from the camper's eye. For the audio team.")]
+        [SerializeField] private SoundCue _shutterSfx;
+        [Tooltip("Dry click when shooting with no plates. Only the camper hears it. For the audio team.")]
+        [SerializeField] private SoundCue _drySfx;
+        [Tooltip("A plate finished recharging. Only the camper hears it. For the audio team.")]
+        [SerializeField] private SoundCue _plateReadySfx;
 
         private static readonly List<CamperGaze> _all = new();
         private static readonly RaycastHit[] _hits = new RaycastHit[16];
@@ -78,7 +103,20 @@ namespace BetterTogether.Gaze
         private bool _resetRequested;
         private bool _isSpawned;
         private PlayerMovement _movement;
+        private PlayerInteractor _interactor;
         private InputAction _focus;
+        private InputAction _attack;
+
+        // Authority only: a shot click read in Update, consumed in FixedUpdateNetwork, and the click kept until the focus completes.
+        private bool _attackQueued;
+        private bool _bufferedShot;
+
+        // Render-side previous values for the sound cues; the first Render after Spawned only initialises them.
+        private bool _feedbackReady;
+        private bool _prevFocusing;
+        private byte _prevShotSeq;
+        private byte _prevDrySeq;
+        private int _prevWholePlates;
 
         /// <summary>Every spawned camper gaze, local and remote.</summary>
         public static IReadOnlyList<CamperGaze> All => _all;
@@ -118,38 +156,68 @@ namespace BetterTogether.Gaze
         [Networked] public NetworkBool IsGazeEnabled { get; private set; }
         [Networked] private NetworkBool IsFocusing { get; set; }
 
-        // Stamina is replicated as "value at the last event + tick of that event" (see CurrentStamina). The anchor is
-        // rewritten only when focusing starts/stops, when the bar runs dry and when a match starts.
-        [Networked] private float StaminaAnchor { get; set; }
-        [Networked] private int StaminaTick { get; set; }
-        [Networked] private NetworkBool IsExhausted { get; set; }
+        // Plates are replicated as "value at the last event + tick of that event" (see CurrentPlates). The anchor is
+        // rewritten only when a shot is fired, when a match starts and on spawn.
+        [Networked] private float PlatesAnchor { get; set; }
+        [Networked] private int PlatesTick { get; set; }
+        [Networked] private int NetLastShotTick { get; set; }
+        [Networked] private byte NetShotSeq { get; set; }
+        [Networked] private byte NetDrySeq { get; set; }
+        [Networked] private NetworkBool NetLastShotHit { get; set; }
+        [Networked] private ShutterMode NetMode { get; set; }
 
-        /// <summary>True while the camper holds the focus button and has stamina; only then the gaze petrifies.</summary>
+        /// <summary>True while the camper holds the focus button with the camera active; only then the camera can freeze a gnome.</summary>
         public bool Focusing => _isSpawned && IsFocusing;
 
-        /// <summary>0..1 gaze stamina.</summary>
-        public float StaminaFraction => _isSpawned ? CurrentStamina : 1f;
+        /// <summary>Plates now (0..<see cref="MaxPlates"/>), derived from the replicated anchor: they recharge after a short delay.</summary>
+        public float Plates => _isSpawned ? CurrentPlates : _maxPlates;
 
-        /// <summary>
-        /// Stamina now, derived from the replicated anchor: it drains while focusing, and refills after a short delay otherwise.
-        /// </summary>
-        private float CurrentStamina
+        /// <summary>Plates a full camera holds.</summary>
+        public int MaxPlates => _maxPlates;
+
+        /// <summary>0..1 progress of the plate being recharged; 1 when every plate is loaded.</summary>
+        public float NextPlateFraction
         {
             get
             {
-                var elapsed = NetAnchor.Elapsed(Runner, StaminaTick);
-                var value = IsFocusing
-                    ? StaminaAnchor - elapsed / Mathf.Max(_staminaSeconds, 0.01f)
-                    : StaminaAnchor + Mathf.Max(0f, elapsed - _regenDelay) / Mathf.Max(_regenSeconds, 0.01f);
-                return Mathf.Clamp01(value);
+                var plates = Plates;
+                return plates >= _maxPlates ? 1f : plates - Mathf.Floor(plates);
             }
         }
 
-        /// <summary>True after the stamina ran out, until it refills to <see cref="ReuseThreshold"/>.</summary>
-        public bool Exhausted => _isSpawned && IsExhausted;
+        private float CurrentPlates
+        {
+            get
+            {
+                var elapsed = NetAnchor.Elapsed(Runner, PlatesTick);
+                var value = PlatesAnchor + Mathf.Max(0f, elapsed - _plateRegenDelay) / Mathf.Max(_plateRechargeSeconds, 0.01f);
+                return Mathf.Clamp(value, 0f, _maxPlates);
+            }
+        }
 
-        /// <summary>Stamina fraction needed to use the gaze again after running dry.</summary>
-        public float ReuseThreshold => _reuseThreshold;
+        /// <summary>Shots taken so far (wraps at 256); a change means a new shutter click. Compare, don't count.</summary>
+        public byte ShotSeq => _isSpawned ? NetShotSeq : (byte)0;
+
+        /// <summary>Dry clicks (no plates) so far (wraps at 256).</summary>
+        public byte DrySeq => _isSpawned ? NetDrySeq : (byte)0;
+
+        /// <summary>True if the last shot froze a gnome.</summary>
+        public bool LastShotHit => _isSpawned && NetLastShotHit;
+
+        /// <summary>Simulation tick of the last shot.</summary>
+        public int LastShotTick => _isSpawned ? NetLastShotTick : 0;
+
+        /// <summary>Current shutter mode (A = Auto, B = Click).</summary>
+        public ShutterMode Mode => _isSpawned ? NetMode : _defaultMode;
+
+        /// <summary>True when the camera may be raised: gaze on and nothing in the camper's hands.</summary>
+        public bool CanRaise => _isSpawned && IsGazeEnabled && (_interactor == null || _interactor.CarriedOrPredicted == null);
+
+        /// <summary>
+        /// A gnome is focused and the lock is complete but not shot yet. Only meaningful on the camper's own client (the authority
+        /// derives it from its own tick): it is the HUD's "ready to shoot".
+        /// </summary>
+        public bool FocusReady => _isSpawned && Target != null && DerivedLockFill >= 1f && !LockFull;
 
         /// <summary>True once spawned with the gaze switched on, whether or not the camper is focusing.</summary>
         public bool IsGazeOn => _isSpawned && IsGazeEnabled;
@@ -215,7 +283,11 @@ namespace BetterTogether.Gaze
             }
         }
 
-        private void Awake() => _movement = GetComponent<PlayerMovement>();
+        private void Awake()
+        {
+            _movement = GetComponent<PlayerMovement>();
+            _interactor = GetComponent<PlayerInteractor>();
+        }
 
         public override void Spawned()
         {
@@ -227,17 +299,19 @@ namespace BetterTogether.Gaze
             Local = this;
             IsGazeEnabled = _enabledOnSpawn;
             LockFull = false;
-            StaminaAnchor = 1f;
-            StaminaTick = Runner.Tick.Raw;
-            IsExhausted = false;
+            FillPlates(Runner.Tick.Raw);
+            NetLastShotTick = Runner.Tick.Raw - NoShotTicks;
+            NetMode = _defaultMode;
             IsFocusing = false;
             _focus = InputSystem.actions.FindAction("Player/Focus");
+            _attack = InputSystem.actions.FindAction("Player/Attack");
             MatchManager.OnGameStarted += HandleGameStarted;
         }
 
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             _isSpawned = false;
+            _feedbackReady = false;
             _all.Remove(this);
             MatchManager.OnGameStarted -= HandleGameStarted;
             if (Local == this)
@@ -251,10 +325,58 @@ namespace BetterTogether.Gaze
         // Raised from a render-side callback, so only flag it; the networked writes happen in FixedUpdateNetwork.
         private void HandleGameStarted() => _resetRequested = true;
 
+        // Reads the shot click here (input is per frame); only the flag is kept, FixedUpdateNetwork decides and writes.
+        private void Update()
+        {
+            if (!_isSpawned || !HasStateAuthority || _attack == null)
+                return;
+
+            // Left click also re-locks the cursor (FirstPersonCamera), so ignore it while the cursor is free.
+            if (IsFocusing && Cursor.lockState == CursorLockMode.Locked && _attack.WasPressedThisFrame())
+                _attackQueued = true;
+        }
+
         public override void Render()
         {
+            if (!_isSpawned)
+                return;
+
             if (HasStateAuthority && CameraFocus.Instance != null)
                 CameraFocus.Instance.SetFocused(IsFocusing);
+
+            PlayFeedback();
+        }
+
+        // Sounds come from replicated state changes, never from RPCs. Late joiners only initialise the previous values.
+        private void PlayFeedback()
+        {
+            var focusing = IsFocusing;
+            var shotSeq = NetShotSeq;
+            var drySeq = NetDrySeq;
+            var wholePlates = Mathf.FloorToInt(CurrentPlates);
+            if (_feedbackReady)
+            {
+                if (focusing && !_prevFocusing)
+                    _raiseSfx.PlayAt(EyePosition);
+
+                if (shotSeq != _prevShotSeq)
+                    _shutterSfx.PlayAt(EyePosition);
+
+                if (HasStateAuthority)
+                {
+                    if (drySeq != _prevDrySeq)
+                        _drySfx.Play();
+
+                    if (wholePlates > _prevWholePlates)
+                        _plateReadySfx.Play();
+                }
+            }
+
+            _feedbackReady = true;
+            _prevFocusing = focusing;
+            _prevShotSeq = shotSeq;
+            _prevDrySeq = drySeq;
+            _prevWholePlates = wholePlates;
         }
 
         public override void FixedUpdateNetwork()
@@ -276,43 +398,117 @@ namespace BetterTogether.Gaze
             var dt = Runner.DeltaTime;
             UpdateFocus();
             UpdateLock(dt);
+            UpdateShutter();
         }
 
-        // Stamina is never written per tick: it is re-anchored only when focusing flips, when the bar runs dry and when a match starts.
+        // Ticks before "now" used as the last shot at spawn, so the first shot is never blocked by the interval.
+        private const int NoShotTicks = 10000;
+
+        private void FillPlates(int tick)
+        {
+            PlatesAnchor = _maxPlates;
+            PlatesTick = tick;
+        }
+
+        // Raising the camera costs nothing; it is only refused while the camper carries something.
         private void UpdateFocus()
         {
-            var tick = Runner.Tick.Raw;
             if (_resetRequested)
             {
                 _resetRequested = false;
-                StaminaAnchor = 1f;
-                StaminaTick = tick;
-                IsExhausted = false;
+                _bufferedShot = false;
+                FillPlates(Runner.Tick.Raw);
             }
 
-            var stamina = CurrentStamina;
             var wantsFocus = _focus != null && _focus.IsPressed() && Cursor.lockState == CursorLockMode.Locked;
-            var focusing = wantsFocus && !IsExhausted && stamina > 0f && IsGazeEnabled;
-            if (IsFocusing && stamina <= 0f)
-            {
-                // The bar ran dry while focusing.
-                IsExhausted = true;
-                focusing = false;
-            }
-            else if (!focusing && IsExhausted && stamina >= _reuseThreshold)
-            {
-                IsExhausted = false;
-            }
-
+            var focusing = wantsFocus && CanRaise;
             if (focusing != IsFocusing)
-            {
-                StaminaAnchor = stamina;
-                StaminaTick = tick;
                 IsFocusing = focusing;
-            }
 
             if (_movement != null)
                 _movement.SpeedMultiplier = focusing ? _focusMoveMultiplier : 1f;
+        }
+
+        // Shots are the only thing that spends plates and, in Click mode, the only thing that freezes a gnome.
+        private void UpdateShutter()
+        {
+            var pressed = _attackQueued;
+            _attackQueued = false;
+            if (!IsFocusing || !IsGazeEnabled)
+            {
+                _bufferedShot = false;
+                return;
+            }
+
+            var target = Target;
+            if (NetMode == ShutterMode.Auto)
+            {
+                // Variant A: the photo is taken when the focus completes; with no plates the camera just stays focused.
+                if (target != null && !LockFull && DerivedLockFill >= 1f && CurrentPlates >= 1f && ShotIntervalPassed)
+                    FireShot(true);
+                return;
+            }
+
+            if (pressed)
+                _bufferedShot = true;
+
+            if (!_bufferedShot)
+                return;
+
+            if (target == null)
+            {
+                // No gnome focused: the click fires at once and misses. Never kept.
+                _bufferedShot = false;
+                if (ShotIntervalPassed)
+                    FireShot(false);
+                return;
+            }
+
+            if (LockFull)
+            {
+                _bufferedShot = false;
+                return;
+            }
+
+            if (DerivedLockFill >= 1f && ShotIntervalPassed)
+            {
+                _bufferedShot = false;
+                FireShot(true);
+            }
+        }
+
+        private bool ShotIntervalPassed => NetAnchor.Elapsed(Runner, NetLastShotTick) >= _minShotInterval;
+
+        // Spends a plate (or clicks dry with none), and freezes the focused gnome when the shot is aimed at a completed lock.
+        private void FireShot(bool aimed)
+        {
+            var tick = Runner.Tick.Raw;
+            var plates = CurrentPlates;
+            NetLastShotTick = tick;
+            if (plates < 1f)
+            {
+                NetDrySeq = (byte)(NetDrySeq + 1);
+                return;
+            }
+
+            PlatesAnchor = plates - 1f;
+            PlatesTick = tick;
+            var hit = aimed && Target != null && DerivedLockFill >= 1f;
+            NetLastShotHit = hit;
+            NetShotSeq = (byte)(NetShotSeq + 1);
+            if (hit)
+                LockFull = true;
+
+            if (Telemetry.Enabled)
+                Telemetry.Begin("photo").Bool("hit", hit).Float("plates", PlatesAnchor).Str("mode", NetMode == ShutterMode.Auto ? "auto" : "click").Send();
+        }
+
+        /// <summary>Switches the shutter mode (variant A/B). Anyone may call it (debug panel); the camper's owner applies it.</summary>
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        public void RPC_SetShutterMode(ShutterMode mode)
+        {
+            if (mode == ShutterMode.Auto || mode == ShutterMode.Click)
+                NetMode = mode;
         }
 
         /// <summary>Turns the gaze on or off. Anyone may call it (debug panel); the camper's owner applies it.</summary>
@@ -368,9 +564,7 @@ namespace BetterTogether.Gaze
             var current = Target;
             if (current != null && TryKeep(current, dt))
             {
-                // The fill itself is derived from LockTick; only the confirmation of a full lock is written, once.
-                if (!LockFull && DerivedLockFill >= 1f)
-                    LockFull = true;
+                // The fill itself is derived from LockTick; LockFull is written only by a shot (UpdateShutter).
                 return;
             }
 
@@ -424,7 +618,7 @@ namespace BetterTogether.Gaze
         // Telemetry only (camper's client): the lock on a gnome was lost before it filled, so the gnome got away.
         private void LogEscape(Petrifiable gnome, string how)
         {
-            if (gnome.IsStone || DerivedLockFill >= 1f || gnome.Object == null || !gnome.Object.IsValid)
+            if (gnome.IsStone || LockFull || gnome.Object == null || !gnome.Object.IsValid)
                 return;
 
             Telemetry.Begin("freeze_escape").Int("gnome", gnome.Object.StateAuthority.PlayerId).Float("lock", DerivedLockFill).Str("how", how).Send();
@@ -437,7 +631,7 @@ namespace BetterTogether.Gaze
                 return false;
 
             // Full lock and the gnome already turned to stone: let go so the gaze can move on to a free gnome.
-            var locked = DerivedLockFill >= 1f; // Authority only: its own fill, not the one confirmed to peers.
+            var locked = LockFull; // Set by the shot, written by this authority.
             if (locked && target.IsStone)
                 return false;
 

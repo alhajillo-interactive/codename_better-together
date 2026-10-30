@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BetterTogether.Diagnostics;
+using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using BetterTogether.Player;
 using Fusion;
@@ -60,6 +61,7 @@ namespace BetterTogether.Combat
         private readonly List<Kickable> _targets = new();
         private InputAction _attack;
         private PlayerMovement _movement;
+        private CamperGaze _gaze;
         private float _readyTime;
         private float _pendingFovPunchTime = -1f;
         private float _impactTime = -1f;
@@ -71,7 +73,11 @@ namespace BetterTogether.Combat
         public bool HasTargetInRange => _targets.Count > 0;
         public bool IsReady => Time.time >= _readyTime;
 
-        private void Awake() => _movement = GetComponent<PlayerMovement>();
+        private void Awake()
+        {
+            _movement = GetComponent<PlayerMovement>();
+            _gaze = GetComponent<CamperGaze>();
+        }
 
         public override void Spawned()
         {
@@ -120,7 +126,8 @@ namespace BetterTogether.Combat
             }
 
             // Left click also re-locks the cursor (FirstPersonCamera), so ignore it while the cursor is free.
-            if (_attack != null && _attack.WasPressedThisFrame() && Cursor.lockState == CursorLockMode.Locked && IsReady)
+            // With the camera raised the same button is the shutter (CamperGaze), so it never kicks.
+            if (_attack != null && _attack.WasPressedThisFrame() && Cursor.lockState == CursorLockMode.Locked && IsReady && (_gaze == null || !_gaze.Focusing))
                 Kick();
         }
 

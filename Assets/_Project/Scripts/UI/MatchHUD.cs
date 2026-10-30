@@ -605,7 +605,7 @@ namespace BetterTogether.UI
             var comeback = fire.ComebackActive;
             if (_hasFireState && playing && hasRole && comeback && !_prevComeback)
             {
-                Announce(camper ? "¡Segundo aire! Los fósforos vuelven y tu mirada se amplía" : "¡El campista se recupera!",
+                Announce(camper ? "¡Segundo aire! Los fósforos vuelven y tu cámara se amplía" : "¡El campista se recupera!",
                     camper ? Theme.leafDark : Theme.hatDark);
             }
 
