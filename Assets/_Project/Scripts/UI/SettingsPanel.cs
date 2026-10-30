@@ -43,6 +43,11 @@ namespace BetterTogether.UI
         [Tooltip("Same asset the player voice uses; gives the default mode and the push-to-talk key.")]
         [SerializeField] private VoiceChatSettings _voiceSettings;
 
+        [Header("Accessibility")]
+        [Tooltip("Toggle (same style as the microphone button) for 'Reducir destellos': caps the camera flashes. Saved in PlayerPrefs 'reduceFlashes'.")]
+        [SerializeField] private Button _reduceFlashesButton;
+        [SerializeField] private TMP_Text _reduceFlashesLabel;
+
         [SerializeField] private Button _closeButton;
 
         private bool _open;
@@ -64,6 +69,8 @@ namespace BetterTogether.UI
                 _bobSlider.onValueChanged.AddListener(OnBobChanged);
             if (_micModeButton != null)
                 _micModeButton.onClick.AddListener(OnMicModeClicked);
+            if (_reduceFlashesButton != null)
+                _reduceFlashesButton.onClick.AddListener(OnReduceFlashesClicked);
             if (_closeButton != null)
                 _closeButton.onClick.AddListener(Close);
 
@@ -81,6 +88,8 @@ namespace BetterTogether.UI
                 _bobSlider.onValueChanged.RemoveListener(OnBobChanged);
             if (_micModeButton != null)
                 _micModeButton.onClick.RemoveListener(OnMicModeClicked);
+            if (_reduceFlashesButton != null)
+                _reduceFlashesButton.onClick.RemoveListener(OnReduceFlashesClicked);
             if (_closeButton != null)
                 _closeButton.onClick.RemoveListener(Close);
         }
@@ -162,6 +171,7 @@ namespace BetterTogether.UI
             SetSlider(_sensitivitySlider, FirstPersonCamera.SensitivityMultiplier);
             SetSlider(_bobSlider, PlayerPrefs.GetFloat(CameraFeel.BobPrefsKey, 1f));
             RefreshMic();
+            RefreshFlashes();
         }
 
         private static void SetSlider(Slider slider, float value)
@@ -206,6 +216,19 @@ namespace BetterTogether.UI
 
             _voiceSettings.SetPushToTalk(!_voiceSettings.PushToTalk);
             RefreshMic();
+        }
+
+        private void OnReduceFlashesClicked()
+        {
+            FlashSettings.ReduceFlashes = !FlashSettings.ReduceFlashes;
+            PlayerPrefs.Save();
+            RefreshFlashes();
+        }
+
+        private void RefreshFlashes()
+        {
+            if (_reduceFlashesLabel != null)
+                _reduceFlashesLabel.text = FlashSettings.ReduceFlashes ? "Reducir destellos: sí" : "Reducir destellos: no";
         }
 
         private void RefreshMic()

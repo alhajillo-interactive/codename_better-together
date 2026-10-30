@@ -108,7 +108,7 @@ namespace BetterTogether.UI
         private ElasticPlate _pillPlate;
 
         // Parts of the match HUD hidden by the end screen (found by name, hidden with a CanvasGroup so their logic keeps running).
-        private static readonly string[] HiddenOnEnd = { "Objectives", "Clock", "ControlsHint", "Prompt", "StaminaBar", "StoneOverlay" };
+        private static readonly string[] HiddenOnEnd = { "Objectives", "Clock", "ControlsHint", "Prompt", "Viewfinder", "PlatesRow", "FrozenView", "AlbumSlot", "GnomeThreat" };
         private CanvasGroup[] _endHidden;
         private float[] _endHiddenAlpha;
 

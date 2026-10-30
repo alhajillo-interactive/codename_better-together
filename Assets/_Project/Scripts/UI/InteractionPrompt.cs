@@ -96,9 +96,8 @@ namespace BetterTogether.UI
                 return;
             }
 
-            // Tells a gnome the camper is looking at it, so it knows why it can't move.
-            var watched = Petrifiable.Local != null && Petrifiable.Local.IsWatched;
-            HudSupport.SetActive(_watchedWarning.gameObject, watched);
+            // C8.2: the "camper is looking at you" text is gone; GazeFeedbackHUD shows the three-level lens glint instead.
+            HudSupport.SetActive(_watchedWarning.gameObject, false);
 
             // A change in anything that decides the prompt forces an immediate refresh.
             if (DecidingStateChanged(local))

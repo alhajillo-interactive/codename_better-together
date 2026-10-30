@@ -1,9 +1,10 @@
 // Editor-only builder for the in-game HUD (C0.7). Run it from the menu GnoMore/Construir HUD de juego: it opens
 // Prefabs/UI/MatchHUD.prefab, creates (or reuses) the uGUI/TMP children of the crosshair, interaction prompt, gaze
 // feedback, microphone badge and screen flash, adds and wires InteractionPrompt, GazeFeedbackHUD, MicIndicator and
-// ScreenFlash on the prefab root, sets the CanvasScaler to 1920x1080 and, if it does not exist, writes the radial
-// vignette sprite Art/UI/vignette_radial.png. It is idempotent: elements that already exist are kept as they are
-// (so tweaks made in the editor survive); only the references are wired again.
+// ScreenFlash on the prefab root and sets the CanvasScaler to 1920x1080. C8.2: the gaze feedback is the camera viewfinder
+// (Viewfinder, PlatesRow, GnomeThreat, FrozenView, AlbumSlot), built with the sprites of the UiTheme (run GnoMore/Aplicar
+// estilo de UI first); the old vignettes, stone overlay and stamina bar are removed. It is idempotent: elements that
+// already exist are kept as they are (so tweaks made in the editor survive); only the references are wired again.
 using System.IO;
 using BetterTogether.UI;
 using TMPro;
@@ -18,9 +19,6 @@ namespace BetterTogether.EditorTools
         private const string LogPrefix = "[GameHudBuilder]";
         private const string PrefabPath = "Assets/_Project/Prefabs/UI/MatchHUD.prefab";
         private const string ThemePath = "Assets/_Project/Resources/UiTheme.asset";
-        private const string ConePath = "Assets/_Project/Art/UI/vignette_radial.png";
-        private const string GnomePath = "Assets/_Project/Art/UI/vignette_radial_gnome.png";
-        private const string FocusPath = "Assets/_Project/Art/UI/vignette_radial_focus.png";
         private const int UiLayer = 5;
 
         private static readonly Vector2 Center = new(0.5f, 0.5f);
@@ -37,16 +35,18 @@ namespace BetterTogether.EditorTools
                 return;
             }
 
-            var cone = EnsureVignetteSprite(ConePath, HudSupport.RampRatioCone);
-            var gnome = EnsureVignetteSprite(GnomePath, HudSupport.RampRatioGnome);
-            var focus = EnsureVignetteSprite(FocusPath, HudSupport.RampRatioFocus);
-            if (cone == null || gnome == null || focus == null)
+            var theme = AssetDatabase.LoadAssetAtPath<UiTheme>(ThemePath);
+            if (theme == null || theme.viewfinderCorner == null || theme.focusBracket == null || theme.plate == null
+                || theme.lensGlint == null || theme.ring == null)
+            {
+                Debug.LogError($"{LogPrefix} The UiTheme at {ThemePath} is missing or has no viewfinder sprites: run GnoMore/Aplicar estilo de UI first.");
                 return;
+            }
 
             var root = PrefabUtility.LoadPrefabContents(PrefabPath);
             try
             {
-                BuildContents(root, cone, gnome, focus);
+                BuildContents(root, theme);
                 PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
             }
             finally
@@ -59,146 +59,36 @@ namespace BetterTogether.EditorTools
                       "and ScreenFlash components from the 'HUD' object of each scene (they are replaced by the ones on the prefab).");
         }
 
-        #region Sprite
-
-        // Writes the PNG when it is missing or no longer matches HudSupport (size or ramp), and makes sure it imports as a sprite.
-        private static Sprite EnsureVignetteSprite(string assetPath, float rampRatio)
-        {
-            var fullPath = Path.GetFullPath(Path.Combine(Application.dataPath, "..", assetPath));
-            if (!File.Exists(fullPath) || !PngMatches(fullPath, rampRatio))
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-                File.WriteAllBytes(fullPath, GenerateVignettePng(rampRatio));
-                AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
-                Debug.Log($"{LogPrefix} Generated {assetPath}");
-            }
-
-            ConfigureImporter(assetPath);
-            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
-            if (sprite == null)
-                Debug.LogError($"{LogPrefix} {assetPath} did not import as a Sprite.");
-
-            return sprite;
-        }
-
-        // Alpha of the gradient at `distance` pixels from the centre: 0 inside the clear radius, smooth ramp, 1 at the ramp end.
-        private static float VignetteAlpha(float distance, float rampRatio)
-        {
-            var clear = HudSupport.ClearRadiusPixels;
-            return Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(clear, clear * rampRatio, distance));
-        }
-
-        // True when the file has the expected size and the alpha halfway up the ramp is the expected one.
-        private static bool PngMatches(string fullPath, float rampRatio)
-        {
-            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            try
-            {
-                if (!texture.LoadImage(File.ReadAllBytes(fullPath)))
-                    return false;
-
-                const int size = HudSupport.SpritePixels;
-                if (texture.width != size || texture.height != size)
-                    return false;
-
-                var clear = HudSupport.ClearRadiusPixels;
-                var probe = clear * (1f + rampRatio) * 0.5f;
-                var center = (size - 1) * 0.5f;
-                var x = Mathf.RoundToInt(center + probe);
-                var y = size / 2;
-                var expected = VignetteAlpha(new Vector2(x - center, y - center).magnitude, rampRatio);
-                return Mathf.Abs(texture.GetPixel(x, y).a - expected) < 0.02f;
-            }
-            finally
-            {
-                Object.DestroyImmediate(texture);
-            }
-        }
-
-        // 512x512, white, alpha 0 up to ClearRadiusPixels from the centre, smooth ramp to 1 at clear * rampRatio, 1 beyond.
-        private static byte[] GenerateVignettePng(float rampRatio)
-        {
-            const int size = HudSupport.SpritePixels;
-            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
-            var pixels = new Color32[size * size];
-            var center = (size - 1) * 0.5f;
-            for (var y = 0; y < size; y++)
-            {
-                for (var x = 0; x < size; x++)
-                {
-                    var distance = new Vector2(x - center, y - center).magnitude;
-                    var alpha = VignetteAlpha(distance, rampRatio);
-                    pixels[y * size + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(alpha * 255f));
-                }
-            }
-
-            texture.SetPixels32(pixels);
-            var png = texture.EncodeToPNG();
-            Object.DestroyImmediate(texture);
-            return png;
-        }
-
-        private static void ConfigureImporter(string assetPath)
-        {
-            var importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
-            if (importer == null)
-                return;
-
-            var border = HudSupport.BorderPixels;
-            var settings = new TextureImporterSettings();
-            importer.ReadTextureSettings(settings);
-
-            var correct = importer.textureType == TextureImporterType.Sprite
-                          && importer.spriteImportMode == SpriteImportMode.Single
-                          && Mathf.Approximately(importer.spritePixelsPerUnit, 100f)
-                          && importer.spriteBorder == new Vector4(border, border, border, border)
-                          && !importer.mipmapEnabled
-                          && importer.alphaIsTransparency
-                          && importer.wrapMode == TextureWrapMode.Clamp
-                          && importer.textureCompression == TextureImporterCompression.Uncompressed
-                          && settings.spriteMeshType == SpriteMeshType.FullRect;
-            if (correct)
-                return;
-
-            importer.textureType = TextureImporterType.Sprite;
-            importer.spriteImportMode = SpriteImportMode.Single;
-            importer.spritePixelsPerUnit = 100f;
-            importer.spriteBorder = new Vector4(border, border, border, border);
-            importer.mipmapEnabled = false;
-            importer.alphaIsTransparency = true;
-            importer.wrapMode = TextureWrapMode.Clamp;
-            importer.filterMode = FilterMode.Bilinear;
-            importer.textureCompression = TextureImporterCompression.Uncompressed;
-            importer.maxTextureSize = HudSupport.SpritePixels;
-
-            importer.ReadTextureSettings(settings);
-            settings.spriteMeshType = SpriteMeshType.FullRect;
-            importer.SetTextureSettings(settings);
-            importer.SaveAndReimport();
-        }
-
-        #endregion
-
         #region Prefab contents
 
-        private static void BuildContents(GameObject root, Sprite coneSprite, Sprite gnomeSprite, Sprite focusSprite)
+        // Old pieces replaced by C8.2 (vignettes, stone overlay, stamina bar): removed once, so the builder stays idempotent.
+        private static readonly string[] ObsoleteParts =
+            { "GnomeVignette", "FocusVignette", "CamperConeVignette", "StaminaBar", "StoneOverlay" };
+
+        private static void BuildContents(GameObject root, UiTheme theme)
         {
             var rootRect = (RectTransform)root.transform;
             ConfigureScaler(root);
             var font = FindFont(root);
 
-            // Back layer (behind the match HUD): vignettes.
-            var gnomeVignette = BuildVignette(rootRect, "GnomeVignette", gnomeSprite, new Color(1f, 1f, 1f, 0f), 0);
-            var focusVignette = BuildVignette(rootRect, "FocusVignette", focusSprite, new Color(0f, 0f, 0f, 0f), 1);
-            var coneVignette = BuildVignette(rootRect, "CamperConeVignette", coneSprite, new Color(0.3f, 0.2f, 0.5f, 0f), 2);
+            foreach (var part in ObsoleteParts)
+            {
+                var old = rootRect.Find(part);
+                if (old != null)
+                    Object.DestroyImmediate(old.gameObject);
+            }
 
-            // Front layer: crosshair, prompt, warnings, overlays, badges.
+            // Back layer (behind the match HUD): the viewfinder and the gnome's widgets.
+            var viewfinder = BuildViewfinder(rootRect, theme, font);
+            var plates = BuildPlatesRow(rootRect, theme);
+            var threat = BuildThreatGlint(rootRect, theme);
+            var frozen = BuildFrozenView(rootRect, theme, font);
+            var album = BuildAlbumSlot(rootRect, theme);
+
+            // Front layer: crosshair, prompt, warnings, badges.
             var crosshair = BuildCrosshair(rootRect);
             BuildPrompt(rootRect, font, out var promptRoot, out var promptText);
             var watched = BuildWatchedWarning(rootRect, font);
-            BuildStoneOverlay(rootRect, font, out var stoneRoot, out var stoneTitle, out var stoneCounter, out var stoneBarFill);
-            BuildStamina(rootRect, font, out var staminaRoot, out var staminaFill, out var staminaFillImage,
-                out var staminaThreshold, out var exhaustedLabel, out var hintLabel);
             BuildMicBadge(rootRect, font, out var micBadge, out var micBackground, out var micLabel);
             var flash = BuildFlash(rootRect);
 
@@ -209,19 +99,25 @@ namespace BetterTogether.EditorTools
                 ("_watchedWarning", watched));
 
             Wire(GetOrAdd<GazeFeedbackHUD>(root),
-                ("_gnomeVignette", gnomeVignette),
-                ("_stoneRoot", stoneRoot),
-                ("_stoneTitle", stoneTitle),
-                ("_stoneCounter", stoneCounter),
-                ("_stoneBarFill", stoneBarFill),
-                ("_focusVignette", focusVignette),
-                ("_coneVignette", coneVignette),
-                ("_staminaRoot", staminaRoot),
-                ("_staminaFill", staminaFill),
-                ("_staminaFillImage", staminaFillImage),
-                ("_staminaThreshold", staminaThreshold),
-                ("_exhaustedLabel", exhaustedLabel),
-                ("_hintLabel", hintLabel));
+                ("_viewfinderRoot", viewfinder.Root),
+                ("_viewfinderGroup", viewfinder.Group),
+                ("_dimRoot", viewfinder.Dim),
+                ("_cornerRoot", viewfinder.Corners),
+                ("_thirdsRoot", viewfinder.Thirds),
+                ("_bracketRoot", viewfinder.Brackets),
+                ("_focusedLabel", viewfinder.FocusedLabel),
+                ("_platesRow", plates),
+                ("_shootPrompt", viewfinder.ShootPrompt),
+                ("_shootText", viewfinder.ShootText),
+                ("_albumRoot", album.Frame),
+                ("_albumGroup", album.Group),
+                ("_albumImage", album.Photo),
+                ("_threatGlint", threat),
+                ("_frozenRoot", frozen.Root),
+                ("_frozenFrame", frozen.Frame),
+                ("_ringRoot", frozen.RingRoot),
+                ("_ringImage", frozen.RingFill),
+                ("_shakeLabel", frozen.Label));
 
             Wire(GetOrAdd<MicIndicator>(root),
                 ("_badge", micBadge),
@@ -231,11 +127,7 @@ namespace BetterTogether.EditorTools
             Wire(GetOrAdd<ScreenFlash>(root), ("_image", flash));
 
             // C6.2a: elastic objectives plate, line stamps, toast pill and the mic badge in the safe zone.
-            var theme = AssetDatabase.LoadAssetAtPath<UiTheme>(ThemePath);
-            if (theme != null)
-                HudPlateTools.Ensure(root, theme);
-            else
-                Debug.LogWarning($"{LogPrefix} No UiTheme at {ThemePath}: run GnoMore/Aplicar estilo de UI to finish the HUD plates.");
+            HudPlateTools.Ensure(root, theme);
 
             // Draw order at the top: the end screen covers the crosshair and the prompt, and the flash covers everything.
             var endScreen = rootRect.Find("EndScreen");
@@ -243,6 +135,405 @@ namespace BetterTogether.EditorTools
                 endScreen.SetAsLastSibling();
 
             flash.transform.SetAsLastSibling();
+        }
+
+        private readonly struct ViewfinderParts
+        {
+            public readonly RectTransform Root;
+            public readonly CanvasGroup Group;
+            public readonly RectTransform Dim;
+            public readonly RectTransform Corners;
+            public readonly RectTransform Thirds;
+            public readonly RectTransform Brackets;
+            public readonly RectTransform FocusedLabel;
+            public readonly RectTransform ShootPrompt;
+            public readonly TMP_Text ShootText;
+
+            public ViewfinderParts(RectTransform root, CanvasGroup group, RectTransform dim, RectTransform corners, RectTransform thirds,
+                RectTransform brackets, RectTransform focusedLabel, RectTransform shootPrompt, TMP_Text shootText)
+            {
+                Root = root;
+                Group = group;
+                Dim = dim;
+                Corners = corners;
+                Thirds = thirds;
+                Brackets = brackets;
+                FocusedLabel = focusedLabel;
+                ShootPrompt = shootPrompt;
+                ShootText = shootText;
+            }
+        }
+
+        private readonly struct FrozenParts
+        {
+            public readonly GameObject Root;
+            public readonly RectTransform Frame;
+            public readonly RectTransform RingRoot;
+            public readonly Image RingFill;
+            public readonly TMP_Text Label;
+
+            public FrozenParts(GameObject root, RectTransform frame, RectTransform ringRoot, Image ringFill, TMP_Text label)
+            {
+                Root = root;
+                Frame = frame;
+                RingRoot = ringRoot;
+                RingFill = ringFill;
+                Label = label;
+            }
+        }
+
+        private readonly struct AlbumParts
+        {
+            public readonly RectTransform Frame;
+            public readonly CanvasGroup Group;
+            public readonly RawImage Photo;
+
+            public AlbumParts(RectTransform frame, CanvasGroup group, RawImage photo)
+            {
+                Frame = frame;
+                Group = group;
+                Photo = photo;
+            }
+        }
+
+        // Camper viewfinder: Viewfinder (pop root) > Content (CanvasGroup) > Dim (4 bars), Corners (4), Thirds (4 lines),
+        // Brackets (4 + the "Enfocado" pill), ShootPrompt. GazeFeedbackHUD positions every piece at runtime from the cone.
+        private static ViewfinderParts BuildViewfinder(RectTransform parent, UiTheme theme, TMP_FontAsset font)
+        {
+            var root = Child(parent, "Viewfinder", out var created);
+            if (created)
+            {
+                Stretch(root);
+                root.SetSiblingIndex(0);
+            }
+
+            var content = Child(root, "Content", out var contentCreated);
+            if (contentCreated)
+                Stretch(content);
+            var group = GetOrAdd<CanvasGroup>(content.gameObject);
+            if (contentCreated)
+            {
+                group.alpha = 0f;
+                group.interactable = false;
+                group.blocksRaycasts = false;
+            }
+
+            var dim = CenterContainer(content, "Dim");
+            Bar(dim, "Top", new Vector2(0.5f, 0f));
+            Bar(dim, "Bottom", new Vector2(0.5f, 1f));
+            Bar(dim, "Left", new Vector2(1f, 0.5f));
+            Bar(dim, "Right", new Vector2(0f, 0.5f));
+
+            var corners = CenterContainer(content, "Corners");
+            foreach (var corner in CornerNames)
+                Piece(corners, corner, theme.viewfinderCorner, Color.white, new Vector2(0f, 1f), new Vector2(110f, 110f));
+
+            var thirds = CenterContainer(content, "Thirds");
+            foreach (var line in new[] { "V1", "V2", "H1", "H2" })
+                Piece(thirds, line, null, theme.cream, Center, new Vector2(2f, 2f));
+
+            var brackets = CenterContainer(content, "Brackets");
+            var signs = new[] { new Vector2(1f, 1f), new Vector2(-1f, 1f), new Vector2(1f, -1f), new Vector2(-1f, -1f) };
+            for (var i = 0; i < CornerNames.Length; i++)
+            {
+                var bracket = Piece(brackets, CornerNames[i], theme.focusBracket, Color.white, new Vector2(0f, 1f), new Vector2(56f, 56f));
+                bracket.rectTransform.localScale = new Vector3(signs[i].x, signs[i].y, 1f);
+            }
+
+            var label = Child(brackets, "FocusedLabel", out var labelCreated);
+            var labelImage = GetOrAdd<Image>(label.gameObject);
+            if (labelCreated)
+            {
+                Place(label, Center, Center, TopCenter, new Vector2(0f, -90f), new Vector2(220f, 46f));
+                labelImage.sprite = theme.pill;
+                labelImage.type = Image.Type.Sliced;
+                labelImage.color = theme.ember;
+                labelImage.raycastTarget = false;
+                label.gameObject.SetActive(false);
+            }
+
+            var labelText = Text(label, "Text", "¡Enfocado!", 32f, theme.ink, TextAlignmentOptions.Center, font, false,
+                out var labelTextRect, out var labelTextCreated);
+            if (labelTextCreated)
+            {
+                Stretch(labelTextRect);
+                ApplyTitleFont(labelText, theme, false);
+            }
+
+            var prompt = Child(content, "ShootPrompt", out var promptCreated);
+            var promptImage = GetOrAdd<Image>(prompt.gameObject);
+            if (promptCreated)
+            {
+                Place(prompt, Center, Center, BottomCenter, new Vector2(0f, -400f), new Vector2(600f, 54f));
+                promptImage.sprite = theme.pill;
+                promptImage.type = Image.Type.Sliced;
+                promptImage.color = theme.night80;
+                promptImage.raycastTarget = false;
+            }
+
+            var promptText = Text(prompt, "Text", "Clic · Disparar", 30f, theme.cream, TextAlignmentOptions.Center, font, false,
+                out var promptTextRect, out var promptTextCreated);
+            if (promptTextCreated)
+            {
+                Stretch(promptTextRect);
+                ApplyTitleFont(promptText, theme, true);
+            }
+
+            if (created)
+                root.gameObject.SetActive(false);
+
+            return new ViewfinderParts(root, group, dim, corners, thirds, brackets, label, prompt, promptText);
+        }
+
+        private static readonly string[] CornerNames = { "TL", "TR", "BL", "BR" };
+
+        // A zero-size object at the canvas centre: its children are positioned from the centre at runtime.
+        private static RectTransform CenterContainer(RectTransform parent, string name)
+        {
+            var rect = Child(parent, name, out var created);
+            if (created)
+                Place(rect, Center, Center, Center, Vector2.zero, Vector2.zero);
+
+            return rect;
+        }
+
+        private static void Bar(RectTransform parent, string name, Vector2 pivot)
+        {
+            Piece(parent, name, null, new Color(0f, 0f, 0f, 0.5f), pivot, new Vector2(10f, 10f));
+        }
+
+        // An Image child anchored at the centre of its parent; runtime code sets position and size.
+        private static Image Piece(RectTransform parent, string name, Sprite sprite, Color color, Vector2 pivot, Vector2 size)
+        {
+            var rect = Child(parent, name, out var created);
+            var image = GetOrAdd<Image>(rect.gameObject);
+            if (created)
+            {
+                Place(rect, Center, Center, pivot, Vector2.zero, size);
+                image.color = color;
+                image.raycastTarget = false;
+            }
+
+            if (image.sprite == null && sprite != null)
+                image.sprite = sprite;
+
+            return image;
+        }
+
+        // Three glass plates: ghost (30 %) with a Filled child; GazeFeedbackHUD moves the row.
+        private static RectTransform BuildPlatesRow(RectTransform parent, UiTheme theme)
+        {
+            const float Plate = 60f;
+            const float Gap = 10f;
+            var row = Child(parent, "PlatesRow", out var created);
+            if (created)
+            {
+                Place(row, Center, Center, new Vector2(0f, 1f), Vector2.zero, new Vector2(3f * Plate + 2f * Gap, Plate));
+                row.SetSiblingIndex(1);
+            }
+
+            for (var i = 0; i < 3; i++)
+            {
+                var plate = Child(row, $"Plate_{i}", out var plateCreated);
+                var ghost = GetOrAdd<Image>(plate.gameObject);
+                if (plateCreated)
+                {
+                    Place(plate, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(i * (Plate + Gap), 0f),
+                        new Vector2(Plate, Plate));
+                    ghost.color = new Color(1f, 1f, 1f, 0.3f);
+                    ghost.raycastTarget = false;
+                }
+
+                if (ghost.sprite == null)
+                    ghost.sprite = theme.plate;
+
+                var fill = Child(plate, "Fill", out var fillCreated);
+                var fillImage = GetOrAdd<Image>(fill.gameObject);
+                if (fillCreated)
+                {
+                    Stretch(fill);
+                    fillImage.color = Color.white;
+                    fillImage.raycastTarget = false;
+                }
+
+                if (fillImage.sprite == null)
+                    fillImage.sprite = theme.plate;
+
+                if (fillImage.type != Image.Type.Filled || fillImage.fillMethod != Image.FillMethod.Horizontal)
+                {
+                    fillImage.type = Image.Type.Filled;
+                    fillImage.fillMethod = Image.FillMethod.Horizontal;
+                    fillImage.fillOrigin = (int)Image.OriginHorizontal.Left;
+                }
+            }
+
+            if (created)
+                row.gameObject.SetActive(false);
+
+            return row;
+        }
+
+        // Lens glint at the screen edge (gnome threat levels 1 and 2); size, colour and position are runtime.
+        private static Image BuildThreatGlint(RectTransform parent, UiTheme theme)
+        {
+            var rect = Child(parent, "GnomeThreat", out var created);
+            var image = GetOrAdd<Image>(rect.gameObject);
+            if (created)
+            {
+                Place(rect, Center, Center, Center, Vector2.zero, new Vector2(52f, 52f));
+                image.color = new Color(1f, 1f, 1f, 0f);
+                image.raycastTarget = false;
+                image.enabled = false;
+                rect.SetSiblingIndex(2);
+            }
+
+            if (image.sprite == null)
+                image.sprite = theme.lensGlint;
+
+            return image;
+        }
+
+        // Frozen gnome: sepia frame (4 edges, 24 px), break-free ring around the crosshair with an "E", and "¡Sacúdete!".
+        private static FrozenParts BuildFrozenView(RectTransform parent, UiTheme theme, TMP_FontAsset font)
+        {
+            const float FrameWidth = 24f;
+            var root = Child(parent, "FrozenView", out var created);
+            if (created)
+            {
+                Stretch(root);
+                root.SetSiblingIndex(3);
+            }
+
+            var frame = Child(root, "Frame", out var frameCreated);
+            if (frameCreated)
+                Stretch(frame);
+
+            EdgeBar(frame, "Top", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, FrameWidth), theme);
+            EdgeBar(frame, "Bottom", new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, FrameWidth), theme);
+            EdgeBar(frame, "Left", new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(FrameWidth, 0f), theme);
+            EdgeBar(frame, "Right", new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), new Vector2(FrameWidth, 0f), theme);
+
+            var ringRoot = Child(root, "Ring", out var ringCreated);
+            if (ringCreated)
+                Place(ringRoot, Center, Center, Center, Vector2.zero, new Vector2(150f, 150f));
+
+            var back = Child(ringRoot, "Back", out var backCreated);
+            var backImage = GetOrAdd<Image>(back.gameObject);
+            if (backCreated)
+            {
+                Stretch(back);
+                backImage.color = new Color(theme.night80.r, theme.night80.g, theme.night80.b, 0.5f);
+                backImage.raycastTarget = false;
+            }
+
+            if (backImage.sprite == null)
+                backImage.sprite = theme.ring;
+
+            var fill = Child(ringRoot, "Fill", out var fillCreated);
+            var fillImage = GetOrAdd<Image>(fill.gameObject);
+            if (fillCreated)
+            {
+                Stretch(fill);
+                fillImage.color = theme.ember;
+                fillImage.raycastTarget = false;
+            }
+
+            if (fillImage.sprite == null)
+                fillImage.sprite = theme.ring;
+
+            if (fillImage.type != Image.Type.Filled || fillImage.fillMethod != Image.FillMethod.Radial360)
+            {
+                fillImage.type = Image.Type.Filled;
+                fillImage.fillMethod = Image.FillMethod.Radial360;
+                fillImage.fillOrigin = (int)Image.Origin360.Top;
+                fillImage.fillClockwise = true;
+                fillImage.fillAmount = 0f;
+            }
+
+            var glyph = Text(ringRoot, "Key", "E", 64f, theme.cream, TextAlignmentOptions.Center, font, false, out var glyphRect, out var glyphCreated);
+            if (glyphCreated)
+            {
+                Stretch(glyphRect);
+                ApplyTitleFont(glyph, theme, true);
+            }
+
+            var label = Text(root, "ShakeLabel", "¡Sacúdete!", 52f, theme.cream, TextAlignmentOptions.Center, font, false,
+                out var labelRect, out var labelCreated);
+            if (labelCreated)
+            {
+                Place(labelRect, Center, Center, TopCenter, new Vector2(0f, -110f), new Vector2(700f, 76f));
+                ApplyTitleFont(label, theme, true);
+            }
+
+            if (created)
+                root.gameObject.SetActive(false);
+
+            return new FrozenParts(root.gameObject, frame, ringRoot, fillImage, label);
+        }
+
+        private static void EdgeBar(RectTransform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 size,
+            UiTheme theme)
+        {
+            var rect = Child(parent, name, out var created);
+            var image = GetOrAdd<Image>(rect.gameObject);
+            if (!created)
+                return;
+
+            Place(rect, anchorMin, anchorMax, pivot, Vector2.zero, size);
+            image.color = theme.photoSepia;
+            image.raycastTarget = false;
+        }
+
+        // Album slot (bottom right): a photo frame with a RawImage that C8.3 fills through GazeFeedbackHUD.ShowPhoto.
+        private static AlbumParts BuildAlbumSlot(RectTransform parent, UiTheme theme)
+        {
+            var root = Child(parent, "AlbumSlot", out var created);
+            if (created)
+            {
+                Stretch(root);
+                root.SetSiblingIndex(4);
+            }
+
+            var frame = Child(root, "Frame", out var frameCreated);
+            var frameImage = GetOrAdd<Image>(frame.gameObject);
+            var group = GetOrAdd<CanvasGroup>(frame.gameObject);
+            if (frameCreated)
+            {
+                // Resting place: 64 px from the right and 40 px from the bottom, centred pivot so it can twist.
+                Place(frame, new Vector2(1f, 0f), new Vector2(1f, 0f), Center, new Vector2(-64f - 170f, 40f + 100f), new Vector2(340f, 200f));
+                frameImage.color = theme.cream;
+                frameImage.raycastTarget = false;
+                var outline = GetOrAdd<Outline>(frame.gameObject);
+                outline.effectColor = theme.ink;
+                outline.effectDistance = new Vector2(4f, -4f);
+                group.alpha = 0f;
+                group.interactable = false;
+                group.blocksRaycasts = false;
+            }
+
+            var photo = Child(frame, "Photo", out var photoCreated);
+            var raw = GetOrAdd<RawImage>(photo.gameObject);
+            if (photoCreated)
+            {
+                Stretch(photo);
+                photo.offsetMin = new Vector2(10f, 10f);
+                photo.offsetMax = new Vector2(-10f, -10f);
+                raw.raycastTarget = false;
+            }
+
+            if (frameCreated)
+                frame.gameObject.SetActive(false);
+
+            return new AlbumParts(frame, group, raw);
+        }
+
+        // Lilita title font with the ink outline, only when the text is created (later editor tweaks survive).
+        private static void ApplyTitleFont(TMP_Text text, UiTheme theme, bool outline)
+        {
+            if (theme.titleFont != null)
+                text.font = theme.titleFont;
+            if (outline && theme.titleOutline != null)
+                text.fontSharedMaterial = theme.titleOutline;
         }
 
         private static void ConfigureScaler(GameObject root)
@@ -260,27 +551,6 @@ namespace BetterTogether.EditorTools
         {
             var existing = root.GetComponentInChildren<TMP_Text>(true);
             return existing != null && existing.font != null ? existing.font : TMP_Settings.defaultFontAsset;
-        }
-
-        private static Image BuildVignette(RectTransform parent, string name, Sprite sprite, Color color, int siblingIndex)
-        {
-            var rect = Child(parent, name, out var created);
-            var image = GetOrAdd<Image>(rect.gameObject);
-            image.sprite = sprite;
-
-            // Not cosmetic: the runtime sizing in HudSupport assumes a sliced Image with this border multiplier.
-            image.type = Image.Type.Sliced;
-            image.fillCenter = true;
-            image.pixelsPerUnitMultiplier = HudSupport.BorderMultiplier;
-            if (!created)
-                return image;
-
-            Place(rect, Center, Center, Center, Vector2.zero, Vector2.one * HudSupport.VignetteSizeFor(300f));
-            image.color = color;
-            image.raycastTarget = false;
-            image.enabled = false;
-            rect.SetSiblingIndex(siblingIndex);
-            return image;
         }
 
         private static Image BuildCrosshair(RectTransform parent)
@@ -337,105 +607,6 @@ namespace BetterTogether.EditorTools
             }
 
             return text;
-        }
-
-        private static void BuildStoneOverlay(RectTransform parent, TMP_FontAsset font, out GameObject stoneRoot,
-            out TMP_Text title, out TMP_Text counter, out RectTransform barFill)
-        {
-            var rect = Child(parent, "StoneOverlay", out var created);
-            stoneRoot = rect.gameObject;
-            if (created)
-                Stretch(rect);
-
-            var anchorMin = new Vector2(0f, 0.6f);
-            var anchorMax = new Vector2(1f, 0.6f);
-
-            title = Text(rect, "Title", "¡Petrificado! Machaca E", 52f, Color.white, TextAlignmentOptions.Center, font, false,
-                out var titleRect, out var titleCreated);
-            if (titleCreated)
-                Place(titleRect, anchorMin, anchorMax, Center, Vector2.zero, new Vector2(0f, 70f));
-
-            // Hidden by GazeFeedbackHUD (channel A); never shows a sample "0/0".
-            counter = Text(rect, "Counter", "", 30f, Color.white, TextAlignmentOptions.Center, font, false,
-                out var counterRect, out var counterCreated);
-            if (counterCreated)
-                Place(counterRect, anchorMin, anchorMax, Center, new Vector2(0f, -60f), new Vector2(0f, 40f));
-
-            var backRect = Child(rect, "BarBack", out var backCreated);
-            var back = GetOrAdd<Image>(backRect.gameObject);
-            if (backCreated)
-            {
-                var barAnchor = new Vector2(0.5f, 0.6f);
-                Place(backRect, barAnchor, barAnchor, Center, new Vector2(0f, -105f), new Vector2(360f, 16f));
-                back.color = new Color(0f, 0f, 0f, 0.5f);
-                back.raycastTarget = false;
-            }
-
-            barFill = Child(backRect, "BarFill", out var fillCreated);
-            var fill = GetOrAdd<Image>(barFill.gameObject);
-            if (fillCreated)
-            {
-                Stretch(barFill);
-                barFill.anchorMax = new Vector2(0f, 1f);
-                fill.color = new Color(1f, 1f, 1f, 0.9f);
-                fill.raycastTarget = false;
-            }
-
-            if (created)
-                stoneRoot.SetActive(false);
-        }
-
-        private static void BuildStamina(RectTransform parent, TMP_FontAsset font, out GameObject staminaRoot,
-            out RectTransform fillRect, out Image fillImage, out RectTransform threshold, out TMP_Text exhaustedLabel,
-            out TMP_Text hintLabel)
-        {
-            var rect = Child(parent, "StaminaBar", out var created);
-            staminaRoot = rect.gameObject;
-            var back = GetOrAdd<Image>(staminaRoot);
-            if (created)
-            {
-                Place(rect, BottomCenter, BottomCenter, BottomCenter, new Vector2(0f, 70f), new Vector2(260f, 14f));
-                back.color = new Color(0f, 0f, 0f, 0.5f);
-                back.raycastTarget = false;
-            }
-
-            fillRect = Child(rect, "Fill", out var fillCreated);
-            fillImage = GetOrAdd<Image>(fillRect.gameObject);
-            if (fillCreated)
-            {
-                Stretch(fillRect);
-                fillImage.color = new Color(0.6f, 0.5f, 1f, 0.95f);
-                fillImage.raycastTarget = false;
-            }
-
-            threshold = Child(rect, "ThresholdMark", out var markCreated);
-            var mark = GetOrAdd<Image>(threshold.gameObject);
-            if (markCreated)
-            {
-                // Vertical stripe 2 wide that sticks out 3 above and below; GazeFeedbackHUD moves its anchors.
-                Place(threshold, new Vector2(0.35f, 0f), new Vector2(0.35f, 1f), Center, Vector2.zero, new Vector2(2f, 6f));
-                mark.color = new Color(1f, 1f, 1f, 0.85f);
-                mark.raycastTarget = false;
-            }
-
-            exhaustedLabel = Text(rect, "ExhaustedLabel", "Mirada agotada", 20f, new Color(1f, 0.2f, 0.2f, 0.95f),
-                TextAlignmentOptions.Center, font, false, out var exhaustedRect, out var exhaustedCreated);
-            if (exhaustedCreated)
-            {
-                Place(exhaustedRect, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 0f), new Vector2(0f, 6f), new Vector2(0f, 28f));
-                exhaustedRect.gameObject.SetActive(false);
-            }
-
-            hintLabel = Text(rect, "HintLabel", "[Clic der.] Mirada", 20f, Color.white, TextAlignmentOptions.MidlineLeft, font,
-                false, out var hintRect, out var hintCreated);
-            if (hintCreated)
-            {
-                Place(hintRect, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0.5f), new Vector2(10f, 0f), new Vector2(260f, 28f));
-                hintRect.gameObject.SetActive(false);
-            }
-
-            if (created)
-                staminaRoot.SetActive(false);
         }
 
         private static void BuildMicBadge(RectTransform parent, TMP_FontAsset font, out GameObject badge, out Image background,
