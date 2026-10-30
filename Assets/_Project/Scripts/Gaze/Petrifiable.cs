@@ -55,7 +55,10 @@ namespace BetterTogether.Gaze
         [Header("Stone look")]
         [Tooltip("Root of the visual; every renderer below it is tinted.")]
         [SerializeField] private Transform _visual;
-        [SerializeField] private Color _stoneColor = new(0.55f, 0.55f, 0.58f);
+        [Tooltip("Garden-figurine plaster colour (#EFE6D6) the body turns into.")]
+        [SerializeField] private Color _stoneColor = new(0.937f, 0.902f, 0.839f);
+        [Tooltip("How much of the plaster colour replaces the original at full stone: 1 = flat plaster, lower lets the hat colour still read.")]
+        [SerializeField, Range(0f, 1f)] private float _stoneStrength = 0.8f;
         [Tooltip("Seconds the stone tint takes to sweep from the feet to the head (and back when freed).")]
         [SerializeField] private float _sweepTime = 0.4f;
         [Tooltip("Height fraction of the body that is mid-blend at any moment; bigger = softer sweep edge.")]
@@ -530,7 +533,7 @@ namespace BetterTogether.Gaze
                 var amount = Mathf.Clamp01((_stoneAmount * (1f + _sweepBand) - _relativeHeights[i]) / _sweepBand);
                 var baseColor = Color.Lerp(_originalColors[slot], _overlayTint, _overlayAmount);
                 _block.Clear();
-                _block.SetColor(_slotColorId[slot], Color.Lerp(baseColor, _stoneColor, amount));
+                _block.SetColor(_slotColorId[slot], Color.Lerp(baseColor, _stoneColor, amount * _stoneStrength));
                 _renderers[i].SetPropertyBlock(_block, _slotMaterial[slot]);
             }
         }

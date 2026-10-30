@@ -46,6 +46,30 @@ namespace BetterTogether.Gaze
         [Tooltip("Metres between the head of the locked gnome and the marker.")]
         [SerializeField] private float _markerHeight = 0.25f;
 
+        [Header("Lens glint (seen by gnomes)")]
+        [Tooltip("Show a glint on the camper's lens to gnomes while the camper focuses.")]
+        [SerializeField] private bool _showGlint = true;
+        [Tooltip("Base glint size in metres.")]
+        [SerializeField] private float _glintSize = 0.25f;
+        [Tooltip("Size multiplier while a gnome is locked.")]
+        [SerializeField] private float _glintLockedScale = 1.6f;
+        [Tooltip("Pulse amplitude (fraction of size) at 1 Hz.")]
+        [SerializeField, Range(0f, 0.5f)] private float _glintPulse = 0.2f;
+        [SerializeField] private Color _glintColor = new(1f, 0.96f, 0.85f, 0.9f);
+        [Tooltip("Glint colour while a gnome is locked or on the shot flash (ember #F6C343).")]
+        [SerializeField] private Color _glintLockedColor = new(0.965f, 0.765f, 0.263f, 1f);
+        [Tooltip("Metres from the eye towards the look direction where the lens sits.")]
+        [SerializeField] private float _lensOffset = 0.15f;
+        [Tooltip("Seconds the shot flash lasts.")]
+        [SerializeField] private float _flashTime = 0.08f;
+        [Tooltip("Glint size multiplier during the shot flash.")]
+        [SerializeField] private float _flashScale = 3f;
+        [Tooltip("Intensity of the shot flash light (cached point light, off by default).")]
+        [SerializeField] private float _flashLightIntensity = 6f;
+        [Tooltip("Range in metres of the shot flash light.")]
+        [SerializeField] private float _flashLightRange = 6f;
+        [SerializeField] private Color _flashLightColor = new(1f, 0.93f, 0.8f);
+
         private static readonly int ColorId = Shader.PropertyToID("_Color");
         private static readonly int AlphaId = Shader.PropertyToID("_Alpha");
         private static readonly RaycastHit[] _hits = new RaycastHit[16];
@@ -66,6 +90,14 @@ namespace BetterTogether.Gaze
         private float _builtAngle = -1f;
         private float _lockBlend;
         private float _focusBlend;
+        private Mesh _glintMesh;
+        private Material _glintMaterial;
+        private Renderer _glintRenderer;
+        private Light _flashLight;
+        private Camera _viewCamera;
+        private byte _prevShotSeq;
+        private bool _glintReady;
+        private float _flashUntil = -1f;
 
         private void Awake()
         {
@@ -91,6 +123,18 @@ namespace BetterTogether.Gaze
             _coneRenderer = CreatePart("Gaze Cone", _coneMesh, _coneMaterial);
             _footprintRenderer = CreatePart("Gaze Footprint", _footprintMesh, _footprintMaterial);
             _markerRenderer = CreatePart("Gaze Lock Marker", _markerMesh, _markerMaterial);
+
+            _glintMesh = CreateGlintMesh();
+            _glintMaterial = CreateMaterial(_glintColor);
+            _glintRenderer = CreatePart("Gaze Lens Glint", _glintMesh, _glintMaterial);
+            var lightObject = new GameObject("Gaze Flash Light") { hideFlags = HideFlags.HideAndDontSave };
+            _flashLight = lightObject.AddComponent<Light>();
+            _flashLight.type = LightType.Point;
+            _flashLight.shadows = LightShadows.None;
+            _flashLight.color = _flashLightColor;
+            _flashLight.range = _flashLightRange;
+            _flashLight.intensity = _flashLightIntensity;
+            _flashLight.enabled = false;
         }
 
         private void OnDestroy()
@@ -98,6 +142,11 @@ namespace BetterTogether.Gaze
             DestroyPart(_coneRenderer);
             DestroyPart(_footprintRenderer);
             DestroyPart(_markerRenderer);
+            DestroyPart(_glintRenderer);
+            if (_flashLight != null)
+                Destroy(_flashLight.gameObject);
+            DestroyAsset(_glintMesh);
+            DestroyAsset(_glintMaterial);
             DestroyAsset(_coneMesh);
             DestroyAsset(_footprintMesh);
             DestroyAsset(_markerMesh);
@@ -113,6 +162,7 @@ namespace BetterTogether.Gaze
             UpdateMarker(focusing ? _gaze.LockedTarget : null);
 
             var isGnomeView = on && PlayerCharacter.Local != null && PlayerCharacter.Local.Role == PlayerRole.Gnome;
+            UpdateGlint(on, focusing, isGnomeView);
             var color = isGnomeView ? ComputeColor(focusing) : default;
             var showCone = isGnomeView && color.a > 0.001f;
             _coneRenderer.enabled = showCone;
@@ -131,6 +181,56 @@ namespace BetterTogether.Gaze
             var look = _gaze.LookDirection;
             _coneRenderer.transform.SetPositionAndRotation(eye + look * ApexOffset, Quaternion.LookRotation(look));
             UpdateFootprint(eye, look);
+        }
+
+        // Lens glint + shot flash, local only. Gnomes see it (never the camper). The first frame after the gaze comes on
+        // only takes the shot sequence, so a late joiner gets no old flash.
+        private void UpdateGlint(bool on, bool focusing, bool gnomeView)
+        {
+            if (!on)
+            {
+                _glintReady = false;
+                _glintRenderer.enabled = false;
+                _flashLight.enabled = false;
+                return;
+            }
+
+            var seq = _gaze.ShotSeq;
+            if (_glintReady && seq != _prevShotSeq)
+                _flashUntil = Time.time + _flashTime;
+
+            _prevShotSeq = seq;
+            _glintReady = true;
+
+            var flashing = Time.time < _flashUntil;
+            var eye = _gaze.EyePosition;
+            var look = _gaze.LookDirection;
+            var lens = eye + look * _lensOffset;
+
+            // The flash light lights the surroundings for gnomes; the camper's own screen flash is C8.2's job.
+            _flashLight.enabled = flashing && gnomeView;
+            if (_flashLight.enabled)
+                _flashLight.transform.position = lens;
+
+            var show = _showGlint && gnomeView && (focusing || flashing);
+            _glintRenderer.enabled = show;
+            if (!show)
+                return;
+
+            if (_viewCamera == null)
+                _viewCamera = Camera.main;
+
+            var locked = focusing && _gaze.LockedTarget != null;
+            var size = _glintSize * (locked ? _glintLockedScale : 1f)
+                * (1f + Mathf.Sin(Time.time * Mathf.PI * 2f) * _glintPulse);
+            if (flashing)
+                size = _glintSize * _flashScale;
+
+            _glintMaterial.SetColor(ColorId, locked || flashing ? _glintLockedColor : _glintColor);
+            var glint = _glintRenderer.transform;
+            glint.position = lens;
+            glint.rotation = _viewCamera != null ? _viewCamera.transform.rotation : Quaternion.LookRotation(-look);
+            glint.localScale = Vector3.one * size;
         }
 
         // Dormant when the camper isn't focusing, search colour while focusing, locked colour on a target.
@@ -317,6 +417,51 @@ namespace BetterTogether.Gaze
             }
 
             var mesh = new Mesh { name = "Gaze Footprint", hideFlags = HideFlags.HideAndDontSave };
+            mesh.SetVertices(vertices);
+            mesh.SetColors(colors);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        // Unit disc facing the camera (billboard): bright centre, soft falloff to a transparent edge.
+        private static Mesh CreateGlintMesh()
+        {
+            var vertices = new Vector3[1 + FootprintSegments * 2];
+            var colors = new Color[vertices.Length];
+            vertices[0] = Vector3.zero;
+            colors[0] = Color.white;
+            for (var segment = 0; segment < FootprintSegments; segment++)
+            {
+                var angle = segment * Mathf.PI * 2f / FootprintSegments;
+                var direction = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
+                vertices[1 + segment] = direction * 0.2f;
+                colors[1 + segment] = new Color(1f, 1f, 1f, 0.5f);
+                vertices[1 + FootprintSegments + segment] = direction * 0.5f;
+                colors[1 + FootprintSegments + segment] = new Color(1f, 1f, 1f, 0f);
+            }
+
+            var triangles = new int[FootprintSegments * 9];
+            var cursor = 0;
+            for (var segment = 0; segment < FootprintSegments; segment++)
+            {
+                var next = (segment + 1) % FootprintSegments;
+                var inner = 1 + segment;
+                var innerNext = 1 + next;
+                var outer = 1 + FootprintSegments + segment;
+                var outerNext = 1 + FootprintSegments + next;
+                triangles[cursor++] = 0;
+                triangles[cursor++] = inner;
+                triangles[cursor++] = innerNext;
+                triangles[cursor++] = inner;
+                triangles[cursor++] = outer;
+                triangles[cursor++] = outerNext;
+                triangles[cursor++] = inner;
+                triangles[cursor++] = outerNext;
+                triangles[cursor++] = innerNext;
+            }
+
+            var mesh = new Mesh { name = "Gaze Glint", hideFlags = HideFlags.HideAndDontSave };
             mesh.SetVertices(vertices);
             mesh.SetColors(colors);
             mesh.SetTriangles(triangles, 0);

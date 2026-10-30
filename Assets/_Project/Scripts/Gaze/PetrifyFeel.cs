@@ -9,14 +9,14 @@ namespace BetterTogether.Gaze
     /// <summary>
     /// Presentation of turning to stone, derived from <see cref="Petrifiable.IsHeldStone"/> (replicated state; nothing
     /// is networked here). Everyone sees stone dust when the sweep starts and a burst of fragments when it ends.
-    /// Only the owner gets the desaturated, vignetted screen (a local Volume) and the FOV squeeze.
+    /// Only the owner gets the lightly desaturated, sepia-tinted screen (a local Volume, no vignette) and the FOV squeeze.
     /// A player that is already stone when it is first seen (late joiner) gets none of it.
     /// </summary>
     [RequireComponent(typeof(Petrifiable))]
     public class PetrifyFeel : MonoBehaviour
     {
         [Header("Owner screen")]
-        [Tooltip("Local Volume with the petrified look (saturation down, grey vignette). Only the owner drives its weight.")]
+        [Tooltip("Local Volume with the petrified look (saturation down at most 25, light sepia colour filter, no vignette). Only the owner drives its weight.")]
         [SerializeField] private Volume _volume;
         [Tooltip("Seconds the Volume weight takes to go 0 to 1 (and back when freed).")]
         [SerializeField] private float _screenBlendTime = 0.35f;
@@ -31,6 +31,8 @@ namespace BetterTogether.Gaze
         [SerializeField] private ParticleSystem _fragments;
         [Tooltip("Crack heard when a rider is frozen by the tower below (a petrified gnome already has its own sound).")]
         [SerializeField] private SoundCue _crackSfx;
+        [Tooltip("Ceramic clink played (spatial) for everyone when a gnome freezes. Empty = silent.")]
+        [SerializeField] private SoundCue _ceramicClinkSfx;
 
         private Petrifiable _petrifiable;
         private bool _seen;
@@ -90,6 +92,7 @@ namespace BetterTogether.Gaze
                 _dust.Play();
             if (!_petrifiable.IsStone)
                 _crackSfx.PlayAt(transform.position);
+            _ceramicClinkSfx.PlayAt(transform.position);
 
             if (!isOwner)
                 return;

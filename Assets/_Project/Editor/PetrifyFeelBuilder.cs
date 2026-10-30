@@ -20,6 +20,8 @@ namespace BetterTogether.EditorTools
         private const string VolumeName = "PetrifyVolume";
         private const string DustName = "PetrifyDust";
         private const string FragmentsName = "PetrifyFragments";
+        private static readonly Color PlasterColor = new(0.937f, 0.902f, 0.839f); // #EFE6D6
+        private static readonly Color PhotoSepia = new(0.910f, 0.835f, 0.682f); // #E8D5AE
         private const string LogPrefix = "[PetrifyFeelBuilder]";
 
         [MenuItem("GnoMore/Construir feel de petrificación")]
@@ -52,6 +54,8 @@ namespace BetterTogether.EditorTools
                 serialized.FindProperty("_dust").objectReferenceValue = dust;
                 serialized.FindProperty("_fragments").objectReferenceValue = fragments;
                 serialized.FindProperty("_crackSfx").objectReferenceValue = AssetDatabase.LoadAssetAtPath<SoundCue>(CuePath);
+                // _ceramicClinkSfx is left empty on purpose (no asset yet); assign one in the prefab when it exists.
+                ConfigureStone(root.GetComponent<Petrifiable>());
                 serialized.ApplyModifiedPropertiesWithoutUndo();
 
                 PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
@@ -61,6 +65,15 @@ namespace BetterTogether.EditorTools
             {
                 PrefabUtility.UnloadPrefabContents(root);
             }
+        }
+
+        // C8.3: the Gnome prefab gets the plaster figurine look (idempotent, serialized fields only).
+        private static void ConfigureStone(Petrifiable petrifiable)
+        {
+            var stone = new SerializedObject(petrifiable);
+            stone.FindProperty("_stoneColor").colorValue = PlasterColor;
+            stone.FindProperty("_stoneStrength").floatValue = 0.8f;
+            stone.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static VolumeProfile EnsureProfile()
@@ -77,13 +90,12 @@ namespace BetterTogether.EditorTools
 
             if (!profile.TryGet(out ColorAdjustments adjustments))
                 adjustments = profile.Add<ColorAdjustments>(true);
-            adjustments.saturation.Override(-80f);
+            adjustments.saturation.Override(-25f);
+            adjustments.colorFilter.Override(Color.Lerp(Color.white, PhotoSepia, 0.6f)); // Light sepia (photoSepia #E8D5AE).
 
-            if (!profile.TryGet(out Vignette vignette))
-                vignette = profile.Add<Vignette>(true);
-            vignette.color.Override(new Color(0.45f, 0.45f, 0.48f));
-            vignette.intensity.Override(0.45f);
-            vignette.smoothness.Override(0.6f);
+            // C8.3: no vignette on the petrified screen (the sepia border is drawn by the HUD). Remove it from older profiles.
+            if (profile.Has<Vignette>())
+                profile.Remove<Vignette>();
 
             EditorUtility.SetDirty(profile);
             AssetDatabase.SaveAssets();
@@ -107,7 +119,7 @@ namespace BetterTogether.EditorTools
             }
 
             // Configured on every run so the tool stays idempotent (also fixes a material made by an older run).
-            material.SetColor("_BaseColor", new Color(0.62f, 0.62f, 0.65f));
+            material.SetColor("_BaseColor", PlasterColor);
             material.SetTexture("_BaseMap", AssetDatabase.LoadAssetAtPath<Texture2D>(TexturePath));
             material.SetFloat("_Surface", 1f); // Transparent
             material.SetFloat("_Blend", 0f); // Alpha
@@ -153,7 +165,7 @@ namespace BetterTogether.EditorTools
             main.startLifetime = new ParticleSystem.MinMaxCurve(0.5f, 0.9f);
             main.startSpeed = new ParticleSystem.MinMaxCurve(0.2f, 0.6f);
             main.startSize = new ParticleSystem.MinMaxCurve(0.04f, 0.1f);
-            main.startColor = new Color(0.65f, 0.65f, 0.68f, 0.8f);
+            main.startColor = new Color(PlasterColor.r, PlasterColor.g, PlasterColor.b, 0.8f);
             main.gravityModifier = -0.05f;
             main.maxParticles = 40;
 
@@ -179,7 +191,7 @@ namespace BetterTogether.EditorTools
             main.startLifetime = new ParticleSystem.MinMaxCurve(0.5f, 0.9f);
             main.startSpeed = new ParticleSystem.MinMaxCurve(1.5f, 3f);
             main.startSize = new ParticleSystem.MinMaxCurve(0.03f, 0.08f);
-            main.startColor = new Color(0.5f, 0.5f, 0.53f, 1f);
+            main.startColor = PlasterColor;
             main.gravityModifier = 1.5f;
             main.maxParticles = 40;
 
