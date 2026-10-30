@@ -30,7 +30,7 @@ namespace BetterTogether.UI
         private static readonly Entry[] CamperEntries =
         {
             new("interact", "usar", "Player/Interact"),
-            new("attack", "patear", "Player/Attack"),
+            new("attack", "disparar", "Player/Attack"),
             new("focus", "cámara", "Player/Focus"),
             new("crouch", "agacharte", "Player/Crouch"),
         };
@@ -44,6 +44,9 @@ namespace BetterTogether.UI
             new("ping", "marcar", "Player/Ping"),
             new("mic", "micro", null, Key.M),
         };
+
+        /// <summary>Text of the camper's shutter key ("Clic"), read from the Attack action. Allocates: cache it.</summary>
+        public static string FireKeyText() => KeyText(CamperEntries[1]);
 
         /// <summary>The longest list of any role (how many lines the HUD needs).</summary>
         public static int MaxEntries => GnomeEntries.Length;

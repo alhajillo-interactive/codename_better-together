@@ -105,6 +105,9 @@ namespace BetterTogether.EditorTools
             Set(so, "_micModeButton", content.Find("Window/MicMode")?.GetComponent<Button>());
             Set(so, "_micModeLabel", content.Find("Window/MicMode/Label")?.GetComponent<TMP_Text>());
             Set(so, "_talkKeyLabel", content.Find("Window/TalkKey")?.GetComponent<TMP_Text>());
+            EnsureReduceFlashes(content, font);
+            Set(so, "_reduceFlashesButton", content.Find("Window/ReduceFlashes")?.GetComponent<Button>());
+            Set(so, "_reduceFlashesLabel", content.Find("Window/ReduceFlashes/Label")?.GetComponent<TMP_Text>());
             Set(so, "_closeButton", content.Find("Window/Close")?.GetComponent<Button>());
             Set(so, "_voiceSettings", FindVoiceSettings());
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -140,8 +143,30 @@ namespace BetterTogether.EditorTools
             CreateSliderRow(window, font, "Row_Bob", "Balanceo de cámara", 0f, 1f);
             CreateButton("MicMode", window, font, "Micrófono: abierto", 70f);
             CreateText("TalkKey", window, font, "", 32, TextAlignmentOptions.Center, 50f);
+            CreateButton("ReduceFlashes", window, font, "Reducir destellos: no", 70f);
             CreateButton("Close", window, font, "Cerrar", 70f);
+            window.sizeDelta = new Vector2(window.sizeDelta.x, ReduceFlashesWindowHeight);
             return content;
+        }
+
+        private const float ReduceFlashesWindowHeight = 1000f;
+
+        // C8.2: an existing prefab gets the "Reducir destellos" button (a copy of the microphone button style) above Close, and a
+        // window tall enough for it. Nothing is written when the button already exists.
+        private static void EnsureReduceFlashes(Transform content, TMP_FontAsset font)
+        {
+            var window = content.Find("Window") as RectTransform;
+            if (window == null || window.Find("ReduceFlashes") != null)
+                return;
+
+            CreateButton("ReduceFlashes", window, font, "Reducir destellos: no", 70f);
+            var created = window.Find("ReduceFlashes");
+            var close = window.Find("Close");
+            if (created != null && close != null)
+                created.SetSiblingIndex(close.GetSiblingIndex());
+
+            if (window.sizeDelta.y < ReduceFlashesWindowHeight)
+                window.sizeDelta = new Vector2(window.sizeDelta.x, ReduceFlashesWindowHeight);
         }
 
         private static void CreateSliderRow(Transform parent, TMP_FontAsset font, string rowName, string label, float min, float max)

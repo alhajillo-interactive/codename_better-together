@@ -44,6 +44,11 @@ namespace BetterTogether.EditorTools
         private const string PillSpritePath = UiSpriteFolder + "/Pill.png";
         private const string StampSpritePath = UiSpriteFolder + "/Stamp.png";
         private const string StampFailSpritePath = UiSpriteFolder + "/StampFail.png";
+        private const string ViewfinderCornerSpritePath = UiSpriteFolder + "/ViewfinderCorner.png";
+        private const string FocusBracketSpritePath = UiSpriteFolder + "/FocusBracket.png";
+        private const string PlateSpritePath = UiSpriteFolder + "/Plate.png";
+        private const string LensGlintSpritePath = UiSpriteFolder + "/LensGlint.png";
+        private const string RingSpritePath = UiSpriteFolder + "/Ring.png";
         private const string FontPath = "Assets/_Project/Fonts/LilitaOne/LilitaOne-Regular SDF.asset";
 
         private const int DiscPixels = 64;
@@ -59,7 +64,7 @@ namespace BetterTogether.EditorTools
         private const string MainMenuScene = "Assets/_Project/Scenes/MainMenu.unity";
         private const string CampBryanScene = "Assets/_Project/Scenes/CampBryan.unity";
 
-        private static readonly string[] HudParts = { "RoleCard", "EndScreen", "Waiting", "Prompt", "StoneOverlay", "StaminaBar", "ControlsHint", "MicBadge" };
+        private static readonly string[] HudParts = { "RoleCard", "EndScreen", "Waiting", "Prompt", "ControlsHint", "MicBadge" };
 
         // Never restyled (logo art, event system).
         private static readonly HashSet<string> SkipNames = new() { "Logo", "GnomeLogo", "EventSystem" };
@@ -122,6 +127,11 @@ namespace BetterTogether.EditorTools
             GenerateStamp(StampFailSpritePath, true);
             GenerateFrame(FrameSpritePath);
             GenerateNeutralButton(ButtonSpritePath, ButtonTintSpritePath);
+            GenerateViewfinderCorner(ViewfinderCornerSpritePath);
+            GenerateFocusBracket(FocusBracketSpritePath);
+            GeneratePlate(PlateSpritePath);
+            GenerateLensGlint(LensGlintSpritePath);
+            GenerateRing(RingSpritePath);
 
             ConfigureSprite(ButtonSpritePath, 24);
             ConfigureSprite(HeaderSpritePath, 28);
@@ -131,6 +141,163 @@ namespace BetterTogether.EditorTools
             ConfigureSprite(PillSpritePath, DiscBorder);
             ConfigureSprite(StampSpritePath, 0);
             ConfigureSprite(StampFailSpritePath, 0);
+            ConfigureSprite(ViewfinderCornerSpritePath, 0);
+            ConfigureSprite(FocusBracketSpritePath, 0);
+            ConfigureSprite(PlateSpritePath, 0);
+            ConfigureSprite(LensGlintSpritePath, 0);
+            ConfigureSprite(RingSpritePath, 0);
+        }
+
+        // ---- C8.2 viewfinder sprites (128 px, written once, never overwritten)
+
+        private const int ViewfinderPixels = 128;
+        private const int CornerArm = 124;
+        private const int CornerThickness = 30;
+        private const float CornerOutline = 4f;
+        private const int BracketArm = 64;
+        private const int BracketThickness = 10;
+
+        // Depth inside the union of the two arms of a top-left L (positive inside, in pixels; origin bottom-left).
+        private static float LDepth(float x, float y, int arm, int thickness)
+        {
+            const float top = ViewfinderPixels;
+            var horizontal = Mathf.Min(Mathf.Min(x, arm - x), Mathf.Min(y - (top - thickness), top - y));
+            var vertical = Mathf.Min(Mathf.Min(x, thickness - x), Mathf.Min(y - (top - arm), top - y));
+            return Mathf.Max(horizontal, vertical);
+        }
+
+        // Wooden L with an ink outline and grain stripes along each arm: the corner of the viewfinder.
+        private static void GenerateViewfinderCorner(string path)
+        {
+            if (File.Exists(path))
+                return;
+
+            var defaults = ScriptableObject.CreateInstance<UiTheme>();
+            Color ink = defaults.ink, wood = defaults.wood, grain = defaults.woodDark;
+            Object.DestroyImmediate(defaults);
+
+            var pixels = new Color32[ViewfinderPixels * ViewfinderPixels];
+            for (var y = 0; y < ViewfinderPixels; y++)
+            {
+                for (var x = 0; x < ViewfinderPixels; x++)
+                {
+                    var depth = LDepth(x + 0.5f, y + 0.5f, CornerArm, CornerThickness);
+                    var horizontalArm = y + 0.5f >= ViewfinderPixels - CornerThickness;
+                    var along = horizontalArm ? y : x;
+                    var stripe = Mathf.Sin(along * 0.85f + Mathf.Sin((horizontalArm ? x : y) * 0.12f) * 2f);
+                    var fill = Color.Lerp(wood, grain, Mathf.Clamp01(stripe - 0.55f) * 0.9f);
+                    var color = depth < CornerOutline ? ink : fill;
+                    color.a = Mathf.Clamp01(depth + 0.5f);
+                    pixels[y * ViewfinderPixels + x] = color;
+                }
+            }
+
+            WritePng(path, ViewfinderPixels, ViewfinderPixels, pixels);
+        }
+
+        // Thin white L (tinted at runtime): the focus bracket around a locked gnome.
+        private static void GenerateFocusBracket(string path)
+        {
+            if (File.Exists(path))
+                return;
+
+            var pixels = new Color32[ViewfinderPixels * ViewfinderPixels];
+            for (var y = 0; y < ViewfinderPixels; y++)
+            {
+                for (var x = 0; x < ViewfinderPixels; x++)
+                {
+                    var depth = LDepth(x + 0.5f, y + 0.5f, BracketArm, BracketThickness);
+                    var color = (Color32)Color.white;
+                    color.a = (byte)Mathf.RoundToInt(Mathf.Clamp01(depth + 0.5f) * 255f);
+                    pixels[y * ViewfinderPixels + x] = color;
+                }
+            }
+
+            WritePng(path, ViewfinderPixels, ViewfinderPixels, pixels);
+        }
+
+        // Sepia glass plate: rounded square, ink outline and a diagonal shine.
+        private static void GeneratePlate(string path)
+        {
+            if (File.Exists(path))
+                return;
+
+            var defaults = ScriptableObject.CreateInstance<UiTheme>();
+            Color ink = defaults.ink, sepia = defaults.photoSepia;
+            Object.DestroyImmediate(defaults);
+
+            const float radius = 22f;
+            const float outline = 5f;
+            var half = ViewfinderPixels * 0.5f;
+            var pixels = new Color32[ViewfinderPixels * ViewfinderPixels];
+            for (var y = 0; y < ViewfinderPixels; y++)
+            {
+                for (var x = 0; x < ViewfinderPixels; x++)
+                {
+                    var px = Mathf.Abs(x + 0.5f - half) - (half - radius);
+                    var py = Mathf.Abs(y + 0.5f - half) - (half - radius);
+                    var distance = new Vector2(Mathf.Max(px, 0f), Mathf.Max(py, 0f)).magnitude + Mathf.Min(Mathf.Max(px, py), 0f) - radius;
+                    var depth = -distance;
+
+                    // Shine: a soft diagonal band, stronger on the upper-left half.
+                    var band = Mathf.Abs(x - y + 20f) / 14f;
+                    var shine = Mathf.Clamp01(1f - band) * (x + y < ViewfinderPixels ? 0.55f : 0.15f);
+                    var color = depth < outline ? ink : Color.Lerp(sepia, Color.white, shine);
+                    color.a = Mathf.Clamp01(depth + 0.5f);
+                    pixels[y * ViewfinderPixels + x] = color;
+                }
+            }
+
+            WritePng(path, ViewfinderPixels, ViewfinderPixels, pixels);
+        }
+
+        // White four-pointed star (astroid): the lens glint, tinted at runtime.
+        private static void GenerateLensGlint(string path)
+        {
+            if (File.Exists(path))
+                return;
+
+            var half = ViewfinderPixels * 0.5f;
+            var pixels = new Color32[ViewfinderPixels * ViewfinderPixels];
+            for (var y = 0; y < ViewfinderPixels; y++)
+            {
+                for (var x = 0; x < ViewfinderPixels; x++)
+                {
+                    var ax = Mathf.Abs(x + 0.5f - half) / half;
+                    var ay = Mathf.Abs(y + 0.5f - half) / half;
+                    var inside = 1f - (Mathf.Sqrt(ax) + Mathf.Sqrt(ay));
+                    var color = (Color32)Color.white;
+                    color.a = (byte)Mathf.RoundToInt(Mathf.Clamp01(inside * 4f) * 255f);
+                    pixels[y * ViewfinderPixels + x] = color;
+                }
+            }
+
+            WritePng(path, ViewfinderPixels, ViewfinderPixels, pixels);
+        }
+
+        // White ring for radial progress (Filled Radial 360, tinted at runtime).
+        private static void GenerateRing(string path)
+        {
+            if (File.Exists(path))
+                return;
+
+            const float thickness = 14f;
+            var center = (ViewfinderPixels - 1) * 0.5f;
+            var radius = ViewfinderPixels * 0.5f;
+            var pixels = new Color32[ViewfinderPixels * ViewfinderPixels];
+            for (var y = 0; y < ViewfinderPixels; y++)
+            {
+                for (var x = 0; x < ViewfinderPixels; x++)
+                {
+                    var distance = new Vector2(x - center, y - center).magnitude;
+                    var coverage = Mathf.Clamp01(radius - distance) * Mathf.Clamp01(distance - (radius - thickness));
+                    var color = (Color32)Color.white;
+                    color.a = (byte)Mathf.RoundToInt(coverage * 255f);
+                    pixels[y * ViewfinderPixels + x] = color;
+                }
+            }
+
+            WritePng(path, ViewfinderPixels, ViewfinderPixels, pixels);
         }
 
         private const int StampPixels = 64;
@@ -362,6 +529,11 @@ namespace BetterTogether.EditorTools
             Fill(ref theme.pill, PillSpritePath, ref dirty);
             Fill(ref theme.stamp, StampSpritePath, ref dirty);
             Fill(ref theme.stampFail, StampFailSpritePath, ref dirty);
+            Fill(ref theme.viewfinderCorner, ViewfinderCornerSpritePath, ref dirty);
+            Fill(ref theme.focusBracket, FocusBracketSpritePath, ref dirty);
+            Fill(ref theme.plate, PlateSpritePath, ref dirty);
+            Fill(ref theme.lensGlint, LensGlintSpritePath, ref dirty);
+            Fill(ref theme.ring, RingSpritePath, ref dirty);
             Fill(ref theme.backdrop, BackdropSpritePath, ref dirty);
 
             if (theme.titleFont == null)
