@@ -121,7 +121,8 @@ namespace BetterTogether.Gaze
             _next = (_next + 1) % _pool.Length;
 
             _shotCamera.CopyFrom(_viewCamera);
-            _shotCamera.cullingMask = _cullingMask;
+            // Same layers the camper sees, minus the filter (UI is always out).
+            _shotCamera.cullingMask = _viewCamera.cullingMask & _cullingMask;
             _shotCamera.targetTexture = texture;
             _shotCamera.aspect = 1f;
             _shotCamera.Render();
