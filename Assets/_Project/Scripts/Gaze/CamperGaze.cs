@@ -110,6 +110,7 @@ namespace BetterTogether.Gaze
         // Authority only: a shot click read in Update, consumed in FixedUpdateNetwork, and the click kept until the focus completes.
         private bool _attackQueued;
         private bool _bufferedShot;
+        private Petrifiable _bufferedTarget;
 
         // Render-side previous values for the sound cues; the first Render after Spawned only initialises them.
         private bool _feedbackReady;
@@ -204,7 +205,7 @@ namespace BetterTogether.Gaze
         /// <summary>True if the last shot froze a gnome.</summary>
         public bool LastShotHit => _isSpawned && NetLastShotHit;
 
-        /// <summary>Simulation tick of the last shot.</summary>
+        /// <summary>Simulation tick of the last shot (a made-up past tick before the first one). Use <see cref="ShotSeq"/> to detect shots.</summary>
         public int LastShotTick => _isSpawned ? NetLastShotTick : 0;
 
         /// <summary>Current shutter mode (A = Auto, B = Click).</summary>
@@ -215,9 +216,9 @@ namespace BetterTogether.Gaze
 
         /// <summary>
         /// A gnome is focused and the lock is complete but not shot yet. Only meaningful on the camper's own client (the authority
-        /// derives it from its own tick): it is the HUD's "ready to shoot".
+        /// derives it from its own tick): it is the HUD's "ready to shoot". False with no plate left.
         /// </summary>
-        public bool FocusReady => _isSpawned && Target != null && DerivedLockFill >= 1f && !LockFull;
+        public bool FocusReady => _isSpawned && Target != null && DerivedLockFill >= 1f && !LockFull && CurrentPlates >= 1f;
 
         /// <summary>True once spawned with the gaze switched on, whether or not the camper is focusing.</summary>
         public bool IsGazeOn => _isSpawned && IsGazeEnabled;
@@ -367,7 +368,8 @@ namespace BetterTogether.Gaze
                     if (drySeq != _prevDrySeq)
                         _drySfx.Play();
 
-                    if (wholePlates > _prevWholePlates)
+                    // One plate recharged; a refill at match start jumps several at once and stays silent.
+                    if (wholePlates == _prevWholePlates + 1)
                         _plateReadySfx.Play();
                 }
             }
@@ -450,17 +452,27 @@ namespace BetterTogether.Gaze
             }
 
             if (pressed)
+            {
+                if (target == null)
+                {
+                    // No gnome focused: the click fires at once and misses. Never kept.
+                    _bufferedShot = false;
+                    if (ShotIntervalPassed)
+                        FireShot(false);
+                    return;
+                }
+
                 _bufferedShot = true;
+                _bufferedTarget = target;
+            }
 
             if (!_bufferedShot)
                 return;
 
-            if (target == null)
+            // A kept click belongs to the gnome it was aimed at: if that one got away (or another took its place), drop it.
+            if (target != _bufferedTarget)
             {
-                // No gnome focused: the click fires at once and misses. Never kept.
                 _bufferedShot = false;
-                if (ShotIntervalPassed)
-                    FireShot(false);
                 return;
             }
 
