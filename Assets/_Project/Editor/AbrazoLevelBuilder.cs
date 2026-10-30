@@ -92,7 +92,7 @@ namespace BetterTogether.EditorTools
         // ---- Roots ----
         private const float RootHeight = 2.8f;
         private const float RootHalfThickness = 1f;
-        private const float RootEastStartX = 10.8f;
+        private const float RootEastStartX = 7f;
         private const float RootWestStartX = 7f;
         private const float RootTipX = 24f;
         private const float TunnelX = 16f;
@@ -108,22 +108,32 @@ namespace BetterTogether.EditorTools
         private const float PeepholeSillY = 0.15f;
 
         // ---- Ramp around the trunks ----
-        private const float RampRadius = 9f;
-        private const int RampSegments = 22;
-        private const float RampStartDeg = -18.43f;
-        private const float RampEndDeg = 395f;
+        private const float RampRadius = 10f;
+        private const float RampEntryX = 12.5f;
+        private const float RampEntryStartZ = -24f;
+        private const float RampEntryEndY = 3.2f;
+        private const int RampEntrySegments = 8;
+        private const int RampArcSegments = 22;
+        private const float RampArcStartRadius = 12.5f;
+        private const float RampArcBlendDeg = 40f;
+        private const float RampEndDeg = 401f;
+        private const float RampShoulderY = 6f;
         private const float RampTopY = 10f;
         private const float RampWidth = 2f;
         private const float RampThickness = 0.2f;
         private const float RampOverlap = 0.45f;
         private const float RampRailHeight = 0.5f;
-        private const float RampPostRadius = 9.85f;
+        private const float RampPostOffset = 0.85f;
         private const float RampPostSize = 0.25f;
+        private const float SecondLapDeg = 360f;
         private const float ShoulderDeg = 229.4f;
-        private const float ShoulderRadius = 3f;
+        private const float ShoulderRadius = 3.3f;
         private const float CanopyPlatformRadius = 2.5f;
         private const float PlatformThickness = 0.3f;
-        private const float SecondLapFirstSegment = 19f;
+        private const float TowerStairRadius = 12.2f;
+        private const float TowerStairStartDeg = 207f;
+        private const float TowerStairEndDeg = 229.4f;
+        private const float TowerStairWidth = 1.2f;
 
         // ---- Gnome-only crack (Grieta) and the tower ledge ----
         private const float CrackRadius = 7.6f;
@@ -146,7 +156,7 @@ namespace BetterTogether.EditorTools
 
         // ---- Sector: camp ----
         private static readonly Vector2[] TentSpots = { new(-9f, -27f), new(9f, -32f) };
-        private static readonly Vector2 CageSpot = new(12f, -24f);
+        private static readonly Vector2 CageSpot = new(17f, -24f);
         private static readonly Vector2 CampWoodSpot = new(-6f, -26f);
         private static readonly Vector2 CamperSpawnSpot = new(0f, -30f);
 
@@ -1245,11 +1255,27 @@ namespace BetterTogether.EditorTools
 
         // ================================================================== Ramp
 
+        private static float RampRadiusAt(float degrees)
+        {
+            if (degrees <= 0f)
+                return RampArcStartRadius;
+
+            return degrees >= RampArcBlendDeg ? RampRadius : Mathf.Lerp(RampArcStartRadius, RampRadius, Mathf.SmoothStep(0f, 1f, degrees / RampArcBlendDeg));
+        }
+
+        private static float RampY(float degrees)
+        {
+            return degrees <= ShoulderDeg
+                ? Mathf.Lerp(RampEntryEndY, RampShoulderY, degrees / ShoulderDeg)
+                : Mathf.Lerp(RampShoulderY, RampTopY, (degrees - ShoulderDeg) / (RampEndDeg - ShoulderDeg));
+        }
+
+        // A point of the arc part of the ramp (degrees from +x towards +z; 0 is where the entry bridge ends).
         private static Vector3 RampPos(float degrees)
         {
             var angle = degrees * Mathf.Deg2Rad;
-            var y = RampTopY * (degrees - RampStartDeg) / (RampEndDeg - RampStartDeg);
-            return new Vector3(Mathf.Cos(angle) * RampRadius, y, Mathf.Sin(angle) * RampRadius);
+            var radius = RampRadiusAt(degrees);
+            return new Vector3(Mathf.Cos(angle) * radius, RampY(degrees), Mathf.Sin(angle) * radius);
         }
 
         private static Quaternion RampRotation(float degrees)
@@ -1267,6 +1293,7 @@ namespace BetterTogether.EditorTools
             return DistanceToSegment(new Vector2(x, z), SlitStart, SlitEnd) < 2f;
         }
 
+        // Entry straight (12.5, -24, Y0) to (12.5, 0, Y3.2): a bridge over the east root; then the arc round the trunks.
         private static void BuildRamp(Transform parent)
         {
             var ramp = Group("Tramos");
@@ -1276,12 +1303,26 @@ namespace BetterTogether.EditorTools
             var deckB = Mat("TablasViejas", WoodOldHex);
             var posts = Group("Postes");
             posts.SetParent(parent, false);
-            for (var k = 0; k < RampSegments; k++)
+
+            var path = new List<Vector3>();
+            var degrees = new List<float>();
+            for (var k = 0; k <= RampEntrySegments; k++)
             {
-                var from = RampStartDeg + (RampEndDeg - RampStartDeg) * k / RampSegments;
-                var to = RampStartDeg + (RampEndDeg - RampStartDeg) * (k + 1) / RampSegments;
-                var p0 = RampPos(from);
-                var p1 = RampPos(to);
+                path.Add(new Vector3(RampEntryX, RampEntryEndY * k / RampEntrySegments, RampEntryStartZ * (1f - k / (float)RampEntrySegments)));
+                degrees.Add(-1f);
+            }
+
+            for (var j = 1; j <= RampArcSegments; j++)
+            {
+                var d = RampEndDeg * j / RampArcSegments;
+                path.Add(RampPos(d));
+                degrees.Add(d);
+            }
+
+            for (var k = 0; k + 1 < path.Count; k++)
+            {
+                var p0 = path[k];
+                var p1 = path[k + 1];
                 var rotation = Quaternion.LookRotation((p1 - p0).normalized);
                 var normal = rotation * Vector3.up;
                 var length = (p1 - p0).magnitude;
@@ -1294,25 +1335,28 @@ namespace BetterTogether.EditorTools
                 Box(ramp, $"Baranda_{k:00}", railCenter, new Vector3(0.08f, RampRailHeight, length), deckB, _layerEnv, false, rotation);
 
                 // Post at the end of the tramo, under the outer edge of the deck, down to the ground.
-                if (k + 1 < SecondLapFirstSegment)
-                    BuildPost(posts, k + 1, to, p1.y);
+                if (degrees[k + 1] < SecondLapDeg)
+                {
+                    outward.y = 0f;
+                    outward.Normalize();
+                    BuildPost(posts, k + 1, p1 + outward * RampPostOffset, p1.y);
+                }
             }
 
             BuildShoulder(ramp);
             BuildCanopyPlatform(ramp, parent);
         }
 
-        private static void BuildPost(Transform parent, int index, float degrees, float deckY)
+        private static void BuildPost(Transform parent, int index, Vector3 at, float deckY)
         {
-            var angle = degrees * Mathf.Deg2Rad;
-            var x = Mathf.Cos(angle) * RampPostRadius;
-            var z = Mathf.Sin(angle) * RampPostRadius;
-            if (deckY < 0.6f || PostBlocked(x, z))
+            // Not in the root wall (the bridge passes over it), the fire's U or the slit.
+            var inRoot = Mathf.Abs(at.z) < RootHalfThickness + 0.6f && Mathf.Abs(at.x) > RootWestStartX;
+            if (deckY < 0.6f || inRoot || PostBlocked(at.x, at.z))
                 return;
 
-            var ground = HeightAt(x, z);
+            var ground = HeightAt(at.x, at.z);
             var top = deckY - RampThickness;
-            Box(parent, $"Poste_{index:00}", new Vector3(x, (top + ground - StairSink) * 0.5f, z), new Vector3(RampPostSize, top - ground + StairSink, RampPostSize),
+            Box(parent, $"Poste_{index:00}", new Vector3(at.x, (top + ground - StairSink) * 0.5f, at.z), new Vector3(RampPostSize, top - ground + StairSink, RampPostSize),
                 Mat("TablasViejas", WoodOldHex), _layerEnv);
         }
 
@@ -1422,6 +1466,33 @@ namespace BetterTogether.EditorTools
             // Ledge at 1.6 m: only a tower of gnomes reaches it (Environment layer, so everyone collides with it).
             var half = TowerLedgeSize * 0.5f;
             Solid(parent, "RepisaTorre", TowerLedge.x - half, TowerLedge.x + half, TowerLedge.y - half, TowerLedge.y + half, TowerLedgeTopY, rock, _layerEnv);
+            BuildTowerStairs(crack, rock);
+        }
+
+        // Gnome-only stairs of 0.4 m steps from the tower ledge to the shoulder. They run outside the ramp's band (r 9..11)
+        // at r 12.2, so they never cross the ramp; a landing at ledge height links the ledge to the first step.
+        private static void BuildTowerStairs(Transform parent, Material material)
+        {
+            var rise = RampPos(ShoulderDeg).y - TowerLedgeTopY;
+            var steps = Mathf.CeilToInt(rise / GnomeStepHeight - 0.001f);
+            var each = rise / steps;
+            var span = TowerStairEndDeg - TowerStairStartDeg;
+            for (var k = 1; k <= steps; k++)
+            {
+                var degrees = TowerStairStartDeg + span * (k - 0.5f) / steps;
+                var top = TowerLedgeTopY + each * k;
+                var depth = span * Mathf.Deg2Rad * TowerStairRadius / steps;
+                var center = OnCircle(TowerStairRadius, degrees, (top - StairSink) * 0.5f);
+                var tangent = new Vector3(-Mathf.Sin(degrees * Mathf.Deg2Rad), 0f, Mathf.Cos(degrees * Mathf.Deg2Rad));
+                Box(parent, $"EscaleraTorre_{k}", center, new Vector3(TowerStairWidth, top + StairSink, depth + 0.02f), material, _layerGnomeOnly, true, Quaternion.LookRotation(tangent));
+            }
+
+            var firstStep = OnCircle(TowerStairRadius, TowerStairStartDeg, 0f);
+            var ledge = new Vector3(TowerLedge.x, 0f, TowerLedge.y);
+            var along = firstStep - ledge;
+            var landingCenter = (firstStep + ledge) * 0.5f;
+            landingCenter.y = (TowerLedgeTopY - StairSink) * 0.5f;
+            Box(parent, "DescansoTorre", landingCenter, new Vector3(TowerStairWidth, TowerLedgeTopY + StairSink, along.magnitude), material, _layerGnomeOnly, true, Quaternion.LookRotation(along.normalized));
         }
 
         // ================================================================== Stairs
@@ -1685,6 +1756,9 @@ namespace BetterTogether.EditorTools
                 return true;
 
             if (Mathf.Abs(z) < RootHalfThickness + 2.5f && Mathf.Abs(x) > RootWestStartX - 1f && Mathf.Abs(x) < RootTipX + 3f)
+                return true;
+
+            if (Mathf.Abs(x - RampEntryX) < 3f && z > RampEntryStartZ - 3f && z < 2f)
                 return true;
 
             if (Vector2.Distance(new Vector2(x, z), PozaCenter) < WaterRadius + 1.2f)
