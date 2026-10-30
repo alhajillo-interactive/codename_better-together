@@ -29,9 +29,9 @@ namespace BetterTogether.Fireplace
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
         [Tooltip("Seconds on a lit grill until it is ready to eat.")]
-        [SerializeField] private float _cookedAt = 15f;
+        [SerializeField] private float _cookedAt = 30f;
         [Tooltip("Seconds on a lit grill until it burns.")]
-        [SerializeField] private float _burntAt = 25f;
+        [SerializeField] private float _burntAt = 42f;
         [Tooltip("Seconds a burnt, unattended sausage waits before going back to its spawn point.")]
         [SerializeField] private float _resetDelay = 4f;
         [Tooltip("Heard by everyone, from the sausage, when the camper eats it.")]

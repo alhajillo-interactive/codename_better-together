@@ -4,6 +4,7 @@ using BetterTogether.Diagnostics;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
+using BetterTogether.Networking;
 using BetterTogether.Player;
 using Fusion;
 using PrimeTween;
@@ -26,7 +27,9 @@ namespace BetterTogether.Fireplace
         [SerializeField, Min(0f)] private float _fillTolerance = 0.5f;
         [Tooltip("Heard by everyone, from the bucket, when it is filled.")]
         [SerializeField] private SoundCue _fillSfx;
-        [Tooltip("Heard by everyone, from the bucket, when the water leaves it (poured or spilled).")]
+        [Tooltip("Seconds a full bucket takes to drain by itself (0 = it never leaks). Filling again restarts the count.")]
+        [SerializeField, Min(0f)] private float _leakSeconds = 30f;
+        [Tooltip("Heard by everyone, from the bucket, when the water leaves it (poured, spilled or leaked).")]
         [SerializeField] private SoundCue _emptySfx;
 
         [Header("Feel (built by GnoMore/Construir feel de fogata y cubeta; every field is optional)")]
@@ -42,6 +45,8 @@ namespace BetterTogether.Fireplace
         [SerializeField, Min(0.01f)] private float _waterRiseTime = 0.35f;
         [Tooltip("Metres below its resting height the water disc starts when filling.")]
         [SerializeField, Min(0f)] private float _waterRiseDepth = 0.12f;
+        [Tooltip("How many times faster the drops fall when the bucket is about to run dry than when it was just filled.")]
+        [SerializeField, Min(1f)] private float _leakDripSpeedup = 4f;
         [Tooltip("Particles in the splash when the bucket is filled.")]
         [SerializeField, Min(0)] private int _fillSplashCount = 14;
         [Tooltip("Particles in the splash when the bucket is spilled on the ground.")]
@@ -92,6 +97,25 @@ namespace BetterTogether.Fireplace
 
         [Networked, OnChangedRender(nameof(OnFullChanged))]
         private NetworkBool Full { get; set; }
+
+        // Anchor + tick (CLAUDE.md rule 4): the tick at which the bucket was last filled; the leak is derived from it on every peer.
+        [Networked] private int FilledTick { get; set; }
+
+        /// <summary>
+        /// Water left, from 1 (just filled) to 0 (about to leak out). Derived from <see cref="FilledTick"/>; a proxy's tick can
+        /// lag a little, so it is for presentation only. 0 when empty or not spawned, 1 when the bucket does not leak.
+        /// </summary>
+        public float FillFraction
+        {
+            get
+            {
+                if (!_isSpawned || !Full)
+                    return 0f;
+                if (_leakSeconds <= 0f)
+                    return 1f;
+                return 1f - Mathf.Clamp01(NetAnchor.Elapsed(Runner, FilledTick) / _leakSeconds);
+            }
+        }
 
         /// <summary>True while the bucket holds water. False when not spawned.</summary>
         public bool IsFull => _isSpawned && Full;
@@ -159,6 +183,13 @@ namespace BetterTogether.Fireplace
             }
 
             _hadHolder = held;
+
+            // The water leaks out on its own, held or not. Master change: the new authority keeps counting from FilledTick.
+            if (Full && _leakSeconds > 0f && NetAnchor.Elapsed(Runner, FilledTick) >= _leakSeconds)
+            {
+                Full = false;
+                if (Telemetry.Enabled) Telemetry.Begin("bucket_spill").Str("reason", "leaked").Send();
+            }
         }
 
         /// <summary>Authority only: the bucket is empty again at the start of a match.</summary>
@@ -201,6 +232,7 @@ namespace BetterTogether.Fireplace
             if (!Runner.TryFindBehaviour(interactorId, out PlayerInteractor who) || !CanFill(who, _fillTolerance))
                 return;
 
+            FilledTick = Runner.Tick.Raw;
             Full = true;
             if (Telemetry.Enabled) Telemetry.Begin("bucket_fill", who).Send();
             if (MatchManager.Instance != null) MatchManager.Instance.Award(who.Object.StateAuthority, MatchManager.ScoreReason.FillBucket);
@@ -348,7 +380,9 @@ namespace BetterTogether.Fireplace
 
             var surface = Quaternion.FromToRotation(Vector3.up, (Vector3.up + _lean).normalized);
             var local = inverseRoot * pour * surface * rootRotation;
-            var restPosition = _waterRestPosition + Vector3.down * (_waterRiseDepth * (1f - _waterRise));
+            // The water starts low and rises when filled, then sinks again as the bucket leaks.
+            var sink = Mathf.Max(1f - _waterRise, 1f - FillFraction);
+            var restPosition = _waterRestPosition + Vector3.down * (_waterRiseDepth * sink);
             _water.transform.SetLocalPositionAndRotation(local * restPosition, local * _waterRestRotation);
         }
 
@@ -367,13 +401,15 @@ namespace BetterTogether.Fireplace
             _pourStream.transform.SetPositionAndRotation(rim, Quaternion.LookRotation(_pourDirection + Vector3.down * 0.35f));
         }
 
-        // A full bucket in somebody's hands drips: one drop every few tenths of a second (local, nothing replicated).
+        // A full bucket drips (when carried, or always if it leaks): one drop every few tenths of a second, faster as it empties (local, nothing replicated).
         private void UpdateDrips(bool full)
         {
-            if (_drips == null || !full || !_carryable.IsHeld || Time.time < _nextDrip)
+            if (_drips == null || !full || (!_carryable.IsHeld && _leakSeconds <= 0f) || Time.time < _nextDrip)
                 return;
 
-            _nextDrip = Time.time + _dripInterval;
+            // The drops come faster as the bucket empties.
+            var speed = Mathf.Lerp(1f, _leakDripSpeedup, 1f - FillFraction);
+            _nextDrip = Time.time + _dripInterval / speed;
             _drips.Emit(1);
         }
     }

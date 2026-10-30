@@ -200,8 +200,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5b1e8d3a7c2f4e90a6d4b2c8e0f17a36, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Fireplace.Sausage
-  _cookedAt: 15
-  _burntAt: 25
+  _cookedAt: 30
+  _burntAt: 42
   _resetDelay: 4
   _eatSfx: {fileID: 11400000, guid: 4260266f5bb59b0be511ef6f7296ae8e, type: 2}
   _visual: {fileID: 4737430231874366731}
