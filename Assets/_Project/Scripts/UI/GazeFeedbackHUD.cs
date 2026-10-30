@@ -99,8 +99,6 @@ namespace BetterTogether.UI
         [SerializeField] private Vector2 _bracketHalfRange = new(36f, 240f);
         [Tooltip("Bracket size multiplier when the lock starts; it closes to 1 as the lock fills.")]
         [SerializeField] private float _bracketOpenScale = 1.4f;
-        [Tooltip("Size in canvas units of one bracket corner.")]
-        [SerializeField] private float _bracketSize = 56f;
 
         [Header("Flash")]
         [Tooltip("Peak alpha of the shutter flash.")]
@@ -246,6 +244,10 @@ namespace BetterTogether.UI
             _focusedLabel.gameObject.SetActive(false);
             Instance = this;
         }
+
+        private void OnEnable() => PhotoAlbum.PhotoTaken += ShowPhoto;
+
+        private void OnDisable() => PhotoAlbum.PhotoTaken -= ShowPhoto;
 
         private void OnDestroy()
         {
@@ -518,10 +520,11 @@ namespace BetterTogether.UI
             var showViewfinder = amount > 0.001f;
             HudSupport.SetActive(_viewfinderRoot.gameObject, showViewfinder);
 
-            // The cone as a rectangle: tan(halfAngle) / tan(fov / 2) of the half screen, per axis, with the FOV on screen now.
+            // The cone is round: the frame is the square inscribed in it (tan(halfAngle) / √2 per axis, over tan(fov / 2) of the
+            // half screen, with the FOV on screen now), so a gnome anywhere inside the frame can be focused.
             var tanHalfV = Mathf.Tan(_camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
             var tanHalfH = tanHalfV * _camera.aspect;
-            var tanCone = Mathf.Tan(Mathf.Min(gaze.HalfAngle, 85f) * Mathf.Deg2Rad);
+            var tanCone = Mathf.Tan(Mathf.Min(gaze.HalfAngle, 85f) * Mathf.Deg2Rad) * 0.70710678f;
             var halfW = Mathf.Min(tanCone / tanHalfH * size.x * 0.5f, size.x * 0.5f * _maxViewfinderFraction);
             var halfH = Mathf.Min(tanCone / tanHalfV * size.y * 0.5f, size.y * 0.5f * _maxViewfinderFraction);
 
@@ -640,7 +643,10 @@ namespace BetterTogether.UI
             _lastShootIndex = count;
             _shootText.text = _shootTexts[count];
             var theme = UiTheme.Safe;
-            _shootText.color = count == 0 ? theme.inkSoft : theme.cream;
+            var cream = theme.cream;
+            if (count == 0)
+                cream.a = 0.6f; // Dimmed but readable on the dark pill.
+            _shootText.color = cream;
         }
 
         // Brackets close from _bracketOpenScale to 1 with the lock; cream -> ember once the shot is ready.
@@ -749,6 +755,8 @@ namespace BetterTogether.UI
 
                 if (gaze.LockedTarget == gnome)
                     locker = gaze;
+                else if (!gaze.CanSee(gnome.FocusPoint, gnome.transform))
+                    continue; // Only a camera that actually frames this gnome can be the warning's source.
 
                 var sqr = (gaze.EyePosition - gnomePos).sqrMagnitude;
                 if (sqr < nearestSqr)
