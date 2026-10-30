@@ -53,9 +53,12 @@ namespace BetterTogether.Fireplace
                 return false;
 
             var carried = interactor.Carried;
+            // Only a raw sausage goes on the grill: a cooked one must be eaten (E would otherwise put it back to burn),
+            // and a burnt one has nothing left to cook.
             return carried != null
                 && carried.TryGetComponent<Sausage>(out var sausage)
-                && !sausage.Eaten;
+                && !sausage.Eaten
+                && sausage.State == Sausage.CookState.Raw;
         }
 
         public void Interact(PlayerInteractor interactor)

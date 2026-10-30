@@ -343,7 +343,14 @@ namespace BetterTogether.Interaction
             if (!_interact.WasPressedThisFrame())
                 return;
 
-            if (Focused != null && Focused.CanInteract(this))
+            // Eating the cooked sausage wins over whatever is in focus: it is the camper's goal and the prompt promises it.
+            var edible = EdibleCarried;
+            if (edible != null)
+            {
+                NoteInteraction();
+                edible.RequestEat(this);
+            }
+            else if (Focused != null && Focused.CanInteract(this))
             {
                 NoteInteraction();
                 Focused.Interact(this);

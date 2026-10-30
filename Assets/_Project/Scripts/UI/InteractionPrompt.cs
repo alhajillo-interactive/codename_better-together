@@ -193,6 +193,11 @@ namespace BetterTogether.UI
                     : stack.ClimbBlockReason;
                 _resolvedDenied = !stack.CanClimbAimed;
             }
+            else if (carried != null && local.EdibleCarried != null)
+            {
+                // Mirrors PlayerInteractor: eating the cooked sausage wins over whatever is in focus.
+                text = BuildCarriedText(local, carried);
+            }
             else if (local.Focused != null && local.Focused.CanInteract(local))
             {
                 text = local.Focused is IHoldInteractable hold && hold.GetHoldTime(local) > 0f
