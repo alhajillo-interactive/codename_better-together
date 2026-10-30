@@ -29,6 +29,10 @@ MonoBehaviour:
   hatDark: {r: 0.61960787, g: 0.18431373, b: 0.15686275, a: 1}
   roleCamper: {r: 1, g: 0.70980394, b: 0.2784314, a: 1}
   roleGnome: {r: 0.23921569, g: 0.43529412, b: 0.65882355, a: 1}
+  photoSepia: {r: 0.9098039, g: 0.8352941, b: 0.68235296, a: 1}
+  photoInk: {r: 0.2901961, g: 0.19607843, b: 0.1254902, a: 1}
+  plaster: {r: 0.9372549, g: 0.9019608, b: 0.8392157, a: 1}
+  flash: {r: 1, g: 0.972549, b: 0.9019608, a: 1}
   titleFont: {fileID: 11400000, guid: 89011f902c7eb8948a282cdea05b2ad1, type: 2}
   bodyFont: {fileID: 11400000, guid: 89011f902c7eb8948a282cdea05b2ad1, type: 2}
   titleOutline: {fileID: 2100000, guid: 0f0f67e631a03d14f9b40d925ee15be8, type: 2}
@@ -44,6 +48,11 @@ MonoBehaviour:
   backdrop: {fileID: 21300000, guid: f9eb7814776b7e34685fa6c30bceadb9, type: 3}
   stamp: {fileID: 21300000, guid: b821108739bd0a54b8192c6f2893e0f9, type: 3}
   stampFail: {fileID: 21300000, guid: 0a958a9b4b306264890cce24243efe99, type: 3}
+  viewfinderCorner: {fileID: 21300000, guid: d3dae0be7f19086469fa397030a44c20, type: 3}
+  focusBracket: {fileID: 21300000, guid: b6c49d95582416e458b5138e82a73f0e, type: 3}
+  plate: {fileID: 21300000, guid: 5479211c952bec24480c85eaee748fcd, type: 3}
+  lensGlint: {fileID: 21300000, guid: 956c271b338ee864a9ec4ebc208bc854, type: 3}
+  ring: {fileID: 21300000, guid: c55ca675ad60d5d41845cc4c226f52f1, type: 3}
   titleSize: 64
   subtitleSize: 40
   buttonSize: 34
