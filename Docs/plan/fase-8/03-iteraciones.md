@@ -1,4 +1,5 @@
 # 03 · Iteraciones — de «postal» a «travesura de cajón»
+> **Decisión (29 oct 2026)**: se implementa I3 **sin la capa andina**. Ver `02-identidad-visual.md` (versión aprobada).
 
 > Las tres iteraciones parten de la misma base (pilares de `01`, tokens actuales, Lilita One) y solo varían **cómo entra la cámara** y **cuánto folclore andino** se ve. Maquetas comparables en `travesura-de-cajon.html`.
 > Proceso: I1 → autocrítica → I2 → **crítica del experto UX/UI** (agente Opus, revisó I1 e I2) → I3.

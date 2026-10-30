@@ -1,6 +1,6 @@
 # 01 · La identidad que ya tenemos (29 oct 2026)
 
-> Fase 8 sustituye a la exploración dark fantasy de la fase 7 (descartada por el equipo: se alejaba de nuestro tono). Aquí no se inventa un estilo: se **extrae** el que ya existe en las piezas del equipo para que todo lo nuevo salga de él.
+> Aquí no se inventa un estilo: se **extrae** el que ya existe en las piezas del equipo para que todo lo nuevo salga de él.
 
 Piezas analizadas: logo (`Sprites/UI/GnomeLogo.PNG`), ilustración del menú (`BG/MainMenuBG.png`), botón (`ButtonBG`), papel (`tareas-bg`), placa (`InputHeader`), marco (`Credits`/`Frame`), sellos (`Stamp`, `StampFail`), texturas de suelo en acuarela (`Sprites/Acuarela_*`), modelos `campista` y `gnomo1/2`, tokens de `UiTheme` y la UI aplicada en la fase 6 («Campamento de madera y papel»).
 
