@@ -161,8 +161,8 @@ namespace BetterTogether.UI
                 if (mate.Gnome != null && mate.Gnome.IsAvailable && IsListed(mate.Gnome))
                     continue;
 
-                if (mate.Gnome != null)
-                    _mates.Remove(mate.Gnome);
+                // A destroyed gnome reads as null but its key is still the same reference, so it comes out too.
+                _mates.Remove(mate.Gnome);
 
                 ClearSlot(slot);
             }
