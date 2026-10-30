@@ -40,7 +40,7 @@ El campista necesita 5 de 7 leños y sólo 3 están al sur: **tiene que cruzar a
 - **Fósforos**: Hombro (−6, −7, 6).
 - **Salchichas (3)**: Copa (arriba, la más cercana a la fogata: riesgo a cambio de tiempo), Risco, muelle.
 - **Escondites (8)**: Huerto (−24, −14) (−34, −14); Serrería (34, −18); Hondonada (−8, 28) (10, 24) (0, 33); Risco (−36, 12); Poza (20, 31).
-- **Señuelos**: 10 Huerto, 3 Hondonada, 2 Hombro.
+- **Señuelos**: 10 Huerto, 5 Hondonada.
 - **Spawns**: campista (0, −30); gnomos (−34, 8), (0, 32), (34, 14). El más cercano, a más de 40 m.
 
 ## 6. Cambios de reglas

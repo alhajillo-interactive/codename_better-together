@@ -933,8 +933,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Networking.ConnectionManager
   _maxPlayers: 8
   _gameplayScene:
-    asset: {fileID: 102900000, guid: 9cb0fdcb2bbec2f4281d58aa29300541, type: 3}
-    guid: 9cb0fdcb2bbec2f4281d58aa29300541
+    asset: {fileID: 102900000, guid: e4ddd33dd7b3b1a45a61ae3964353225, type: 3}
+    guid: e4ddd33dd7b3b1a45a61ae3964353225
   _menuScene:
     asset: {fileID: 102900000, guid: c171c6aacc82eeacabeb3525857b2cac, type: 3}
     guid: c171c6aacc82eeacabeb3525857b2cac

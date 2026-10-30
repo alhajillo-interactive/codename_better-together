@@ -119,7 +119,7 @@ namespace BetterTogether.EditorTools
         private const int CoverMaxBushes = 90;
         private const float CoverRouteStep = 5f;
         private const float CoverRouteOffset = 2.6f;
-        private const float CoverNearPath = 2f;
+        private const float CoverNearPath = 1.1f;
         private const float CoverBushMinHeight = 2f;
         private const float CoverBushExtraHeight = 0.7f;
 
@@ -1194,6 +1194,9 @@ namespace BetterTogether.EditorTools
             // Dense cover in the hollow and the orchard.
             CoverLattice(parent, new Vector2(-15f, 20.5f), new Vector2(15f, 34f), 3.3f, 0.9f, 11);
             CoverLattice(parent, new Vector2(-36.5f, -28.5f), new Vector2(-19.5f, -13.5f), 3.6f, 0.9f, 23);
+
+            // Whatever the cap leaves goes across the whole clearing, so no route runs without cover.
+            CoverLattice(parent, new Vector2(-36f, -33f), new Vector2(36f, 33f), 6f, 1.6f, 37);
         }
 
         // A bush every ~5 m on alternating sides of each route.

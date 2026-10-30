@@ -208,10 +208,10 @@ namespace BetterTogether.EditorTools
             new(-30f, -16f), new(-23f, -26f), new(-35f, -22f), new(-29f, -27f),
         };
 
-        private static readonly Vector2[] HollowDecoyAnchors = { new(-4f, 24f), new(5f, 28f), new(0f, 20f), new(-10f, 31f) };
+        private static readonly Vector2[] HollowDecoyAnchors = { new(-4f, 24f), new(5f, 28f), new(0f, 20f), new(-10f, 31f), new(12f, 30f), new(-13f, 25f) };
         private const int OrchardDecoys = 10;
-        private const int HollowDecoys = 3;
-        private const int ShoulderDecoys = 2;
+        private const int HollowDecoys = 5;
+        private const int ShoulderDecoys = 0;
 
         // ---- Cover (tall bushes) ----
         private const float CoverSpacing = 6f;
@@ -220,7 +220,7 @@ namespace BetterTogether.EditorTools
         private const float CoverLimitX = 37f;
         private const float CoverLimitZ = 34f;
         private const float CoverClearRadius = 1.1f;
-        private const float CoverKeepAway = 3f;
+        private const float CoverKeepAway = 2f;
         private const float CoverMinGroundY = -1.2f;
         private const float CoverMinNormalY = 0.85f;
         private const float CoverTrunkExclusion = 13f;
