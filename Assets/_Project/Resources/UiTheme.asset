@@ -53,6 +53,21 @@ MonoBehaviour:
   plate: {fileID: 21300000, guid: 5479211c952bec24480c85eaee748fcd, type: 3}
   lensGlint: {fileID: 21300000, guid: 956c271b338ee864a9ec4ebc208bc854, type: 3}
   ring: {fileID: 21300000, guid: c55ca675ad60d5d41845cc4c226f52f1, type: 3}
+  icons:
+  - {fileID: 0}
+  - {fileID: 21300000, guid: 61cb5345766a2ee4082b72aae7e101f7, type: 3}
+  - {fileID: 21300000, guid: 624e39351b967d046b0c2c1e2540d308, type: 3}
+  - {fileID: 21300000, guid: 23e2b6e5a43e42b479a75358db2b66a3, type: 3}
+  - {fileID: 21300000, guid: 891dc5a7b7cdfe3459723a6369dd1b62, type: 3}
+  - {fileID: 21300000, guid: c20db0d45db3a514289230267151f433, type: 3}
+  - {fileID: 21300000, guid: 3712f0b8a33acc64e9ef4a9904a8d7b6, type: 3}
+  - {fileID: 21300000, guid: 1789c230a1ad0414a9aa0e9e7cb34d88, type: 3}
+  - {fileID: 21300000, guid: 5f1fb78b05c6c1e4b8971552a52b8032, type: 3}
+  - {fileID: 21300000, guid: 2627ec20e6ffeac4791761b438f88950, type: 3}
+  - {fileID: 21300000, guid: 2292e34a7aa4da344b3cc10f8fb90c78, type: 3}
+  - {fileID: 21300000, guid: b4d3eed6a17fa0d468229a6a4e8637a5, type: 3}
+  - {fileID: 21300000, guid: 7ae77fce19b539c4995604afddf03576, type: 3}
+  - {fileID: 21300000, guid: 5f9df439d82a0624198f52721df67428, type: 3}
   titleSize: 64
   subtitleSize: 40
   buttonSize: 34
