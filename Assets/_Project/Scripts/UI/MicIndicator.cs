@@ -29,6 +29,8 @@ namespace BetterTogether.UI
         private Color OnColor => UiTheme.WithAlpha(UiTheme.Safe.leafDark, _backgroundAlpha);
         private Color OffColor => UiTheme.WithAlpha(UiTheme.Safe.hatDark, _backgroundAlpha);
 
+        // Optional child "Icon" of the badge (made by HudPlateTools): MicOn / MicOff next to the text.
+        private Image _icon;
         private bool _valid;
         private int _shownState = -1;
 
@@ -42,6 +44,10 @@ namespace BetterTogether.UI
                 return;
 
             _label.color = UiTheme.Safe.cream; // cream on leafDark / hatDark
+            var icon = _badge.transform.Find("Icon");
+            if (icon != null && icon.TryGetComponent(out _icon))
+                _icon.raycastTarget = false;
+
             _badge.SetActive(false);
         }
 
@@ -66,6 +72,12 @@ namespace BetterTogether.UI
             _shownState = state;
             _background.color = state == 1 ? OnColor : OffColor;
             _label.text = state == 1 ? OnText : OffText;
+            if (_icon != null)
+            {
+                var sprite = UiTheme.Safe.Icon(state == 1 ? UiIcon.MicOn : UiIcon.MicOff);
+                _icon.sprite = sprite;
+                _icon.enabled = sprite != null;
+            }
         }
     }
 }

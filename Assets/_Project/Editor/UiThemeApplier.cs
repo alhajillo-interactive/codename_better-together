@@ -5,6 +5,7 @@
 //    inputs, toggles, panels, frames, headers, backdrops and TMP texts. Texts typed by the game at runtime keep their colour.
 //  - Targets: MainMenu scene, CampBryan scene (SurveyCanvas only), and the prefabs SettingsPanel, MenuBTN, MatchHUD (only
 //    RoleCard, EndScreen, Waiting, Prompt, StoneOverlay, ControlsHint, MicBadge), StartMatch_Canvas.
+//  - C8.4: generates the game icons (Sprites/UI/Icons/*.png, 64 px, ink outline) and fills UiTheme.icons.
 //  - C6.2a: generates Stamp.png / StampFail.png (ring + check / cross), and on the MatchHUD prefab makes the objectives plate
 //    elastic, adds the line stamps and the toast pill, and moves the mic badge into the safe zone (see HudPlateTools).
 //  - Idempotent: a value that already matches is not written, so a second run changes nothing. Prefabs are processed
@@ -132,6 +133,7 @@ namespace BetterTogether.EditorTools
             GeneratePlate(PlateSpritePath);
             GenerateLensGlint(LensGlintSpritePath);
             GenerateRing(RingSpritePath);
+            GenerateIcons();
 
             ConfigureSprite(ButtonSpritePath, 24);
             ConfigureSprite(HeaderSpritePath, 28);
@@ -146,6 +148,8 @@ namespace BetterTogether.EditorTools
             ConfigureSprite(PlateSpritePath, 0);
             ConfigureSprite(LensGlintSpritePath, 0);
             ConfigureSprite(RingSpritePath, 0);
+            for (var i = 1; i <= (int)UiIcon.MicOff; i++)
+                ConfigureSprite(IconPath((UiIcon)i), 0);
         }
 
         // ---- C8.2 viewfinder sprites (128 px, written once, never overwritten)
@@ -348,6 +352,252 @@ namespace BetterTogether.EditorTools
             return (point - (a + ab * t)).magnitude;
         }
 
+        // ---- C8.4 game icons (64 px, ink outline, flat theme colours; written once, never overwritten)
+
+        private const string IconFolder = UiSpriteFolder + "/Icons";
+        private const int IconPixels = 64;
+        private const float IconOutline = 3.5f;
+
+        private static string IconPath(UiIcon icon) => $"{IconFolder}/{icon}.png";
+
+        private readonly struct IconShape
+        {
+            public readonly System.Func<Vector2, float> Distance;
+            public readonly Color32 Fill;
+            public readonly bool Outlined;
+
+            public IconShape(System.Func<Vector2, float> distance, Color32 fill, bool outlined)
+            {
+                Distance = distance;
+                Fill = fill;
+                Outlined = outlined;
+            }
+        }
+
+        private static void GenerateIcons()
+        {
+            if (!AssetDatabase.IsValidFolder(IconFolder))
+                AssetDatabase.CreateFolder(UiSpriteFolder, "Icons");
+
+            var theme = ScriptableObject.CreateInstance<UiTheme>();
+            try
+            {
+                for (var i = 1; i <= (int)UiIcon.MicOff; i++)
+                {
+                    var icon = (UiIcon)i;
+                    var path = IconPath(icon);
+                    if (File.Exists(path))
+                        continue;
+
+                    WritePng(path, IconPixels, IconPixels, RenderIcon(BuildIcon(icon, theme), theme.ink));
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(theme);
+            }
+        }
+
+        // Paints the shapes in order, each one over a 3.5 px ink halo (when outlined) and then its flat fill; coverage is analytic.
+        private static Color32[] RenderIcon(List<IconShape> shapes, Color32 ink)
+        {
+            var pixels = new Color32[IconPixels * IconPixels];
+            for (var y = 0; y < IconPixels; y++)
+            {
+                for (var x = 0; x < IconPixels; x++)
+                {
+                    var point = new Vector2(x + 0.5f, y + 0.5f);
+                    float r = 0f, g = 0f, b = 0f, a = 0f; // premultiplied
+                    foreach (var shape in shapes)
+                    {
+                        var distance = shape.Distance(point);
+                        if (shape.Outlined)
+                            Over(ref r, ref g, ref b, ref a, ink, Mathf.Clamp01(0.5f - (distance - IconOutline)));
+                        Over(ref r, ref g, ref b, ref a, shape.Fill, Mathf.Clamp01(0.5f - distance));
+                    }
+
+                    pixels[y * IconPixels + x] = a <= 0f
+                        ? new Color32(0, 0, 0, 0)
+                        : new Color32((byte)Mathf.RoundToInt(r / a * 255f), (byte)Mathf.RoundToInt(g / a * 255f),
+                            (byte)Mathf.RoundToInt(b / a * 255f), (byte)Mathf.RoundToInt(a * 255f));
+                }
+            }
+
+            return pixels;
+        }
+
+        private static void Over(ref float r, ref float g, ref float b, ref float a, Color32 color, float coverage)
+        {
+            if (coverage <= 0f)
+                return;
+
+            var keep = 1f - coverage;
+            r = color.r / 255f * coverage + r * keep;
+            g = color.g / 255f * coverage + g * keep;
+            b = color.b / 255f * coverage + b * keep;
+            a = coverage + a * keep;
+        }
+
+        private static void Add(List<IconShape> shapes, System.Func<Vector2, float> distance, Color fill, bool outlined = true)
+            => shapes.Add(new IconShape(distance, fill, outlined));
+
+        private static Color Mix(Color a, Color b, float t) => Color.Lerp(a, b, t);
+
+        // ---- Signed distance primitives (pixel space, origin bottom-left; negative inside)
+
+        private static System.Func<Vector2, float> Circle(Vector2 center, float radius)
+            => p => (p - center).magnitude - radius;
+
+        private static System.Func<Vector2, float> Capsule(Vector2 a, Vector2 b, float radius)
+            => p => SegmentDistance(p, a, b) - radius;
+
+        private static System.Func<Vector2, float> RoundBox(Vector2 center, Vector2 half, float radius)
+            => p =>
+            {
+                var d = new Vector2(Mathf.Abs(p.x - center.x) - half.x + radius, Mathf.Abs(p.y - center.y) - half.y + radius);
+                return Mathf.Min(Mathf.Max(d.x, d.y), 0f) + new Vector2(Mathf.Max(d.x, 0f), Mathf.Max(d.y, 0f)).magnitude - radius;
+            };
+
+        // Polygon grown by "round" pixels (softens the corners).
+        private static System.Func<Vector2, float> Polygon(float round, params Vector2[] v)
+            => p =>
+            {
+                var d = Vector2.Dot(p - v[0], p - v[0]);
+                var sign = 1f;
+                for (int i = 0, j = v.Length - 1; i < v.Length; j = i, i++)
+                {
+                    var e = v[j] - v[i];
+                    var w = p - v[i];
+                    var q = w - e * Mathf.Clamp01(Vector2.Dot(w, e) / Vector2.Dot(e, e));
+                    d = Mathf.Min(d, Vector2.Dot(q, q));
+                    var c1 = p.y >= v[i].y;
+                    var c2 = p.y < v[j].y;
+                    var c3 = e.x * w.y > e.y * w.x;
+                    if ((c1 && c2 && c3) || (!c1 && !c2 && !c3))
+                        sign = -sign;
+                }
+
+                return sign * Mathf.Sqrt(d) - round;
+            };
+
+        private static System.Func<Vector2, float> Union(System.Func<Vector2, float> a, System.Func<Vector2, float> b)
+            => p => Mathf.Min(a(p), b(p));
+
+        private static System.Func<Vector2, float> Intersect(System.Func<Vector2, float> a, System.Func<Vector2, float> b)
+            => p => Mathf.Max(a(p), b(p));
+
+        private static List<IconShape> BuildIcon(UiIcon icon, UiTheme t)
+        {
+            var s = new List<IconShape>();
+            switch (icon)
+            {
+                case UiIcon.Log:
+                    var logBody = Capsule(new Vector2(17f, 32f), new Vector2(42f, 32f), 11f);
+                    Add(s, logBody, t.wood);
+                    Add(s, Intersect(logBody, Capsule(new Vector2(14f, 38f), new Vector2(44f, 38f), 1.5f)), t.woodDark, false);
+                    Add(s, Intersect(logBody, Capsule(new Vector2(14f, 26f), new Vector2(44f, 26f), 1.5f)), t.woodDark, false);
+                    Add(s, Circle(new Vector2(44f, 32f), 11f), t.woodLight);
+                    Add(s, Circle(new Vector2(44f, 32f), 6f), t.wood, false);
+                    Add(s, Circle(new Vector2(44f, 32f), 2.2f), t.woodDark, false);
+                    break;
+                case UiIcon.Match:
+                    Add(s, Capsule(new Vector2(17f, 17f), new Vector2(43f, 43f), 4.5f), t.woodLight);
+                    Add(s, Circle(new Vector2(47f, 47f), 9f), t.hatDark);
+                    Add(s, Circle(new Vector2(50f, 50f), 3.5f), t.ember, false);
+                    break;
+                case UiIcon.SausageRaw:
+                case UiIcon.SausageCooked:
+                case UiIcon.SausageBurnt:
+                    BuildSausage(s, t, icon);
+                    break;
+                case UiIcon.Fire:
+                    Add(s, Union(Circle(new Vector2(32f, 27f), 13f), Polygon(1f, new Vector2(20f, 31f), new Vector2(44f, 31f), new Vector2(33f, 59f))), t.hatDark);
+                    Add(s, Union(Circle(new Vector2(32f, 25f), 7.5f), Polygon(1f, new Vector2(25.5f, 28f), new Vector2(38.5f, 28f), new Vector2(32f, 45f))), t.ember, false);
+                    Add(s, Capsule(new Vector2(14f, 14f), new Vector2(50f, 22f), 5f), t.wood);
+                    Add(s, Capsule(new Vector2(14f, 22f), new Vector2(50f, 14f), 5f), t.woodDark);
+                    break;
+                case UiIcon.Bucket:
+                    var handle = new Vector2(32f, 44f);
+                    Add(s, p => Mathf.Max(Mathf.Abs((p - handle).magnitude - 12.5f) - 2f, handle.y - p.y), t.woodDark);
+                    var bucketBody = Polygon(2f, new Vector2(15f, 46f), new Vector2(49f, 46f), new Vector2(44f, 10f), new Vector2(20f, 10f));
+                    Add(s, bucketBody, t.roleGnome);
+                    Add(s, Intersect(bucketBody, RoundBox(new Vector2(32f, 34f), new Vector2(30f, 3.5f), 0f)), t.woodLight, false);
+                    Add(s, Intersect(bucketBody, RoundBox(new Vector2(32f, 19f), new Vector2(30f, 3.5f), 0f)), t.woodLight, false);
+                    Add(s, RoundBox(new Vector2(32f, 46f), new Vector2(18.5f, 3.5f), 2f), t.woodLight);
+                    break;
+                case UiIcon.Cage:
+                    Add(s, RoundBox(new Vector2(32f, 31f), new Vector2(20f, 17f), 4f), t.woodDark);
+                    Add(s, Capsule(new Vector2(22f, 16f), new Vector2(22f, 46f), 3f), t.woodLight);
+                    Add(s, Capsule(new Vector2(32f, 16f), new Vector2(32f, 46f), 3f), t.woodLight);
+                    Add(s, Capsule(new Vector2(42f, 16f), new Vector2(42f, 46f), 3f), t.woodLight);
+                    Add(s, RoundBox(new Vector2(32f, 50f), new Vector2(24f, 3.5f), 2f), t.woodLight);
+                    Add(s, RoundBox(new Vector2(32f, 12f), new Vector2(24f, 3.5f), 2f), t.woodLight);
+                    break;
+                case UiIcon.Kick:
+                    var foot = RoundBox(new Vector2(35f, 19f), new Vector2(20f, 9f), 6f);
+                    Add(s, Union(RoundBox(new Vector2(26f, 40f), new Vector2(9f, 15f), 3f), foot), t.wood);
+                    Add(s, Intersect(foot, RoundBox(new Vector2(35f, 12.5f), new Vector2(20f, 3.2f), 0f)), t.woodDark, false);
+                    Add(s, RoundBox(new Vector2(26f, 53f), new Vector2(11f, 3.5f), 2f), t.cream);
+                    break;
+                case UiIcon.Gnome:
+                    Add(s, Polygon(3f, new Vector2(18f, 35f), new Vector2(46f, 35f), new Vector2(32f, 10f)), t.cream);
+                    Add(s, Circle(new Vector2(32f, 35f), 9f), t.woodLight);
+                    Add(s, Circle(new Vector2(32f, 32f), 3.5f), t.wood, false);
+                    Add(s, Circle(new Vector2(27.5f, 36f), 1.6f), t.ink, false);
+                    Add(s, Circle(new Vector2(36.5f, 36f), 1.6f), t.ink, false);
+                    Add(s, Union(Polygon(1.5f, new Vector2(20f, 41f), new Vector2(44f, 41f), new Vector2(38f, 56f)),
+                        Capsule(new Vector2(18f, 41f), new Vector2(46f, 41f), 3f)), t.hatDark);
+                    break;
+                case UiIcon.Hide:
+                    Add(s, Capsule(new Vector2(9f, 14f), new Vector2(55f, 14f), 3f), t.woodDark);
+                    Add(s, Union(Union(Circle(new Vector2(21f, 27f), 11f), Circle(new Vector2(43f, 27f), 11f)),
+                        Union(Circle(new Vector2(32f, 36f), 14f), Circle(new Vector2(32f, 24f), 12f))), t.leafDark);
+                    Add(s, Circle(new Vector2(26f, 42f), 4f), t.leafLight, false);
+                    Add(s, Circle(new Vector2(44f, 34f), 2.5f), t.leafLight, false);
+                    Add(s, Circle(new Vector2(26f, 28f), 4.4f), t.cream);
+                    Add(s, Circle(new Vector2(38f, 28f), 4.4f), t.cream);
+                    Add(s, Circle(new Vector2(26.6f, 27.4f), 1.9f), t.ink, false);
+                    Add(s, Circle(new Vector2(38.6f, 27.4f), 1.9f), t.ink, false);
+                    break;
+                case UiIcon.MicOn:
+                case UiIcon.MicOff:
+                    var mic = new Vector2(32f, 38f);
+                    Add(s, p => Mathf.Max(Mathf.Abs((p - mic).magnitude - 14f) - 2.2f, p.y - mic.y), t.cream);
+                    Add(s, Capsule(new Vector2(32f, 24f), new Vector2(32f, 16f), 2.2f), t.cream);
+                    Add(s, Capsule(new Vector2(22f, 14f), new Vector2(42f, 14f), 2.5f), t.cream);
+                    Add(s, Capsule(new Vector2(32f, 38f), new Vector2(32f, 45f), 8.5f), icon == UiIcon.MicOn ? t.leafLight : t.cream);
+                    if (icon == UiIcon.MicOff)
+                        Add(s, Capsule(new Vector2(13f, 53f), new Vector2(51f, 11f), 3.5f), t.hatDark);
+                    break;
+            }
+
+            return s;
+        }
+
+        // Diagonal sausage: raw is pink, cooked is browned with grill marks, burnt is dark with black marks.
+        private static void BuildSausage(List<IconShape> s, UiTheme t, UiIcon icon)
+        {
+            var a = new Vector2(18f, 22f);
+            var b = new Vector2(46f, 42f);
+            var body = Capsule(a, b, 10.5f);
+            var fill = icon == UiIcon.SausageRaw ? Mix(t.hatDark, t.cream, 0.55f) : icon == UiIcon.SausageCooked ? t.wood : t.inkSoft;
+            var shine = icon == UiIcon.SausageRaw ? t.cream : icon == UiIcon.SausageCooked ? t.woodLight : t.wood;
+            Add(s, body, fill);
+            Add(s, Capsule(new Vector2(18.4f, 28.4f), new Vector2(39.9f, 43.7f), 2.2f), shine, false);
+
+            if (icon == UiIcon.SausageRaw)
+                return;
+
+            var axis = (b - a).normalized;
+            var across = new Vector2(-axis.y, axis.x) * 13f;
+            var mark = icon == UiIcon.SausageCooked ? t.woodDark : t.ink;
+            foreach (var along in new[] { 0.32f, 0.52f, 0.72f })
+            {
+                var center = a + (b - a) * along;
+                Add(s, Intersect(body, Capsule(center - across, center + across, 1.8f)), mark, false);
+            }
+        }
+
         private const int FramePixels = 128;
         private const int FrameBorder = 44;
         private const float FrameRadius = 30f;
@@ -535,6 +785,16 @@ namespace BetterTogether.EditorTools
             Fill(ref theme.lensGlint, LensGlintSpritePath, ref dirty);
             Fill(ref theme.ring, RingSpritePath, ref dirty);
             Fill(ref theme.backdrop, BackdropSpritePath, ref dirty);
+
+            var iconCount = (int)UiIcon.MicOff + 1;
+            if (theme.icons == null || theme.icons.Length != iconCount)
+            {
+                System.Array.Resize(ref theme.icons, iconCount);
+                dirty = true;
+            }
+
+            for (var i = 1; i < iconCount; i++)
+                Fill(ref theme.icons[i], IconPath((UiIcon)i), ref dirty);
 
             if (theme.titleFont == null)
             {
@@ -914,6 +1174,10 @@ namespace BetterTogether.EditorTools
 
         private static void StyleImage(Transform t, Image image, string target)
         {
+            // Game icons and stamps of the HUD are made and driven by HudPlateTools / MatchHUD / MicIndicator.
+            if (t.name == "Icon" || t.name == "Stamp")
+                return;
+
             // Stone-overlay progress bar: colour only (the game drives its fill).
             if (t.name == "BarBack")
             {

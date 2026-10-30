@@ -42,6 +42,10 @@ namespace BetterTogether.UI
             public RectTransform StampRect;
             public int StampKind; // 0 hidden, 1 check, 2 cross
             public Tween StampTween;
+            // Optional child "Icon" of the line text (made by HudPlateTools): the game icon of the objective.
+            public Image Icon;
+            public UiIcon IconKind;
+            public Color IconColor = Color.white; // ui-color-ok: white is the untinted multiplier of a sprite, not a themed colour
         }
 
         [Header("Clock")]
@@ -58,6 +62,8 @@ namespace BetterTogether.UI
         [Header("Objectives")]
         [SerializeField] private TMP_Text _objectivesTitle;
         [SerializeField] private TMP_Text[] _objectiveTexts;
+        [Tooltip("Opacity of the objective icon once its line is done (or while it is a muted hint).")]
+        [Range(0f, 1f)] [SerializeField] private float _doneIconAlpha = 0.5f;
         [Tooltip("Seconds a line shows the failure colour and the cross stamp after it stops being done.")]
         [SerializeField] private float _failSeconds = 0.9f;
         [Tooltip("Scale the stamp starts at when it drops onto a line (it settles at 1).")]
@@ -165,6 +171,13 @@ namespace BetterTogether.UI
             for (var i = 0; i < ObjectiveCount; i++)
             {
                 var line = new Line { Text = _objectiveTexts[i], Punch = UIPunch.Of(_objectiveTexts[i]) };
+                var icon = _objectiveTexts[i].transform.Find("Icon");
+                if (icon != null && icon.TryGetComponent(out line.Icon))
+                {
+                    line.Icon.raycastTarget = false;
+                    line.Icon.enabled = false;
+                }
+
                 var stamp = _objectiveTexts[i].transform.Find("Stamp");
                 if (stamp != null && stamp.TryGetComponent(out line.Stamp))
                 {
@@ -322,6 +335,7 @@ namespace BetterTogether.UI
             var cook = sausage != null ? sausage.State : Sausage.CookState.Raw;
             var eaten = sausage != null && sausage.Eaten;
             var cookDone = sausage != null && (eaten || cook == Sausage.CookState.Cooked);
+            var sausageIcon = SausageIcon(cook);
             var sausageText = cook switch
             {
                 Sausage.CookState.Cooked => "Salchicha: Lista",
@@ -334,22 +348,22 @@ namespace BetterTogether.UI
                 case 0: // Camper, milestone 1: build and light the fire.
                     var carried = PlayerInteractor.Local != null ? PlayerInteractor.Local.Carried : null;
                     var hasMatches = carried != null && carried.TryGetComponent<Matches>(out _);
-                    ShowCount(0, variant, fire != null && wood >= required, false, "Leños {0:0}/{1:0}", wood, required, playing);
-                    ShowPlain(1, variant, hasMatches, false, "Consigue los fósforos", 0, playing);
-                    ShowPlain(2, variant, false, false, "Enciende la fogata", 0, playing);
-                    ShowPlain(3, variant, false, true, "(Luego: cocina y come la salchicha)", 0, playing);
+                    ShowCount(0, variant, fire != null && wood >= required, false, UiIcon.Log, "Leños {0:0}/{1:0}", wood, required, playing);
+                    ShowPlain(1, variant, hasMatches, false, UiIcon.Match, "Consigue los fósforos", 0, playing);
+                    ShowPlain(2, variant, false, false, UiIcon.Fire, "Enciende la fogata", 0, playing);
+                    ShowPlain(3, variant, false, true, UiIcon.SausageRaw, "(Luego: cocina y come la salchicha)", 0, playing);
                     break;
                 case 1: // Camper, milestone 2: defend the fire while the sausage cooks.
-                    ShowPlain(0, variant, false, false, "¡Defiende la fogata!", 0, playing);
-                    ShowPlain(1, variant, cookDone, false, sausageText, (int)cook, playing);
-                    ShowPlain(2, variant, eaten, false, "Cómela cuando esté lista", 0, playing);
-                    ShowPlain(3, variant, false, false, "Patea a quien traiga agua", 0, playing);
+                    ShowPlain(0, variant, false, false, UiIcon.Fire, "¡Defiende la fogata!", 0, playing);
+                    ShowPlain(1, variant, cookDone, false, sausageIcon, sausageText, (int)cook, playing);
+                    ShowPlain(2, variant, eaten, false, sausageIcon, "Cómela cuando esté lista", 0, playing);
+                    ShowPlain(3, variant, false, false, UiIcon.Kick, "Patea a quien traiga agua", 0, playing);
                     break;
                 case 2: // Gnome, milestone 1: steal and hide.
-                    ShowPlain(0, variant, false, false, "Roba leños y fósforos", 0, playing);
-                    ShowPlain(1, variant, false, false, "Escóndelos", 0, playing);
-                    ShowCount(2, variant, false, false, "Leños del campista {0:0}/{1:0}", wood, required, playing);
-                    ShowPlain(3, variant, false, true, "(Si la enciende: busca la cubeta)", 0, playing);
+                    ShowPlain(0, variant, false, false, UiIcon.Log, "Roba leños y fósforos", 0, playing);
+                    ShowPlain(1, variant, false, false, UiIcon.Hide, "Escóndelos", 0, playing);
+                    ShowCount(2, variant, false, false, UiIcon.Log, "Leños del campista {0:0}/{1:0}", wood, required, playing);
+                    ShowPlain(3, variant, false, true, UiIcon.Bucket, "(Si la enciende: busca la cubeta)", 0, playing);
                     break;
                 default: // Gnome, milestone 2: bring the water.
                     var held = PlayerInteractor.Local != null ? PlayerInteractor.Local.Carried : null;
@@ -364,13 +378,21 @@ namespace BetterTogether.UI
                         _ => "Busca la cubeta",
                     };
 
-                    ShowPlain(0, variant, false, false, "¡Apaga la fogata!", 0, playing);
-                    ShowPlain(1, variant, false, false, bucketText, bucketState, playing);
-                    ShowPlain(2, variant, false, false, sausageText, (int)cook, playing);
-                    ShowPlain(3, variant, false, false, "Que no se la coma", 0, playing);
+                    ShowPlain(0, variant, false, false, UiIcon.Fire, "¡Apaga la fogata!", 0, playing);
+                    ShowPlain(1, variant, false, false, UiIcon.Bucket, bucketText, bucketState, playing);
+                    ShowPlain(2, variant, false, false, sausageIcon, sausageText, (int)cook, playing);
+                    ShowPlain(3, variant, false, false, sausageIcon, "Que no se la coma", 0, playing);
                     break;
             }
         }
+
+        // Icon of the featured sausage for its cook state.
+        private static UiIcon SausageIcon(Sausage.CookState cook) => cook switch
+        {
+            Sausage.CookState.Cooked => UiIcon.SausageCooked,
+            Sausage.CookState.Burnt => UiIcon.SausageBurnt,
+            _ => UiIcon.SausageRaw,
+        };
 
         private void SetTitle(int variant)
         {
@@ -397,16 +419,16 @@ namespace BetterTogether.UI
         }
 
         // A line whose text is a literal; extra tells apart the literals a line can show in one variant.
-        private void ShowPlain(int index, int variant, bool done, bool muted, string text, int extra, bool playing)
+        private void ShowPlain(int index, int variant, bool done, bool muted, UiIcon icon, string text, int extra, bool playing)
         {
-            if (UpdateLine(index, done, variant * 16 + extra, playing, muted))
+            if (UpdateLine(index, done, variant * 16 + extra, playing, muted, icon))
                 _lines[index].Text.SetText(done ? Struck(text) : text);
         }
 
         // A line with two numbers, written with SetText so no string is built.
-        private void ShowCount(int index, int variant, bool done, bool muted, string format, int a, int b, bool playing)
+        private void ShowCount(int index, int variant, bool done, bool muted, UiIcon icon, string format, int a, int b, bool playing)
         {
-            if (UpdateLine(index, done, variant * 16 + (a * 100 + b) * 64, playing, muted))
+            if (UpdateLine(index, done, variant * 16 + (a * 100 + b) * 64, playing, muted, icon))
                 _lines[index].Text.SetText(done ? Struck(format) : format, a, b);
         }
 
@@ -423,7 +445,7 @@ namespace BetterTogether.UI
         }
 
         /// <summary>Plays the completion or failure juice and returns true when the line text must be rebuilt.</summary>
-        private bool UpdateLine(int index, bool done, int key, bool playing, bool muted)
+        private bool UpdateLine(int index, bool done, int key, bool playing, bool muted, UiIcon icon)
         {
             var line = _lines[index];
             var changed = line.Known && done != line.Done && playing;
@@ -452,6 +474,7 @@ namespace BetterTogether.UI
                 line.Text.color = color;
 
             SetStamp(line, failing ? 2 : done && !muted ? 1 : 0, changed);
+            SetLineIcon(line, icon, failing ? theme.hatDark : UiTheme.WithAlpha(Color.white, done || muted ? _doneIconAlpha : 1f)); // ui-color-ok: white is the untinted multiplier of a sprite, not a themed colour
 
             var fullKey = key * 2 + (done ? 1 : 0);
             if (fullKey == line.Key)
@@ -459,6 +482,27 @@ namespace BetterTogether.UI
 
             line.Key = fullKey;
             return true;
+        }
+
+        // Sets the game icon of a line and its tint (written only on change): half alpha when finished or a muted hint, hat red when failed.
+        private void SetLineIcon(Line line, UiIcon icon, Color color)
+        {
+            if (line.Icon == null)
+                return;
+
+            if (icon != line.IconKind)
+            {
+                line.IconKind = icon;
+                var sprite = Theme.Icon(icon);
+                line.Icon.sprite = sprite;
+                line.Icon.enabled = sprite != null;
+            }
+
+            if (color != line.IconColor)
+            {
+                line.IconColor = color;
+                line.Icon.color = color;
+            }
         }
 
         // Shows the check or cross stamp of a line (0 hides it). It drops in (scale 1.4 to 1) only on a live change.

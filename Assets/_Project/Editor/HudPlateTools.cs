@@ -2,9 +2,11 @@
 // the MatchHUD prefab that C6.2a makes elastic or adds. All of it is idempotent (a value that already matches is not written)
 // and returns how many writes it made, so the callers know whether the prefab must be saved.
 //  - Objectives plate: "HeaderBG" holds the "Title" text and an ElasticPlate, so the plate grows with the milestone title.
-//  - Objective lines: auto-fit text (min 22 px), room on the right and a "Stamp" child Image per line (check / cross stamp).
+//  - Objective lines: auto-fit text (min 22 px), room on the right, a "Stamp" child Image per line (check / cross stamp)
+//    and, between the stamp and the text, an "Icon" child Image (C8.4: the game icon MatchHUD sets per objective).
 //  - Toast pill: "AnnouncerPill" (event-coloured border, night80 fill) becomes the parent of the "Announcer" text.
-//  - Microphone badge: placed inside the safe zone (64 px from the left, 40 px from the bottom).
+//  - Microphone badge: placed inside the safe zone (64 px from the left, 40 px from the bottom), with an "Icon" child
+//    (C8.4: MicOn / MicOff, set by MicIndicator) to the left of the label.
 // Never touches scenes; the prefab is edited through PrefabUtility contents by the callers.
 using BetterTogether.UI;
 using TMPro;
@@ -21,6 +23,12 @@ namespace BetterTogether.EditorTools
         private const float HeaderCenterY = 45f;
         private const float LineStampSize = 34f;
         private const float LineRightRoom = 72f;
+        private const float LineIconSize = 36f;
+        private const float LineIconGap = 8f;
+        private const float MicBadgeWidth = 280f;
+        private const float MicIconSize = 28f;
+        private const float MicIconLeft = 10f;
+        private const float MicLabelLeft = 44f;
         private const float PillBorder = 3f;
         private const float ToastFontSize = 48f;
         private static readonly string[] LineNames = { "Line1", "Line2", "Line3", "Line4" };
@@ -41,7 +49,7 @@ namespace BetterTogether.EditorTools
             }
 
             changes += EnsureAnnouncerPill(rect, theme);
-            changes += EnsureMicBadge(rect);
+            changes += EnsureMicBadge(rect, theme);
             return changes;
         }
 
@@ -132,9 +140,11 @@ namespace BetterTogether.EditorTools
 
                 // The stamp sits at the start of the line like a checklist box; the right margin keeps the text on the paper.
                 var margin = text.margin;
-                if (margin.x != LineStampSize + 8f || margin.z != LineRightRoom)
+                // The game icon sits between the stamp and the text, so the text starts after both.
+                var textLeft = LineStampSize + LineIconGap + LineIconSize + LineIconGap;
+                if (margin.x != textLeft || margin.z != LineRightRoom)
                 {
-                    margin.x = LineStampSize + 8f;
+                    margin.x = textLeft;
                     margin.z = LineRightRoom;
                     text.margin = margin;
                     changes++;
@@ -166,6 +176,20 @@ namespace BetterTogether.EditorTools
                     image.enabled = false;
                     changes++;
                 }
+
+                // Game icon: MatchHUD sets the sprite, tint and visibility at runtime, so the prefab keeps it empty and hidden.
+                var icon = line.Find("Icon") as RectTransform;
+                if (icon == null)
+                {
+                    var go = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image)) { layer = UiLayer };
+                    icon = (RectTransform)go.transform;
+                    icon.SetParent(line, false);
+                    changes++;
+                }
+
+                changes += SetRect(icon, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
+                    new Vector2(LineStampSize + LineIconGap, 0f), new Vector2(LineIconSize, LineIconSize));
+                changes += SetIcon(icon.GetComponent<Image>(), null, false);
             }
 
             return changes;
@@ -304,14 +328,38 @@ namespace BetterTogether.EditorTools
 
         // ---------------------------------------------------------------- Microphone badge
 
-        private static int EnsureMicBadge(RectTransform root)
+        private static int EnsureMicBadge(RectTransform root, UiTheme theme)
         {
             var badge = root.Find("MicBadge") as RectTransform;
             if (badge == null)
                 return 0;
 
             // Inside the safe zone: at least 64 px from the left edge and 40 px from the bottom.
-            return SetRect(badge, Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(64f, 40f), new Vector2(240f, 44f));
+            var changes = SetRect(badge, Vector2.zero, Vector2.zero, Vector2.zero, new Vector2(64f, 40f), new Vector2(MicBadgeWidth, 44f));
+
+            // Icon on the left (MicIndicator swaps MicOn / MicOff); the label keeps the rest of the badge.
+            var icon = badge.Find("Icon") as RectTransform;
+            if (icon == null)
+            {
+                var go = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image)) { layer = UiLayer };
+                icon = (RectTransform)go.transform;
+                icon.SetParent(badge, false);
+                changes++;
+            }
+
+            changes += SetRect(icon, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
+                new Vector2(MicIconLeft, 0f), new Vector2(MicIconSize, MicIconSize));
+            var micOff = theme.Icon(UiIcon.MicOff);
+            changes += SetIcon(icon.GetComponent<Image>(), micOff, micOff != null);
+
+            var label = badge.Find("Label") as RectTransform;
+            if (label != null && (label.offsetMin.x != MicLabelLeft))
+            {
+                label.offsetMin = new Vector2(MicLabelLeft, label.offsetMin.y);
+                changes++;
+            }
+
+            return changes;
         }
 
         // ---------------------------------------------------------------- Write helpers (write only when different)
@@ -364,6 +412,25 @@ namespace BetterTogether.EditorTools
             image.type = type;
             image.color = color;
             image.preserveAspect = false;
+            return 1;
+        }
+
+        // Game icon image: white tint, aspect kept, never a raycast target. The sprite is whatever the caller passes (null for runtime-driven icons).
+        private static int SetIcon(Image image, Sprite sprite, bool enabled)
+        {
+            if (image == null)
+                return 0;
+
+            if (image.sprite == sprite && image.type == Image.Type.Simple && image.color == Color.white && image.preserveAspect
+                && !image.raycastTarget && image.enabled == enabled)
+                return 0;
+
+            image.sprite = sprite;
+            image.type = Image.Type.Simple;
+            image.color = Color.white;
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+            image.enabled = enabled;
             return 1;
         }
 
