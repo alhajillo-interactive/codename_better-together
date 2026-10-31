@@ -17,7 +17,7 @@ namespace BetterTogether.EditorTools
         private const string LogPrefix = "[OnboardingBuilder]";
         private const string PrefabPath = "Assets/_Project/Prefabs/UI/MatchHUD.prefab";
         private const int UiLayer = 5;
-        private const int LineCount = 6;
+        private const int LineCount = 7;
 
         private static readonly Vector2 Center = new(0.5f, 0.5f);
         private static readonly Vector2 BottomRight = new(1f, 0f);
