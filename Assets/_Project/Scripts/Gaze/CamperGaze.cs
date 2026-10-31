@@ -448,6 +448,8 @@ namespace BetterTogether.Gaze
                 // Variant A: the photo is taken when the focus completes; with no plates the camera just stays focused.
                 if (target != null && !LockFull && DerivedLockFill >= 1f && CurrentPlates >= 1f && ShotIntervalPassed)
                     FireShot(true);
+                else if (pressed && target == null && ShotIntervalPassed && MatchManager.Instance != null && MatchManager.Instance.MissionsRunning)
+                    FireShot(false); // A manual shot of a place, for the photo missions.
                 return;
             }
 
@@ -513,7 +515,14 @@ namespace BetterTogether.Gaze
 
             if (Telemetry.Enabled)
                 Telemetry.Begin("photo").Bool("hit", hit).Float("plates", PlatesAnchor).Str("mode", NetMode == ShutterMode.Auto ? "auto" : "click").Send();
+
+            if (MatchManager.Instance != null)
+                MatchManager.Instance.ReportPhoto(this);
         }
+
+        /// <summary>True if the point is in the picture right now, up to <paramref name="maxDistance"/>: same cone and occlusion as a gnome.</summary>
+        public bool CanPhotograph(Vector3 point, Transform target, float maxDistance) =>
+            CanSee(point, target, 0f, Mathf.Max(0f, maxDistance - Range));
 
         /// <summary>Switches the shutter mode (variant A/B). Anyone may call it (debug panel); the camper's owner applies it.</summary>
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]

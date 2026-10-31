@@ -10950,7 +10950,7 @@ MonoBehaviour:
   _aimRadius: 0.06
   _interactionMask:
     serializedVersion: 2
-    m_Bits: 3072
+    m_Bits: 35840
   _eye: {fileID: 0}
   _holdDistanceFactor: 0.45
   _holdDropFactor: 0.18

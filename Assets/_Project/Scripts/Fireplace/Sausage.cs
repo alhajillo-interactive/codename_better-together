@@ -79,7 +79,6 @@ namespace BetterTogether.Fireplace
         private Renderer[] _renderers;
         private MaterialPropertyBlock _block;
         private bool _isSpawned;
-        private Vector3 _spawnPosition;
         private Quaternion _spawnRotation;
         private CookState _shownState = (CookState)(-1);
         private bool _burnWatched;
@@ -202,7 +201,6 @@ namespace BetterTogether.Fireplace
             _isSpawned = true;
             if (!_all.Contains(this))
                 _all.Add(this);
-            _spawnPosition = transform.position;
             _spawnRotation = transform.rotation;
             _lastEaten = IsEaten; // Late joiners don't hear a bite that already happened.
             _feelState = State; // Nor a ding or a burn that already happened.
@@ -313,9 +311,11 @@ namespace BetterTogether.Fireplace
                 _body.angularVelocity = Vector3.zero;
             }
 
-            transform.SetPositionAndRotation(_spawnPosition, _spawnRotation);
+            // The carryable knows this match's spot, which may differ from the pose in the scene.
+            var position = _carryable.StartPosition;
+            transform.SetPositionAndRotation(position, _spawnRotation);
             if (_networkTransform != null)
-                _networkTransform.Teleport(_spawnPosition, _spawnRotation);
+                _networkTransform.Teleport(position, _spawnRotation);
         }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD

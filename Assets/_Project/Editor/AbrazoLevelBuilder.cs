@@ -388,6 +388,7 @@ namespace BetterTogether.EditorTools
             ConfigureLevelBounds();
             MarkStaticScenery();
             ApplyRenderBudget();
+            BuildMissions(Group("Misiones"));
             GeneratedSfxBuilder.AssignScene();
             Validate();
 
@@ -1813,6 +1814,8 @@ namespace BetterTogether.EditorTools
             PlaceItem(items, "Items/Sausage.prefab", "Salchicha_Copa", new Vector2(_canopyCenter.x, _canopyCenter.z));
             PlaceItem(items, "Items/Sausage.prefab", "Salchicha_Risco", CragSausageSpot);
             PlaceItem(items, "Items/Sausage.prefab", "Salchicha_Muelle", DockSausageSpot);
+
+            ReserveMissionSpots();
 
             // Spawns (children of PlayerSpawner, referenced by it).
             PlaceSpawn("CamperSpawn", CamperSpawnSpot, Vector3.forward);

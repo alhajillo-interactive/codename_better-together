@@ -15,7 +15,7 @@ namespace BetterTogether.Match
     /// shows the result and starts over. Master-client object: the state authority drives the phases and every
     /// client reads the replicated state.
     /// </summary>
-    public class MatchManager : NetworkBehaviour
+    public partial class MatchManager : NetworkBehaviour
     {
         [Tooltip("Players needed to start a match.")]
         [Min(1)] [SerializeField] private int _minPlayers = 2;
@@ -468,6 +468,7 @@ namespace BetterTogether.Match
             }
 
             ResetWorld();
+            BeginMissions();
             CurrentCamper = ChooseCamper();
             ResetScores();
             CurrentResult = MatchResult.None;
@@ -569,6 +570,7 @@ namespace BetterTogether.Match
 
         public override void Render()
         {
+            ApplySeedLocally();
             var phase = CurrentPhase;
             MatchProgress = ComputeProgress(phase);
             if (phase != MatchPhase.Countdown)

@@ -6,6 +6,7 @@
 // estilo de UI first); the old vignettes, stone overlay and stamina bar are removed. It is idempotent: elements that
 // already exist are kept as they are (so tweaks made in the editor survive); only the references are wired again.
 using System.IO;
+using BetterTogether.Audio;
 using BetterTogether.UI;
 using TMPro;
 using UnityEditor;
@@ -86,6 +87,7 @@ namespace BetterTogether.EditorTools
             var album = BuildAlbumSlot(rootRect, theme);
             BuildTeammates(rootRect, theme, font);
             BuildMinimap(rootRect, theme, font);
+            BuildMissions(rootRect, theme, font);
 
             // Front layer: crosshair, prompt, warnings, badges.
             var crosshair = BuildCrosshair(rootRect);
@@ -593,6 +595,91 @@ namespace BetterTogether.EditorTools
             SetArray(serialized.FindProperty("_slotRoots"), roots);
             SetArray(serialized.FindProperty("_icons"), icons);
             SetArray(serialized.FindProperty("_names"), names);
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // Missions (C11): list at the left edge, a banner near the top and the swarm over the camera. MissionHUD fills them.
+        private const int MissionRows = 3;
+        private const int MissionSwarm = 18;
+        private const float MissionWidth = 460f;
+        private const float MissionRowHeight = 32f;
+        private const float MissionSwarmSize = 150f;
+
+        private static void BuildMissions(RectTransform parent, UiTheme theme, TMP_FontAsset font)
+        {
+            var root = Child(parent, "Missions", out var created);
+            if (created)
+                Place(root, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(64f, 90f),
+                    new Vector2(MissionWidth, MissionRowHeight * (MissionRows + 1)));
+
+            var panel = Child(root, "Panel", out var panelCreated);
+            if (panelCreated)
+                Stretch(panel);
+
+            var title = Text(panel, "Title", "Misiones", theme.hintSize, theme.cream, TextAlignmentOptions.TopLeft, font, false,
+                out var titleRect, out var titleCreated);
+            if (titleCreated)
+            {
+                Place(titleRect, new Vector2(0f, 1f), Vector2.one, new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, MissionRowHeight));
+                ApplyTitleFont(title, theme, true);
+            }
+
+            var rows = new Object[MissionRows];
+            for (var i = 0; i < MissionRows; i++)
+            {
+                var row = Text(panel, $"Row{i + 1}", "", theme.hintSize, theme.cream, TextAlignmentOptions.TopLeft, font, false,
+                    out var rowRect, out var rowCreated);
+                if (rowCreated)
+                {
+                    Place(rowRect, new Vector2(0f, 1f), Vector2.one, new Vector2(0.5f, 1f), new Vector2(0f, -MissionRowHeight * (i + 1)),
+                        new Vector2(0f, MissionRowHeight));
+                    ApplyTitleFont(row, theme, true);
+                }
+
+                rows[i] = row;
+            }
+
+            var banner = Text(parent, "MissionBanner", "", theme.hintSize * 1.3f, theme.cream, TextAlignmentOptions.Center, font, false,
+                out var bannerRect, out var bannerCreated);
+            if (bannerCreated)
+            {
+                Place(bannerRect, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -150f), new Vector2(1100f, 60f));
+                ApplyTitleFont(banner, theme, true);
+                banner.gameObject.SetActive(false);
+            }
+
+            var swarm = Child(parent, "MissionSwarm", out var swarmCreated);
+            if (swarmCreated)
+            {
+                Place(swarm, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+                swarm.gameObject.SetActive(false);
+            }
+
+            var butterflies = new Object[MissionSwarm];
+            for (var i = 0; i < MissionSwarm; i++)
+            {
+                var item = Child(swarm, $"Butterfly{i + 1}", out var itemCreated);
+                var image = GetOrAdd<Image>(item.gameObject);
+                if (itemCreated)
+                {
+                    item.sizeDelta = new Vector2(MissionSwarmSize, MissionSwarmSize);
+                    image.raycastTarget = false;
+                }
+
+                butterflies[i] = image;
+            }
+
+            var hud = GetOrAdd<MissionHUD>(root.gameObject);
+            var serialized = new SerializedObject(hud);
+            SetObjectField(serialized, "_panel", panel.gameObject);
+            SetObjectField(serialized, "_title", title);
+            SetArray(serialized.FindProperty("_rows"), rows);
+            SetObjectField(serialized, "_banner", banner);
+            SetObjectField(serialized, "_swarmRoot", swarm.gameObject);
+            SetArray(serialized.FindProperty("_swarm"), butterflies);
+            SetObjectField(serialized, "_stepSfx", AssetDatabase.LoadAssetAtPath<SoundCue>("Assets/_Project/Audio/SFX/SFX_MissionStep.asset"));
+            SetObjectField(serialized, "_completeSfx", AssetDatabase.LoadAssetAtPath<SoundCue>("Assets/_Project/Audio/SFX/SFX_MissionComplete.asset"));
+            SetObjectField(serialized, "_swarmSfx", AssetDatabase.LoadAssetAtPath<SoundCue>("Assets/_Project/Audio/SFX/SFX_Swarm.asset"));
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 

@@ -54,6 +54,8 @@ namespace BetterTogether.UI
         [Tooltip("Offset in map pixels of the caged-gnomes number from the cage marker.")]
         [SerializeField] private Vector2 _cageCountOffset = new(30f, 22f);
 
+        private const int MissionMarkers = 8;
+
         private sealed class Mate
         {
             public Petrifiable Gnome;
@@ -66,6 +68,9 @@ namespace BetterTogether.UI
         private Sprite _arrowSprite;
         private Texture2D _mateTexture;
         private Sprite _mateSprite;
+        private Texture2D _missionTexture;
+        private Sprite _missionSprite;
+        private Image[] _missionMarkers;
         private Color32[] _pixels;
         private bool[] _mask;
         private MinimapArea _shownArea;
@@ -107,6 +112,7 @@ namespace BetterTogether.UI
             _pixels = new Color32[SpriteTexturePixels * SpriteTexturePixels];
             _mask = new bool[SpriteTexturePixels * SpriteTexturePixels];
             BuildMateSprite();
+            BuildMissionMarkers();
 
             _map.raycastTarget = false;
             _selfMarker.raycastTarget = false;
@@ -138,6 +144,7 @@ namespace BetterTogether.UI
         {
             DestroySprite(ref _arrowSprite, ref _arrowTexture);
             DestroySprite(ref _mateSprite, ref _mateTexture);
+            DestroySprite(ref _missionSprite, ref _missionTexture);
         }
 
         private void LateUpdate()
@@ -168,6 +175,7 @@ namespace BetterTogether.UI
             UpdateSelf(area, local);
             UpdateFire();
             UpdateMates(area, local);
+            UpdateMissions(area, local);
         }
 
         // Only in a running match, with an area in the scene and a spawned local player.
@@ -563,6 +571,9 @@ namespace BetterTogether.UI
             for (var i = 0; i < _labels.Length; i++)
                 _labels[i].gameObject.SetActive(false);
 
+            for (var i = 0; i < _missionMarkers.Length; i++)
+                _missionMarkers[i].gameObject.SetActive(false);
+
             _cageCount.gameObject.SetActive(false);
             _selfMarker.gameObject.SetActive(false);
             _hasSelfRole = false;
@@ -615,6 +626,90 @@ namespace BetterTogether.UI
         }
 
         // A little gnome figurine (pointed hat over a round body) in plaster with an ink outline: the stone teammate.
+        // Mission markers (C11): pending photos and butterflies, and the gnomes during the camper's reward. Copies of the self marker.
+        private void BuildMissionMarkers()
+        {
+            for (var y = 0; y < SpriteTexturePixels; y++)
+            {
+                for (var x = 0; x < SpriteTexturePixels; x++)
+                {
+                    var dx = (x + 0.5f) / SpriteTexturePixels - 0.5f;
+                    var dy = (y + 0.5f) / SpriteTexturePixels - 0.5f;
+                    var radius = dx * dx + dy * dy;
+                    _mask[y * SpriteTexturePixels + x] = radius <= 0.36f * 0.36f && radius >= 0.2f * 0.2f;
+                }
+            }
+
+            PaintMask(Theme.cream);
+            _missionTexture = NewSpriteTexture("MinimapMission");
+            _missionTexture.SetPixels32(_pixels);
+            _missionTexture.Apply(false);
+            _missionSprite = Sprite.Create(_missionTexture, new Rect(0, 0, SpriteTexturePixels, SpriteTexturePixels), new Vector2(0.5f, 0.5f));
+
+            _missionMarkers = new Image[MissionMarkers];
+            for (var i = 0; i < MissionMarkers; i++)
+            {
+                _missionMarkers[i] = Instantiate(_selfMarker, _selfMarker.transform.parent);
+                _missionMarkers[i].rectTransform.localRotation = Quaternion.identity;
+                _missionMarkers[i].raycastTarget = false;
+            }
+        }
+
+        private void UpdateMissions(MinimapArea area, PlayerCharacter local)
+        {
+            var used = 0;
+            var match = MatchManager.Instance;
+            var layout = MissionLayout.Current;
+            if (match != null && layout != null && match.MissionsRunning && local != null)
+            {
+                if (local.Role == PlayerRole.Camper)
+                {
+                    for (var slot = 0; slot < MissionLayout.PhotoTasks; slot++)
+                    {
+                        var subject = layout.Subject(slot);
+                        if (subject != null && !match.IsPhotoDone(slot))
+                            ShowMission(ref used, area, subject.Point, _missionSprite);
+                    }
+
+                    if (match.RevealRemaining > 0f)
+                    {
+                        var gnomes = Petrifiable.All;
+                        for (var i = 0; i < gnomes.Count; i++)
+                        {
+                            if (gnomes[i] != null)
+                                ShowMission(ref used, area, gnomes[i].transform.position, _mateSprite);
+                        }
+                    }
+                }
+                else
+                {
+                    for (var i = 0; i < layout.ButterflyCount; i++)
+                    {
+                        if (match.IsButterflyAvailable(i))
+                            ShowMission(ref used, area, layout.Butterfly(i).Position, _missionSprite);
+                    }
+                }
+            }
+
+            for (var i = used; i < _missionMarkers.Length; i++)
+            {
+                if (_missionMarkers[i].gameObject.activeSelf)
+                    _missionMarkers[i].gameObject.SetActive(false);
+            }
+        }
+
+        private void ShowMission(ref int used, MinimapArea area, Vector3 world, Sprite sprite)
+        {
+            if (used >= _missionMarkers.Length)
+                return;
+
+            var marker = _missionMarkers[used++];
+            marker.sprite = sprite;
+            Place(marker.rectTransform, area, world.x, world.z);
+            if (!marker.gameObject.activeSelf)
+                marker.gameObject.SetActive(true);
+        }
+
         private void BuildMateSprite()
         {
             const float n = SpriteTexturePixels;

@@ -79,6 +79,10 @@ namespace BetterTogether.EditorTools
             new("SFX_Watched", "watched", 0.55f, false, 20f, 0.3f, 0.02f),
             new("SFX_BreakPress", "break_press", 0.45f, false, 20f, 0.03f, 0.08f),
             new("SFX_BreakFree", "break_free", 0.7f, true, 18f, 0.1f, 0.03f),
+            new("SFX_ButterflyCatch", "butterfly_catch", 0.7f, true, 14f, 0.1f, 0.05f),
+            new("SFX_MissionStep", "mission_step", 0.7f, false, 20f, 0.1f, 0.01f),
+            new("SFX_MissionComplete", "mission_complete", 0.8f, false, 20f, 0.2f, 0f),
+            new("SFX_Swarm", "swarm", 0.8f, false, 20f, 0.5f, 0.02f),
         };
 
         [MenuItem("GnoMore/Construir sonidos generados")]

@@ -89,8 +89,10 @@ namespace BetterTogether.Networking
                     if (other != camper && other.PlayerId < player.PlayerId)
                         index++;
 
-                var round = index / _gnomeSpawns.Length;
-                point = _gnomeSpawns[index % _gnomeSpawns.Length];
+                // With a seed only every other point is used, so the points run out twice as fast.
+                var seeded = MatchManager.Instance != null && MatchManager.Instance.Seed != 0;
+                var round = index / Mathf.Max(1, seeded ? _gnomeSpawns.Length / 2 : _gnomeSpawns.Length);
+                point = _gnomeSpawns[GnomeSpawnIndex(index)];
                 if (point != null)
                 {
                     // Extra gnomes reuse the points, shifted sideways like GetSpawnPose does.
@@ -109,6 +111,17 @@ namespace BetterTogether.Networking
             }
 
             return pose;
+        }
+
+        // With a match seed the set of points turns, and gnomes take every other one so they stay apart. Same on every peer.
+        private int GnomeSpawnIndex(int rank)
+        {
+            var count = _gnomeSpawns.Length;
+            var seed = MatchManager.Instance != null ? MatchManager.Instance.Seed : 0;
+            if (seed == 0)
+                return rank % count;
+
+            return (rank * 2 + (seed & int.MaxValue) % count) % count;
         }
 
         /// <summary>

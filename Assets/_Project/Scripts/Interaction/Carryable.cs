@@ -675,6 +675,16 @@ namespace BetterTogether.Interaction
         /// <summary>Authority only: drops the item and puts it back where it started, without a sound.</summary>
         public void ResetForMatch() => ReturnToStart(false);
 
+        /// <summary>Where the item starts this match.</summary>
+        public Vector3 StartPosition => _startPosition;
+
+        /// <summary>Every peer: moves the start pose to this match's spot, so a lost item comes back here, also after a master change.</summary>
+        public void SetStartPosition(Vector3 position)
+        {
+            _startPosition = position;
+            _startPoseValid = ComputeStartPoseValid();
+        }
+
         /// <summary>Authority only: drops the item and puts it back at its start pose. Everyone hears it when <paramref name="announce"/> is true.</summary>
         private void ReturnToStart(bool announce) => Relocate(_startPosition, _startRotation, announce);
 

@@ -293,6 +293,28 @@ def rustle(d, count, level):
     return out * np.hanning(len(out)) ** 0.4 * level
 
 
+# ------------------------------------------------------------------ Missions
+
+def butterfly_catch():
+    notes = [(0.0, 1568), (0.06, 2093)]
+    return mix(0.36, (0.0, band(noise(0.1), 1500, 6000) * decay(0.1, 0.03) * 0.5), *[(s, modal(0.28, [(f, 0.07, 0.6)])) for s, f in notes])
+
+
+def mission_step():
+    return mix(0.42, (0.0, modal(0.3, [(784, 0.09, 0.6), (1568, 0.05, 0.2)])), (0.09, modal(0.3, [(1175, 0.1, 0.7), (2350, 0.05, 0.2)])))
+
+
+def mission_complete():
+    notes = [(0.0, 523), (0.1, 659), (0.2, 784), (0.32, 1047)]
+    return mix(1.0, *[(s, modal(0.6, [(f, 0.2, 0.6), (f * 2, 0.08, 0.2)])) for s, f in notes])
+
+
+def swarm():
+    d = 1.4
+    flutter = 0.5 + 0.5 * np.sin(2 * np.pi * 34 * times(d))
+    return band(noise(d), 500, 3500) * flutter * np.hanning(int(d * SR)) ** 0.6
+
+
 # ------------------------------------------------------------------ UI
 
 def ui_click():
@@ -325,6 +347,7 @@ CLIPS = {
     "log_handoff_a": lambda: wood(230), "log_handoff_b": lambda: wood(265),
     "log_snap": log_snap, "log_unsnap": log_unsnap, "fire_ready": fire_ready,
     "watched": watched, "break_press": break_press, "break_free": break_free,
+    "butterfly_catch": butterfly_catch, "mission_step": mission_step, "mission_complete": mission_complete, "swarm": swarm,
 }
 
 
