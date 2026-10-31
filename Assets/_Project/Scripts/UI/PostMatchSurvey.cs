@@ -58,6 +58,10 @@ namespace BetterTogether.UI
 
         private void Awake()
         {
+            // First of all: the panel is saved active in the scene, and every exit below would leave it on screen with dead buttons.
+            if (_panel != null)
+                _panel.SetActive(false);
+
             if (!Debug.isDebugBuild)
             {
                 enabled = false;
@@ -99,7 +103,6 @@ namespace BetterTogether.UI
             _moment.characterLimit = MaxMomentLength;
             _moment.onSelect.AddListener(_ => FirstPersonCamera.UiTyping = true);
             _moment.onDeselect.AddListener(_ => FirstPersonCamera.UiTyping = false);
-            _panel.SetActive(false);
         }
 
         private void OnDisable()
