@@ -35,11 +35,13 @@ namespace BetterTogether.Environment
         private void Update()
         {
             var fire = FireplaceManager.Instance;
-            var lit = fire != null && fire.Object != null && fire.Object.IsValid && fire.IsLit;
+            var ready = fire != null && fire.Object != null && fire.Object.IsValid;
+            var lit = ready && fire.IsLit;
             if (!_seen)
             {
                 // First look (late joiner, scene start): take the state as it is, without the puff.
-                _seen = true;
+                // The fire may not be spawned yet: wait for it, or a late joiner would take a burning fire for one just lit.
+                _seen = ready;
                 Apply(lit, true);
                 return;
             }

@@ -47,6 +47,7 @@ namespace BetterTogether.UI
         private float _start;
         private float _peakAlpha;
         private Petrifiable _target;
+        private Petrifiable _lastLocked;
         private Vector2 _lastPosition;
         private float _lastEndHalf;
 
@@ -96,6 +97,11 @@ namespace BetterTogether.UI
             if (gaze == null)
                 return;
 
+            // The shot can release the lock in the same tick, so the frame needs the last gnome that was focused.
+            var locked = gaze.LockedTarget;
+            if (locked != null)
+                _lastLocked = locked;
+
             var seq = gaze.ShotSeq;
             if (seq == _lastShotSeq)
                 return;
@@ -109,7 +115,7 @@ namespace BetterTogether.UI
         {
             var reduced = FlashSettings.ReduceFlashes;
             _peakAlpha = reduced ? _reducedScale : 1f;
-            _target = gaze.LockedTarget;
+            _target = gaze.LockedTarget != null ? gaze.LockedTarget : _lastLocked;
             _start = Time.unscaledTime;
             _active = true;
             _lastEndHalf = _endHalfRange.y;

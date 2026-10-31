@@ -1127,7 +1127,8 @@ namespace BetterTogether.Fireplace
         /// before accepting it), so the thrower can draw the big splash. Presentation only.
         /// </summary>
         public bool IsBalloonImpact(Vector3 point) =>
-            _isSpawned && IsLit && HorizontalDistance(point) <= _balloonHitRadius && Mathf.Abs(point.y - transform.position.y) <= AreaHeight;
+            _isSpawned && MatchManager.AllowsInteraction && IsLit && LitGrace.ExpiredOrNotRunning(Runner)
+            && HorizontalDistance(point) <= _balloonHitRadius && Mathf.Abs(point.y - transform.position.y) <= AreaHeight;
 
         /// <summary>Steam over the fire for a balloon that landed on it (the thrower draws the water splash). Presentation only.</summary>
         public void PresentBalloonImpact()
