@@ -61,10 +61,27 @@ namespace BetterTogether.EditorTools
         // Renders the open scene from above (crown hidden while it renders) and writes Sprites/UI/Minimap_Abrazo.png.
         private static bool BakeMinimapPicture()
         {
-            var crown = _root != null ? _root.Find(MinimapCanopyPath) : null;
-            var crownWasActive = crown != null && crown.gameObject.activeSelf;
-            if (crown != null)
-                crown.gameObject.SetActive(false);
+            // Hidden from the picture: the crown, so the tree reads, and everything the map must not give away.
+            var hidden = new System.Collections.Generic.List<GameObject>();
+            void Hide(Transform t)
+            {
+                if (t != null && t.gameObject.activeSelf)
+                {
+                    t.gameObject.SetActive(false);
+                    hidden.Add(t.gameObject);
+                }
+            }
+
+            if (_root != null)
+            {
+                Hide(_root.Find(MinimapCanopyPath));
+                Hide(_root.Find("Items"));
+                Hide(_root.Find("Escondites"));
+                Hide(_root.Find("Senuelos"));
+            }
+
+            var bucket = FindInScene("Bucket");
+            Hide(bucket != null ? bucket.transform : null);
 
             var paper = new Color32(0xF9, 0xEA, 0xC8, 0xFF);
             var ink = new Color32(0x5E, 0x2C, 0x12, 0xFF);
@@ -103,8 +120,8 @@ namespace BetterTogether.EditorTools
             }
             finally
             {
-                if (crown != null)
-                    crown.gameObject.SetActive(crownWasActive);
+                foreach (var go in hidden)
+                    go.SetActive(true);
 
                 target.Release();
                 Object.DestroyImmediate(target);

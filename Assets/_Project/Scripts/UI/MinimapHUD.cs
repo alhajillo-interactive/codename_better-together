@@ -419,7 +419,7 @@ namespace BetterTogether.UI
                 for (var x = 0; x < n; x++)
                 {
                     var dx = Mathf.Abs(x + 0.5f - n * 0.5f);
-                    pixels[y * n + x] = dx <= half ? new Color32(255, 255, 255, 255) : new Color32(255, 255, 255, 0);
+                    pixels[y * n + x] = dx <= half ? new Color32(255, 255, 255, 255) : new Color32(255, 255, 255, 0); // ui-color-ok: white mask of a sprite, tinted at runtime
                 }
             }
 
