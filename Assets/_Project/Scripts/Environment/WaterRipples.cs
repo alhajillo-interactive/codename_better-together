@@ -1,5 +1,6 @@
 using BetterTogether.Audio;
 using BetterTogether.Interaction;
+using System.Collections.Generic;
 using BetterTogether.Player;
 using UnityEngine;
 
@@ -47,6 +48,8 @@ namespace BetterTogether.Environment
             public int Sweep;
         }
 
+        private static readonly List<WaterRipples> Instances = new();
+
         private const int MaxTracked = 64;
         private readonly Tracked[] _tracked = new Tracked[MaxTracked];
         private int _trackedCount;
@@ -57,13 +60,19 @@ namespace BetterTogether.Environment
         private ParticleSystem.EmitParams _emit;
         private bool _wadeThisScan;
         private float _nextWadeSfx;
+        private WaterBody _body;
 
         private void Awake()
         {
+            _body = GetComponent<WaterBody>();
             _basePosition = transform.position;
             if (_rings == null)
                 _rings = GetComponentInChildren<ParticleSystem>();
         }
+
+        private void OnEnable() => Instances.Add(this);
+
+        private void OnDisable() => Instances.Remove(this);
 
         private void LateUpdate()
         {
@@ -156,6 +165,31 @@ namespace BetterTogether.Environment
             _wadeThisScan = true;
             _nextWadeSfx = Time.time + _wadeSfxCooldown;
             _wadeSfx.PlayAt(surface);
+        }
+
+        /// <summary>
+        /// Draws one ring on the surface of whichever pool contains the horizontal position of <paramref name="position"/>.
+        /// Returns false (and draws nothing) when the point is not over water. Allocation-free.
+        /// </summary>
+        public static bool EmitAt(Vector3 position, float size)
+        {
+            for (var i = 0; i < Instances.Count; i++)
+            {
+                var ripples = Instances[i];
+                var body = ripples._body;
+                if (body == null)
+                    continue;
+
+                var dx = position.x - body.CenterXZ.x;
+                var dz = position.z - body.CenterXZ.y;
+                if (dx * dx + dz * dz > body.Radius * body.Radius)
+                    continue;
+
+                ripples.Emit(new Vector3(position.x, body.TopY, position.z), size);
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>Draws one ring at a point on the water; also usable by other presentation (e.g. a falling bomb).</summary>

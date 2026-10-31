@@ -1,5 +1,6 @@
 using BetterTogether.Audio;
 using BetterTogether.Combat;
+using BetterTogether.Environment;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
@@ -59,8 +60,14 @@ namespace BetterTogether.Fireplace
         [SerializeField, Min(0.05f)] private float _ringRadius = 0.35f;
         [Tooltip("Width of the aim line (m).")]
         [SerializeField, Min(0.005f)] private float _lineWidth = 0.03f;
-        [Tooltip("Particles of the splash when a balloon lands or bursts.")]
+        [Tooltip("Particles of the small splash (a balloon landing away from the fire, or bursting in the hand).")]
         [SerializeField, Min(0)] private int _splashCount = 18;
+        [Tooltip("C9.9: particles of the big splash when a balloon lands on the lit fire (the splash system holds 64).")]
+        [SerializeField, Min(0)] private int _fireSplashCount = 48;
+        [Tooltip("C9.9: size (m) of the ring drawn by WaterRipples when a balloon lands in the water.")]
+        [SerializeField, Min(0.05f)] private float _waterRingSize = 1.4f;
+        [Tooltip("C9.9: a landing point at most this far (m) above the water surface counts as landing in the water.")]
+        [SerializeField, Min(0f)] private float _waterContactHeight = 0.3f;
         [Tooltip("Fraction of the life left under which the balloon in the hand wobbles to warn it is about to burst.")]
         [SerializeField, Range(0f, 1f)] private float _warnFraction = 0.2f;
         [Tooltip("Heard by everyone when a balloon is filled.")]
@@ -418,9 +425,7 @@ namespace BetterTogether.Fireplace
             {
                 _flying = false;
                 SetProjectileVisible(false);
-                var landing = PositionAt(ThrowOrigin, ThrowVelocity, flight);
-                EmitSplash(landing);
-                _splashSfx.PlayAt(landing);
+                PresentLanding(PositionAt(ThrowOrigin, ThrowVelocity, flight));
                 return;
             }
 
@@ -498,13 +503,39 @@ namespace BetterTogether.Fireplace
             SetAimVisible(true);
         }
 
-        private void EmitSplash(Vector3 position)
+        // C9.9: three looks for the same replicated landing point (derived on every peer, nothing sent): a big splash with steam
+        // on the lit fire (the same predicate the fire's authority uses to accept the hit), rings on the water, or a small splash.
+        private void PresentLanding(Vector3 landing)
         {
-            if (_splash == null || _splashCount <= 0)
+            var fire = FireplaceManager.Instance;
+            if (fire != null && fire.IsBalloonImpact(landing))
+            {
+                EmitSplash(landing, _fireSplashCount);
+                fire.PresentBalloonImpact();
+            }
+            else if (WaterBody.TryGetSurface(landing, out var top) && landing.y < top + _waterContactHeight)
+            {
+                var surface = new Vector3(landing.x, top, landing.z);
+                EmitSplash(surface, _splashCount);
+                WaterRipples.EmitAt(surface, _waterRingSize);
+            }
+            else
+            {
+                EmitSplash(landing, _splashCount);
+            }
+
+            _splashSfx.PlayAt(landing);
+        }
+
+        private void EmitSplash(Vector3 position) => EmitSplash(position, _splashCount);
+
+        private void EmitSplash(Vector3 position, int count)
+        {
+            if (_splash == null || count <= 0)
                 return;
 
             _splash.transform.position = position;
-            _splash.Emit(_splashCount);
+            _splash.Emit(count);
         }
 
         private void SetHandVisible(bool visible)

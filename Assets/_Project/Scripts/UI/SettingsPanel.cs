@@ -47,6 +47,9 @@ namespace BetterTogether.UI
         [Tooltip("Toggle (same style as the microphone button) for 'Reducir destellos': caps the camera flashes. Saved in PlayerPrefs 'reduceFlashes'.")]
         [SerializeField] private Button _reduceFlashesButton;
         [SerializeField] private TMP_Text _reduceFlashesLabel;
+        [Tooltip("Toggle for 'Efectos de velocidad: sí/no' (screen-edge wind lines while sprinting). Saved in PlayerPrefs 'speedFx'.")]
+        [SerializeField] private Button _speedFxButton;
+        [SerializeField] private TMP_Text _speedFxLabel;
         [Tooltip("Toggle for 'Mapa: mantener / alternar' (camp plan key held or toggled). Saved in PlayerPrefs 'mapToggle'.")]
         [SerializeField] private Button _mapModeButton;
         [SerializeField] private TMP_Text _mapModeLabel;
@@ -76,6 +79,8 @@ namespace BetterTogether.UI
                 _reduceFlashesButton.onClick.AddListener(OnReduceFlashesClicked);
             if (_mapModeButton != null)
                 _mapModeButton.onClick.AddListener(OnMapModeClicked);
+            if (_speedFxButton != null)
+                _speedFxButton.onClick.AddListener(OnSpeedFxClicked);
             if (_closeButton != null)
                 _closeButton.onClick.AddListener(Close);
 
@@ -97,6 +102,8 @@ namespace BetterTogether.UI
                 _reduceFlashesButton.onClick.RemoveListener(OnReduceFlashesClicked);
             if (_mapModeButton != null)
                 _mapModeButton.onClick.RemoveListener(OnMapModeClicked);
+            if (_speedFxButton != null)
+                _speedFxButton.onClick.RemoveListener(OnSpeedFxClicked);
             if (_closeButton != null)
                 _closeButton.onClick.RemoveListener(Close);
         }
@@ -180,6 +187,7 @@ namespace BetterTogether.UI
             RefreshMic();
             RefreshFlashes();
             RefreshMapMode();
+            RefreshSpeedFx();
         }
 
         private static void SetSlider(Slider slider, float value)
@@ -238,6 +246,19 @@ namespace BetterTogether.UI
             MapSettings.Toggle = !MapSettings.Toggle;
             PlayerPrefs.Save();
             RefreshMapMode();
+        }
+
+        private void OnSpeedFxClicked()
+        {
+            SpeedFxSettings.Enabled = !SpeedFxSettings.Enabled;
+            PlayerPrefs.Save();
+            RefreshSpeedFx();
+        }
+
+        private void RefreshSpeedFx()
+        {
+            if (_speedFxLabel != null)
+                _speedFxLabel.text = SpeedFxSettings.Enabled ? "Efectos de velocidad: sí" : "Efectos de velocidad: no";
         }
 
         private void RefreshMapMode()

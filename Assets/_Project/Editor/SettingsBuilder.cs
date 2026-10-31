@@ -111,6 +111,9 @@ namespace BetterTogether.EditorTools
             EnsureMapMode(content, font);
             Set(so, "_mapModeButton", content.Find("Window/MapMode")?.GetComponent<Button>());
             Set(so, "_mapModeLabel", content.Find("Window/MapMode/Label")?.GetComponent<TMP_Text>());
+            EnsureSpeedFx(content, font);
+            Set(so, "_speedFxButton", content.Find("Window/SpeedFx")?.GetComponent<Button>());
+            Set(so, "_speedFxLabel", content.Find("Window/SpeedFx/Label")?.GetComponent<TMP_Text>());
             Set(so, "_closeButton", content.Find("Window/Close")?.GetComponent<Button>());
             Set(so, "_voiceSettings", FindVoiceSettings());
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -148,6 +151,7 @@ namespace BetterTogether.EditorTools
             CreateText("TalkKey", window, font, "", 32, TextAlignmentOptions.Center, 50f);
             CreateButton("ReduceFlashes", window, font, "Reducir destellos: no", 70f);
             CreateButton("MapMode", window, font, "Mapa: mantener", 70f);
+            CreateButton("SpeedFx", window, font, "Efectos de velocidad: sí", 70f);
             CreateButton("Close", window, font, "Cerrar", 70f);
             window.sizeDelta = new Vector2(window.sizeDelta.x, ReduceFlashesWindowHeight);
             return content;
@@ -188,6 +192,24 @@ namespace BetterTogether.EditorTools
 
             if (window.sizeDelta.y < ReduceFlashesWindowHeight)
                 window.sizeDelta = new Vector2(window.sizeDelta.x, ReduceFlashesWindowHeight);
+        }
+
+        // C9.9: an existing prefab gets the "Efectos de velocidad" button above Close. The vertical spacing is tightened (14 -> 8)
+        // so the window still fits the 1080 canvas with the extra row. Nothing is written when the button exists.
+        private static void EnsureSpeedFx(Transform content, TMP_FontAsset font)
+        {
+            var window = content.Find("Window") as RectTransform;
+            if (window == null || window.Find("SpeedFx") != null)
+                return;
+
+            CreateButton("SpeedFx", window, font, "Efectos de velocidad: sí", 70f);
+            var created = window.Find("SpeedFx");
+            var close = window.Find("Close");
+            if (created != null && close != null)
+                created.SetSiblingIndex(close.GetSiblingIndex());
+
+            if (window.TryGetComponent<VerticalLayoutGroup>(out var layout) && layout.spacing > 8f)
+                layout.spacing = 8f;
         }
 
         private static void CreateSliderRow(Transform parent, TMP_FontAsset font, string rowName, string label, float min, float max)

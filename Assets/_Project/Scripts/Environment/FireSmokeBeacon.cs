@@ -14,7 +14,11 @@ namespace BetterTogether.Environment
         [Tooltip("Smoke column that plays while the campfire is lit. Empty = the first ParticleSystem below this object.")]
         [SerializeField] private ParticleSystem _smoke;
 
+        [Tooltip("C9.9: extra smoke particles emitted in one go when the fire is lit (a puff before the column builds up). 0 = none.")]
+        [SerializeField, Min(0)] private int _puffCount = 14;
+
         private bool _playing;
+        private bool _seen;
 
         private void Awake()
         {
@@ -22,13 +26,28 @@ namespace BetterTogether.Environment
                 _smoke = GetComponentInChildren<ParticleSystem>();
         }
 
-        private void OnEnable() => Apply(false, true);
+        private void OnEnable()
+        {
+            _seen = false;
+            Apply(false, true);
+        }
 
         private void Update()
         {
             var fire = FireplaceManager.Instance;
             var lit = fire != null && fire.Object != null && fire.Object.IsValid && fire.IsLit;
+            if (!_seen)
+            {
+                // First look (late joiner, scene start): take the state as it is, without the puff.
+                _seen = true;
+                Apply(lit, true);
+                return;
+            }
+
+            var starting = lit && !_playing;
             Apply(lit, false);
+            if (starting && _smoke != null && _puffCount > 0)
+                _smoke.Emit(_puffCount);
         }
 
         private void Apply(bool lit, bool force)

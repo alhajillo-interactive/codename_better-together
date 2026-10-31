@@ -101,6 +101,12 @@ namespace BetterTogether.Interaction
         [Tooltip("Heard by everyone, from the start pose, when a lost item returns.")]
         [SerializeField] private SoundCue _respawnSfx;
 
+        [Header("Pickup bounce (C9.9)")]
+        [Tooltip("Scale the model starts at when the item changes carrier (picked up, dropped, handed over); it eases back to 1. 1 = no bounce.")]
+        [SerializeField, Min(1f)] private float _bounceScale = 1.15f;
+        [Tooltip("Seconds of the bounce.")]
+        [SerializeField, Min(0.02f)] private float _bounceTime = 0.12f;
+
         [Header("Water")]
         [Tooltip("Buoyancy of a loose item in water: upward acceleration at full submersion as a multiple of gravity. Above 1 it floats; the equilibrium sits at 1 / this fraction submerged.")]
         [SerializeField, Min(0f)] private float _buoyancy = 2.2f;
@@ -145,6 +151,12 @@ namespace BetterTogether.Interaction
         // Heavy-item strain tug (local drawing only): a collider-free visual child nudged by the straining holder.
         private Transform _strainVisual;
         private Vector3 _strainRestLocal;
+        private Vector3 _strainRestScale = Vector3.one;
+        // Presentation only: the carrier last seen, and when the current scale bounce started (-1 = none).
+        private bool _bounceSeen;
+        private PlayerInteractor _bounceHolder;
+        private int _bounceCount;
+        private float _bounceStart = -1f;
         private Rigidbody _body;
         private NetworkTransform _networkTransform;
         private Vector3 _startPosition;
@@ -331,6 +343,7 @@ namespace BetterTogether.Interaction
                 {
                     _strainVisual = child;
                     _strainRestLocal = child.localPosition;
+                    _strainRestScale = child.localScale;
                     return;
                 }
             }
@@ -461,6 +474,8 @@ namespace BetterTogether.Interaction
             _isSpawned = true;
             All.Add(this);
             _outsideSince = -1f;
+            _bounceSeen = false; // A late joiner or a new master sees the carrier as it is: no bounce for a state that already existed.
+            _bounceStart = -1f;
             ApplyPhysicsOwnership();
         }
 
@@ -1242,6 +1257,7 @@ namespace BetterTogether.Interaction
         public override void Render()
         {
             UpdateHandOffFeedback();
+            UpdateBounce();
 
             // No colliders while the item flies between holders or into a slot, so it does not shove anything on its way.
             // A predicted grab also keeps them off: the item sits in front of the view before the replicated state says so.
@@ -1252,6 +1268,40 @@ namespace BetterTogether.Interaction
             _collidersEnabled = shouldEnable;
             foreach (var c in _colliders)
                 c.enabled = shouldEnable;
+        }
+
+        // C9.9: a short scale pop of the model (a collider-free visual child only, never the replicated root or the colliders)
+        // whenever the replicated carrier changes. The first call after Spawned only records the carrier.
+        private void UpdateBounce()
+        {
+            var count = HolderCount;
+            var holder = Holder(0);
+            if (!_bounceSeen)
+            {
+                _bounceSeen = true;
+                _bounceHolder = holder;
+                _bounceCount = count;
+            }
+            else if (count != _bounceCount || holder != _bounceHolder)
+            {
+                _bounceHolder = holder;
+                _bounceCount = count;
+                _bounceStart = Time.time;
+            }
+
+            if (_bounceStart < 0f || _strainVisual == null)
+                return;
+
+            var u = (Time.time - _bounceStart) / _bounceTime;
+            if (u >= 1f)
+            {
+                _bounceStart = -1f;
+                _strainVisual.localScale = _strainRestScale;
+                return;
+            }
+
+            var eased = 1f - (1f - u) * (1f - u);
+            _strainVisual.localScale = _strainRestScale * Mathf.Lerp(_bounceScale, 1f, eased);
         }
 
         // The item passing from the only holder to another one: everyone hears it, the receiver also feels it.

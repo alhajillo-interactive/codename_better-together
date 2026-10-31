@@ -238,6 +238,9 @@ namespace BetterTogether.Player
             _isSpawned = false;
         }
 
+        /// <summary>True between Spawned and Despawned: networked state may be read (presentation scripts guard with it).</summary>
+        public bool IsSpawned => _isSpawned;
+
         /// <summary>True while crouched (replicated, so remote players report it too). False when not spawned.</summary>
         public bool IsCrouching => _isSpawned && Crouching;
 

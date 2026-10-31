@@ -123,6 +123,18 @@ namespace BetterTogether.Fireplace
         [SerializeField] private ParticleSystem _steam;
         [Tooltip("Point light that follows the fire states and flickers.")]
         [SerializeField] private Light _fireLight;
+        [Tooltip("C9.9: burst of flame (manual Emit) at the moment the fire is lit. Empty = none.")]
+        [SerializeField] private ParticleSystem _flare;
+        [Tooltip("C9.9: flare particles emitted when the fire is lit.")]
+        [SerializeField, Min(0)] private int _flareCount = 28;
+        [Tooltip("C9.9: light punch when the fire is lit: intensity multiplier (x) and range multiplier (y) at the first instant; both ease back to 1.")]
+        [SerializeField] private Vector2 _ignitePunch = new(1.8f, 1.3f);
+        [Tooltip("C9.9: seconds the light punch of the ignition lasts.")]
+        [SerializeField, Min(0.05f)] private float _ignitePunchTime = 0.4f;
+        [Tooltip("C9.9: steam particles emitted when a water balloon lands on the lit fire.")]
+        [SerializeField, Min(0)] private int _balloonSteamBurst = 16;
+        [Tooltip("C9.9: when the fire becomes weakened the flame drops to this fraction of its weakened size at once, then settles.")]
+        [SerializeField, Range(0.3f, 1f)] private float _weakenUndershoot = 0.7f;
         [Tooltip("Looping hiss whose volume grows with the pour.")]
         [SerializeField] private AudioSource _hissLoop;
         [Tooltip("Seconds the flame takes to grow from a spark to full size when the fire is lit.")]
@@ -222,6 +234,9 @@ namespace BetterTogether.Fireplace
         private readonly PendingHit[] _pendingHits = new PendingHit[MaxPendingHits];
         // Presentation only: when the fire was last lit on this peer (a late joiner sees it fully grown) and the light smoothing.
         private float _igniteStart = float.NegativeInfinity;
+        private float _ignitePunchStart = float.NegativeInfinity;
+        private bool _weakenedSeen;
+        private bool _lastWeakened;
         private float _lightLevel;
         private float _lightReach;
         private float _flickerSeed;
@@ -343,6 +358,8 @@ namespace BetterTogether.Fireplace
             UpdateLabel();
             UpdateFire();
             _igniteStart = float.NegativeInfinity; // Late joiners see the fire as it is now, without the ignition.
+            _ignitePunchStart = float.NegativeInfinity;
+            _weakenedSeen = false; // The first Render only records whether the fire is weakened (no shrink for a late joiner).
             _lightLevel = 0f;
             _lightReach = 0f;
         }
@@ -1043,8 +1060,11 @@ namespace BetterTogether.Fireplace
             {
                 _lightSfx.PlayAt(transform.position);
                 _igniteStart = Time.time;
+                _ignitePunchStart = Time.time;
                 if (_ignitionSpark != null)
                     _ignitionSpark.Play();
+                if (_flare != null && _flareCount > 0)
+                    _flare.Emit(_flareCount);
             }
             else
             {
@@ -1100,6 +1120,38 @@ namespace BetterTogether.Fireplace
         {
             if (_fire != null && _fire.activeSelf != IsLit)
                 _fire.SetActive(IsLit);
+        }
+
+        /// <summary>
+        /// True when a balloon landing at <paramref name="point"/> counts as a hit on this fire (the same test the authority applies
+        /// before accepting it), so the thrower can draw the big splash. Presentation only.
+        /// </summary>
+        public bool IsBalloonImpact(Vector3 point) =>
+            _isSpawned && IsLit && HorizontalDistance(point) <= _balloonHitRadius && Mathf.Abs(point.y - transform.position.y) <= AreaHeight;
+
+        /// <summary>Steam over the fire for a balloon that landed on it (the thrower draws the water splash). Presentation only.</summary>
+        public void PresentBalloonImpact()
+        {
+            if (_steam != null && _balloonSteamBurst > 0)
+                _steam.Emit(_balloonSteamBurst);
+        }
+
+        // C9.9: the fire turning weakened (first balloon) makes the flame drop at once. Read from replicated state in Render;
+        // the first call after Spawned only records it, so a late joiner or a new master sees no shrink.
+        private void TrackWeakened()
+        {
+            var weakened = IsWeakened;
+            if (!_weakenedSeen)
+            {
+                _weakenedSeen = true;
+                _lastWeakened = weakened;
+                return;
+            }
+
+            if (weakened && !_lastWeakened && MatchManager.AllowsInteraction)
+                _fireFactor = Mathf.Min(_fireFactor, Mathf.Lerp(1f, DouseFireScale, _weakenedDouse) * _weakenUndershoot);
+
+            _lastWeakened = weakened;
         }
 
         // The flames shrink as the water is poured.
@@ -1175,8 +1227,13 @@ namespace BetterTogether.Fireplace
             var on = _lightLevel > 0.01f;
             if (_fireLight.enabled != on)
                 _fireLight.enabled = on;
-            _fireLight.intensity = _lightLevel * (1f + noise * _flickerAmount);
-            _fireLight.range = _lightReach * (1f + noise * _flickerAmount * 0.5f);
+            // C9.9: the ignition punch decays quadratically over its time (1 = no punch).
+            var punch = 1f - Mathf.Clamp01((Time.time - _ignitePunchStart) / _ignitePunchTime);
+            punch *= punch;
+            var intensityPunch = 1f + (_ignitePunch.x - 1f) * punch;
+            var rangePunch = 1f + (_ignitePunch.y - 1f) * punch;
+            _fireLight.intensity = _lightLevel * intensityPunch * (1f + noise * _flickerAmount);
+            _fireLight.range = _lightReach * rangePunch * (1f + noise * _flickerAmount * 0.5f);
         }
 
         // The hiss grows with the pour and stops with it; a late joiner mid-pour just hears the current stretch.
@@ -1256,6 +1313,7 @@ namespace BetterTogether.Fireplace
 
         public override void Render()
         {
+            TrackWeakened();
             UpdateFire();
             RefreshDouseLabel();
             UpdateFireScale();
