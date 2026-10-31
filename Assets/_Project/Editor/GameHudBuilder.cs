@@ -85,6 +85,7 @@ namespace BetterTogether.EditorTools
             var frozen = BuildFrozenView(rootRect, theme, font);
             var album = BuildAlbumSlot(rootRect, theme);
             BuildTeammates(rootRect, theme, font);
+            BuildMinimap(rootRect, theme);
 
             // Front layer: crosshair, prompt, warnings, badges.
             var crosshair = BuildCrosshair(rootRect);
@@ -608,6 +609,119 @@ namespace BetterTogether.EditorTools
 
             for (var i = 0; i < values.Length; i++)
                 array.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
+        }
+
+        // Minimap (C9.5): 240x240 board in the top-right corner, 12 px under the Teammates row (which is 78 px tall, 40 px from the top),
+        // so it never overlaps the row whether it is shown or not. Root "Minimap" (MinimapHUD) > Panel (wood frame, ink outline,
+        // CanvasGroup) > Map (RawImage, 12 px inset) > fixed pool of markers. Idempotent: existing objects are kept, references rewired.
+        private const float MinimapSize = 240f;
+        private const float MinimapInset = 12f;
+        private const float MinimapTop = 40f + TeammateIconSize + TeammateNameHeight + 12f;
+        private const float MinimapMarkerSize = 30f;
+        private const float MinimapSelfSize = 28f;
+        private const int MinimapFixedMarkers = 6;
+        private const int MinimapMateMarkers = 2;
+
+        private static void BuildMinimap(RectTransform parent, UiTheme theme)
+        {
+            var root = Child(parent, "Minimap", out var created);
+            if (created)
+            {
+                Place(root, Vector2.one, Vector2.one, Vector2.one, new Vector2(-64f, -MinimapTop), new Vector2(MinimapSize, MinimapSize));
+                root.SetSiblingIndex(4);
+            }
+
+            var panel = Child(root, "Panel", out var panelCreated);
+            var panelImage = GetOrAdd<Image>(panel.gameObject);
+            var group = GetOrAdd<CanvasGroup>(panel.gameObject);
+            if (panelCreated)
+            {
+                Stretch(panel);
+                if (theme.frame != null)
+                {
+                    panelImage.sprite = theme.frame;
+                    panelImage.type = Image.Type.Sliced;
+                    panelImage.color = Color.white;
+                }
+                else
+                {
+                    panelImage.color = theme.cream;
+                }
+
+                panelImage.raycastTarget = false;
+                var outline = GetOrAdd<Outline>(panel.gameObject);
+                outline.effectColor = theme.ink;
+                outline.effectDistance = new Vector2(3f, -3f);
+                group.interactable = false;
+                group.blocksRaycasts = false;
+                panel.gameObject.SetActive(false);
+            }
+
+            var map = Child(panel, "Map", out var mapCreated);
+            var raw = GetOrAdd<RawImage>(map.gameObject);
+            if (mapCreated)
+            {
+                Stretch(map);
+                map.offsetMin = new Vector2(MinimapInset, MinimapInset);
+                map.offsetMax = new Vector2(-MinimapInset, -MinimapInset);
+                raw.color = Color.white;
+                raw.raycastTarget = false;
+                GetOrAdd<RectMask2D>(map.gameObject);
+            }
+
+            var fixedMarkers = new Object[MinimapFixedMarkers];
+            for (var i = 0; i < MinimapFixedMarkers; i++)
+                fixedMarkers[i] = MinimapMarker(map, $"Fixed{i + 1}", MinimapMarkerSize, false);
+
+            var bucket = MinimapMarker(map, "Bucket", MinimapMarkerSize, false);
+            var mates = new Object[MinimapMateMarkers];
+            for (var i = 0; i < MinimapMateMarkers; i++)
+                mates[i] = MinimapMarker(map, $"Mate{i + 1}", MinimapMarkerSize, false);
+
+            // Last child: the arrow of the local player draws over everything else.
+            var self = MinimapMarker(map, "Self", MinimapSelfSize, true);
+
+            var hud = GetOrAdd<MinimapHUD>(root.gameObject);
+            var serialized = new SerializedObject(hud);
+            SetObjectField(serialized, "_panel", panel.gameObject);
+            SetObjectField(serialized, "_group", group);
+            SetObjectField(serialized, "_map", raw);
+            SetObjectField(serialized, "_bucketMarker", bucket);
+            SetObjectField(serialized, "_selfMarker", self);
+            SetArray(serialized.FindProperty("_fixedMarkers"), fixedMarkers);
+            SetArray(serialized.FindProperty("_mateMarkers"), mates);
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // A marker image anchored to the centre of the map (MinimapHUD moves it); starts hidden and without a sprite.
+        private static Image MinimapMarker(RectTransform map, string name, float size, bool last)
+        {
+            var rect = Child(map, name, out var created);
+            var image = GetOrAdd<Image>(rect.gameObject);
+            if (created)
+            {
+                Place(rect, Center, Center, Center, Vector2.zero, new Vector2(size, size));
+                image.preserveAspect = true;
+                image.raycastTarget = false;
+                rect.gameObject.SetActive(false);
+            }
+
+            if (last)
+                rect.SetAsLastSibling();
+
+            return image;
+        }
+
+        private static void SetObjectField(SerializedObject target, string field, Object value)
+        {
+            var property = target.FindProperty(field);
+            if (property == null)
+            {
+                Debug.LogError($"{LogPrefix} {target.targetObject.GetType().Name} has no serialized field '{field}'.");
+                return;
+            }
+
+            property.objectReferenceValue = value;
         }
 
         // Lilita title font with the ink outline, only when the text is created (later editor tweaks survive).

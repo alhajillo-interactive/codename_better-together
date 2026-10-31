@@ -383,6 +383,10 @@ namespace BetterTogether.EditorTools
             MarkStaticScenery();
             Validate();
 
+            // C9.5: fresh minimap picture and its MinimapArea (fixed points from the constants above).
+            if (BakeMinimapPicture())
+                EnsureMinimapArea();
+
             Lightmapping.lightingDataAsset = null;
             FloatingAudit.AuditOpenScene();
             EditorSceneManager.MarkSceneDirty(_scene);
