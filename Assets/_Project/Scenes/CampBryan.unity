@@ -6926,7 +6926,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Player.CameraFocus
   _focusFov: 35
   _transitionTime: 0.2
-  _focusSensitivity: 0.55
+  _focusSensitivity: 0.3
 --- !u!114 &1443689792
 MonoBehaviour:
   m_ObjectHideFlags: 0
