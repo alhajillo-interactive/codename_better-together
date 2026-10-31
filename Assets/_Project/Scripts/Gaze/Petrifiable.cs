@@ -131,7 +131,10 @@ namespace BetterTogether.Gaze
         private bool HoldsStill => (bool)IsPetrified || (_stack != null && _stack.IsTowerFrozen);
 
         /// <summary>True while the camper cannot lock this player (just broke free or was kicked free).</summary>
-        public bool IsGazeImmune => _isSpawned && !GazeImmunity.ExpiredOrNotRunning(Runner);
+        public bool IsGazeImmune => _isSpawned && (!GazeImmunity.ExpiredOrNotRunning(Runner) || IsLockedInCage);
+
+        /// <summary>True while a cage holds this player: it has no time limit, so it stays out of reach of the camera until freed.</summary>
+        public bool IsLockedInCage => _isSpawned && GnomeCage.IsCaged(Object.Id);
 
         /// <summary>Presses accumulated while frozen (decays when the player stops pressing).</summary>
         public float BreakProgress => _isSpawned ? CurrentBreak : 0f;

@@ -731,6 +731,7 @@ namespace BetterTogether.UI
                 _shakeText ??= _shakeLabel.text;
                 _shakeLabel.text = caged ? "Enjaulado · espera a tus compañeros" : _shakeText;
                 _ringRoot.gameObject.SetActive(!caged);
+                _frozenFrame.gameObject.SetActive(!caged); // Not a photo any more: the sepia frame stays for the stone.
             }
 
             if (caged)

@@ -86,8 +86,8 @@ namespace BetterTogether.UI
 
             HudSupport.SetEnabled(_crosshair, true);
 
-            // Channel A: one thing in the centre. A petrified gnome sees the break-free widget only, so no prompt.
-            if (Petrifiable.Local is { IsStone: true })
+            // Channel A: one thing in the centre. A petrified or caged gnome sees its own widget only, so no prompt.
+            if (Petrifiable.Local is { IsStone: true } or { IsLockedInCage: true })
             {
                 HudSupport.SetActive(_promptRoot, false);
                 HudSupport.SetActive(_watchedWarning.gameObject, false);

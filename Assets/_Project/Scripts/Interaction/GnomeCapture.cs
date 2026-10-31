@@ -364,7 +364,7 @@ namespace BetterTogether.Interaction
 
                 case CaptureState.Caged:
                     _movement.IsCaptured = true;
-                    // Out of the stone (it is not needed any more) and into the cage; the cage keeps it immune meanwhile.
+                    // Out of the stone (it is not needed any more) and into the cage; Petrifiable.IsLockedInCage keeps it immune meanwhile.
                     _petrifiable.ReleaseForCage(cage.CageSeconds + _exitImmunity);
                     _movement.Teleport(cage.InsidePoint.position, cage.InsidePoint.rotation);
                     break;
