@@ -31,7 +31,7 @@ Un claro en el bosque con **dos árboles gigantes abrazados**: uno oscuro y vivo
 | **Huerto** | (−28, −20), 0 | 10 señuelos: disparar a todo gasta placas. Leño (−30, −22), 2 escondites |
 | **Risco** | (−30, 18), 0–4,5 | Terrazas en bucle. Leño arriba (−34, 22, 3), salchicha (−30, 28, 4,5) |
 | **Hondonada** | (0, 26), −1 | Cobertura densa. Leño (6, 30), 3 escondites, boca norte de la Rendija |
-| **Poza** | (28, 26), −1,5 | Agua (26, 22), leño (26, 30), salchicha en el muelle (34, 28), **cubeta** al sur en (32, 6) |
+| **Poza** | (28, 26), −1,5 | Agua (toda la orilla), leño (26, 30), salchicha en el muelle (34, 28), **cubeta** al sur en (32, 6) |
 
 El campista necesita 5 de 7 leños y sólo 3 están al sur: **tiene que cruzar al norte**, y al hacerlo deja la fogata sola.
 

@@ -53,6 +53,7 @@ namespace BetterTogether.EditorTools
         private const float StreamInnerHalfWidth = 0.8f;
         private const float StreamOuterHalfWidth = 2.8f;
         private const float WaterRadius = 10.4f;
+        private const int ShorePoints = 24;
         private const float WaterTopY = -1.05f;
         private const float WaterThickness = 0.6f;
 
@@ -329,7 +330,6 @@ namespace BetterTogether.EditorTools
         private static Scene _scene;
         private static Transform _root;
         private static int _layerEnv;
-        private static int _layerGnomeOnly;
         private static int _layerOccluder;
         private static int _layerWater;
         private static int _groundMask;
@@ -355,7 +355,6 @@ namespace BetterTogether.EditorTools
             ResetAmbience();
             _bushCount = 0;
             _layerEnv = LayerMask.NameToLayer("Environment");
-            _layerGnomeOnly = LayerMask.NameToLayer("GnomeOnly");
             _layerOccluder = LayerMask.NameToLayer("Occluder");
             _layerWater = LayerMask.NameToLayer("Water");
             _groundMask = 1 << _layerEnv;
@@ -880,7 +879,9 @@ namespace BetterTogether.EditorTools
             var stream = DistanceToSegment(new Vector2(x, z), StreamStart, StreamEnd);
             var channel = StreamDepth * (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(StreamInnerHalfWidth, StreamOuterHalfWidth, stream)));
             h = Mathf.Min(h, channel);
-            return Mathf.Max(h, FireMound(x, z));
+            // Only inside the mound: outside it the mound is 0 and must not lift the sunken ground.
+            var mound = FireMound(x, z);
+            return mound > 0f ? Mathf.Max(h, mound) : h;
         }
 
         private static TerrainLayer LoadLayer(int index)
@@ -1471,7 +1472,7 @@ namespace BetterTogether.EditorTools
                 var center = OnCircle(CrackRadius, degrees, (top - StairSink) * 0.5f);
                 var tangent = new Vector3(-Mathf.Sin(degrees * Mathf.Deg2Rad), 0f, Mathf.Cos(degrees * Mathf.Deg2Rad));
                 var depth = CrackLedgeStepDeg * Mathf.Deg2Rad * CrackRadius;
-                Box(crack, $"Repisa_{k}", center, new Vector3(CrackLedgeWidth, top + StairSink, depth), rock, _layerGnomeOnly, true, Quaternion.LookRotation(tangent));
+                Box(crack, $"Repisa_{k}", center, new Vector3(CrackLedgeWidth, top + StairSink, depth), rock, _layerEnv, true, Quaternion.LookRotation(tangent));
             }
 
             var inclineStart = CrackStartDeg + CrackLedgeStepDeg * CrackLedges;
@@ -1486,7 +1487,7 @@ namespace BetterTogether.EditorTools
                 var rotation = Quaternion.LookRotation((p1 - p0).normalized);
                 var length = (p1 - p0).magnitude;
                 var center = (p0 + p1) * 0.5f - rotation * Vector3.up * (RampThickness * 0.5f);
-                var part = Box(crack, $"Tramo_{j}", center, new Vector3(CrackInclineWidth, RampThickness, length + 0.3f), rock, _layerGnomeOnly, true, rotation);
+                var part = Box(crack, $"Tramo_{j}", center, new Vector3(CrackInclineWidth, RampThickness, length + 0.3f), rock, _layerEnv, true, rotation);
                 MarkFloating(part);
             }
 
@@ -1511,7 +1512,7 @@ namespace BetterTogether.EditorTools
                 var depth = span * Mathf.Deg2Rad * TowerStairRadius / steps;
                 var center = OnCircle(TowerStairRadius, degrees, (top - StairSink) * 0.5f);
                 var tangent = new Vector3(-Mathf.Sin(degrees * Mathf.Deg2Rad), 0f, Mathf.Cos(degrees * Mathf.Deg2Rad));
-                Box(parent, $"EscaleraTorre_{k}", center, new Vector3(TowerStairWidth, top + StairSink, depth + 0.02f), material, _layerGnomeOnly, true, Quaternion.LookRotation(tangent));
+                Box(parent, $"EscaleraTorre_{k}", center, new Vector3(TowerStairWidth, top + StairSink, depth + 0.02f), material, _layerEnv, true, Quaternion.LookRotation(tangent));
             }
 
             var firstStep = OnCircle(TowerStairRadius, TowerStairStartDeg, 0f);
@@ -1519,7 +1520,7 @@ namespace BetterTogether.EditorTools
             var along = firstStep - ledge;
             var landingCenter = (firstStep + ledge) * 0.5f;
             landingCenter.y = (TowerLedgeTopY - StairSink) * 0.5f;
-            Box(parent, "DescansoTorre", landingCenter, new Vector3(TowerStairWidth, TowerLedgeTopY + StairSink, along.magnitude), material, _layerGnomeOnly, true, Quaternion.LookRotation(along.normalized));
+            Box(parent, "DescansoTorre", landingCenter, new Vector3(TowerStairWidth, TowerLedgeTopY + StairSink, along.magnitude), material, _layerEnv, true, Quaternion.LookRotation(along.normalized));
         }
 
         // ================================================================== Stairs
@@ -1651,11 +1652,11 @@ namespace BetterTogether.EditorTools
 
             // Camper stairs (0.3 m steps) and gnome stairs (0.4 m steps) between levels.
             Stairs(group, "EscaleraA", new Vector3(-26f, 0f, 6.5f), Vector3.forward, 2f, CragTerraceLowY, CamperStepHeight, _layerEnv, rock);
-            Stairs(group, "EscaleraGnomoA", new Vector3(-23f, 0f, 7.2f), Vector3.forward, 1.2f, CragTerraceLowY, GnomeStepHeight, _layerGnomeOnly, rock);
+            Stairs(group, "EscaleraGnomoA", new Vector3(-23f, 0f, 7.2f), Vector3.forward, 1.2f, CragTerraceLowY, GnomeStepHeight, _layerEnv, rock);
             Stairs(group, "EscaleraB", new Vector3(-32f, CragTerraceLowY, 13.5f), Vector3.forward, 2f, CragTerraceMidY - CragTerraceLowY, CamperStepHeight, _layerEnv, rock);
-            Stairs(group, "EscaleraGnomoB", new Vector3(-29f, CragTerraceLowY, 14.2f), Vector3.forward, 1.2f, CragTerraceMidY - CragTerraceLowY, GnomeStepHeight, _layerGnomeOnly, rock);
+            Stairs(group, "EscaleraGnomoB", new Vector3(-29f, CragTerraceLowY, 14.2f), Vector3.forward, 1.2f, CragTerraceMidY - CragTerraceLowY, GnomeStepHeight, _layerEnv, rock);
             Stairs(group, "EscaleraC", new Vector3(-31f, CragTerraceMidY, 20.5f), Vector3.forward, 2f, CragTerraceHighY - CragTerraceMidY, CamperStepHeight, _layerEnv, rock);
-            Stairs(group, "EscaleraGnomoC", new Vector3(-28f, CragTerraceMidY, 21.2f), Vector3.forward, 1.2f, CragTerraceHighY - CragTerraceMidY, GnomeStepHeight, _layerGnomeOnly, rock);
+            Stairs(group, "EscaleraGnomoC", new Vector3(-28f, CragTerraceMidY, 21.2f), Vector3.forward, 1.2f, CragTerraceHighY - CragTerraceMidY, GnomeStepHeight, _layerEnv, rock);
 
             PlaceRock("Rock_01.prefab", group, "Roca_1", new Vector2(-24f, 25f), 30f);
             PlaceRock("Rock_02.prefab", group, "Roca_2", new Vector2(-37f, 5f), 100f);
@@ -1746,10 +1747,14 @@ namespace BetterTogether.EditorTools
             var path = serialized.FindProperty("_path");
             if (path != null)
             {
-                var offsets = new[] { new Vector2(-1.5f, 0f), new Vector2(0f, 1.5f), new Vector2(1.5f, 0f), new Vector2(0f, -1.5f) };
-                path.arraySize = offsets.Length;
-                for (var i = 0; i < offsets.Length; i++)
-                    path.GetArrayElementAtIndex(i).vector3Value = GroundPoint(WaterSourceSpot + offsets[i]);
+                // The whole shore fills the bucket: a closed ring at the water's edge, so nobody has to wade to a hidden point.
+                path.arraySize = ShorePoints + 1;
+                for (var i = 0; i <= ShorePoints; i++)
+                {
+                    var angle = i * Mathf.PI * 2f / ShorePoints;
+                    var shore = PozaCenter + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * WaterRadius;
+                    path.GetArrayElementAtIndex(i).vector3Value = new Vector3(shore.x, WaterTopY, shore.y);
+                }
             }
 
             var volumes = serialized.FindProperty("_volumes");
