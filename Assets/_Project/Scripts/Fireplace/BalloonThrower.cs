@@ -136,6 +136,9 @@ namespace BetterTogether.Fireplace
         /// <summary>Life left of the balloon in the hand, 1 (just filled) to 0 (bursts now). Presentation only; 0 without balloon.</summary>
         public float LifeFraction => HasBalloon ? 1f - Mathf.Clamp01(NetAnchor.Elapsed(Runner, FilledTick) / _lifeSeconds) : 0f;
 
+        /// <summary>Sequence of the last throw (replicated); the fireplace compares hits against it.</summary>
+        public byte LastThrowSeq => ThrowSeq;
+
         /// <summary>Where the last throw lands, from the replicated throw data (same value on every peer).</summary>
         private Vector3 Landing => PositionAt(ThrowOrigin, ThrowVelocity, ThrowFlight);
 
@@ -150,13 +153,15 @@ namespace BetterTogether.Fireplace
                 if (!_isSpawned || !HasStateAuthority || Has || !Active || !MatchManager.AllowsInteraction || !IsGnome)
                     return false;
 
-                if (_interactor.CarriedOrPredicted != null || IsDisabled || (_stack != null && _stack.IsRiding)
-                    || (_movement != null && _movement.IsFrozen))
+                if (_interactor.CarriedOrPredicted != null || IsDisabled || (_stack != null && _stack.IsRiding) || IsFrozen)
                     return false;
 
                 return WaterSource.IsNearAny(transform.position, 0f);
             }
         }
+
+        // Watched by the camper or part of a frozen tower: no filling and no throwing.
+        private bool IsFrozen => (_movement != null && _movement.IsFrozen) || (_stack != null && _stack.IsTowerFrozen);
 
         // Stone (photographed), stunned (kicked) or captured: the balloon bursts and nothing can be filled or thrown.
         private bool IsDisabled =>
@@ -253,7 +258,7 @@ namespace BetterTogether.Fireplace
             {
                 if (!MatchManager.AllowsInteraction || !IsGnome || IsDisabled || NetAnchor.Elapsed(Runner, FilledTick) >= _lifeSeconds)
                     Has = false; // Bursts in the hand: peers see Has fall without a new ThrowSeq.
-                else if (throwing && NetAnchor.Elapsed(Runner, ThrowTick) >= _minThrowInterval)
+                else if (throwing && !IsFrozen && NetAnchor.Elapsed(Runner, ThrowTick) >= _minThrowInterval)
                     Throw();
             }
             else if (fill && CanFill)
@@ -293,15 +298,18 @@ namespace BetterTogether.Fireplace
             _hitPending = false;
             var fire = FireplaceManager.Instance;
             if (fire != null && MatchManager.AllowsInteraction)
-                fire.RPC_BalloonHit(_hitPoint, Id);
+                fire.RPC_BalloonHit(_hitPoint, Id, ThrowSeq);
         }
 
         /// <summary>
         /// Fireplace authority only: checks that this gnome made a throw that has landed at
         /// <paramref name="point"/> (from the replicated throw data) and that it was not counted yet.
         /// </summary>
-        public bool TryAcceptHit(Vector3 point)
+        public bool TryAcceptHit(Vector3 point, byte seq)
         {
+            if (ThrowSeq != seq)
+                return false; // An older throw (a newer one already replaced it).
+
             if (!_isSpawned || !IsGnome || ThrowTick == 0)
                 return false;
 

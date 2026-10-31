@@ -743,7 +743,7 @@ namespace BetterTogether.Interaction
             if (IsOutOfAction(from) || IsOutOfAction(to))
                 return false;
 
-            if (FindHeldBy(to) != null)
+            if (FindHeldBy(to) != null || (to.TryGetComponent<BalloonThrower>(out var balloon) && balloon.HasBalloon))
             {
                 reason = $"{to.GetComponent<PlayerCharacter>().DisplayName} tiene las manos ocupadas";
                 return false;

@@ -184,7 +184,7 @@ namespace BetterTogether.UI
             {
                 text = "[Espacio] Bajarte";
             }
-            else if (local.Focused == null && carried == null && BalloonThrower.Local is not { HasBalloon: true }
+            else if (local.Focused == null && carried == null && BalloonThrower.Local is not { HasBalloon: true } and not { CanFill: true }
                 && GnomeStack.Local != null && GnomeStack.Local.Aimed != null)
             {
                 var stack = GnomeStack.Local;

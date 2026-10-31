@@ -109,6 +109,8 @@ namespace BetterTogether.Fireplace
         [SerializeField, Min(0f)] private float _balloonMinInterval = 0.5f;
         [Tooltip("How much a weakened fire looks doused (0 = like a full fire, 1 = like a finished pour): lower flames, more steam.")]
         [SerializeField, Range(0f, 1f)] private float _weakenedDouse = 0.5f;
+        [Tooltip("A balloon hit that arrives before the replicated throw data of its thrower waits this long (s) for it, then is dropped.")]
+        [SerializeField, Min(0f)] private float _balloonPendingSeconds = 0.5f;
         [Tooltip("Optional smoke puff played when the fire goes out.")]
         [SerializeField] private ParticleSystem _smokePuff;
 
@@ -206,6 +208,18 @@ namespace BetterTogether.Fireplace
         // Authority only (never networked): tick of the last accepted balloon hit; after a master change the first hit is free.
         private bool _hasBalloonHit;
         private int _lastBalloonHitTick;
+        // Authority only: one waiting hit per thrower (fixed array, nothing allocates).
+        private struct PendingHit
+        {
+            public bool Used;
+            public NetworkBehaviourId Thrower;
+            public Vector3 Point;
+            public byte Seq;
+            public int Tick;
+        }
+
+        private const int MaxPendingHits = 8;
+        private readonly PendingHit[] _pendingHits = new PendingHit[MaxPendingHits];
         // Presentation only: when the fire was last lit on this peer (a late joiner sees it fully grown) and the light smoothing.
         private float _igniteStart = float.NegativeInfinity;
         private float _lightLevel;
@@ -526,26 +540,83 @@ namespace BetterTogether.Fireplace
         /// A camper (or anyone who is not that gnome's client) is refused.
         /// </summary>
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        public void RPC_BalloonHit(Vector3 point, NetworkBehaviourId throwerId, RpcInfo info = default)
+        public void RPC_BalloonHit(Vector3 point, NetworkBehaviourId throwerId, byte seq, RpcInfo info = default)
         {
-            if (!_isSpawned || !MatchManager.AllowsInteraction || !IsLit || !LitGrace.ExpiredOrNotRunning(Runner))
-                return;
-
-            if (!Runner.TryFindBehaviour(throwerId, out BalloonThrower thrower) || !thrower.IsGnome)
+            if (!_isSpawned || !Runner.TryFindBehaviour(throwerId, out BalloonThrower thrower))
                 return;
 
             // Only the thrower's own client may report its hit. A call made on this very peer carries no remote source.
+            // Checked here, on arrival, never when a waiting hit is checked again.
             var owner = thrower.Object.StateAuthority;
             if (info.Source != owner && !(info.Source == PlayerRef.None && Runner.LocalPlayer == owner))
                 return;
 
+            if (ApplyBalloonHit(thrower, point, seq) != HitResult.Wait)
+                return;
+
+            // The RPC beat the replicated throw data (short flight, lost packet): keep it a moment, one per thrower.
+            var slot = -1;
+            for (var i = 0; i < _pendingHits.Length; i++)
+            {
+                if (_pendingHits[i].Used && _pendingHits[i].Thrower == throwerId)
+                {
+                    slot = i;
+                    break;
+                }
+
+                if (slot < 0 && !_pendingHits[i].Used)
+                    slot = i;
+            }
+
+            if (slot >= 0)
+                _pendingHits[slot] = new PendingHit { Used = true, Thrower = throwerId, Point = point, Seq = seq, Tick = Runner.Tick.Raw };
+        }
+
+        private enum HitResult
+        {
+            Done,
+            Wait,
+        }
+
+        // Authority only: waiting hits are checked again every tick until their thrower's data arrives or the time is up.
+        private void TickPendingHits()
+        {
+            for (var i = 0; i < _pendingHits.Length; i++)
+            {
+                ref var pending = ref _pendingHits[i];
+                if (!pending.Used)
+                    continue;
+
+                if (NetAnchor.Elapsed(Runner, pending.Tick) > _balloonPendingSeconds
+                    || !Runner.TryFindBehaviour(pending.Thrower, out BalloonThrower thrower)
+                    || ApplyBalloonHit(thrower, pending.Point, pending.Seq) != HitResult.Wait)
+                    pending.Used = false;
+            }
+        }
+
+        // Authority only: every rule of a hit. Wait means the thrower's replicated sequence has not reached the reported one yet
+        // (compared by signed difference, so the byte can wrap around).
+        private HitResult ApplyBalloonHit(BalloonThrower thrower, Vector3 point, byte seq)
+        {
+            if (!MatchManager.AllowsInteraction || !IsLit || !LitGrace.ExpiredOrNotRunning(Runner) || !thrower.IsGnome)
+                return HitResult.Done;
+
+            if ((sbyte)(seq - thrower.LastThrowSeq) > 0)
+                return HitResult.Wait;
+
+            ApplyAcceptedBalloonHit(thrower, point, seq);
+            return HitResult.Done;
+        }
+
+        private void ApplyAcceptedBalloonHit(BalloonThrower thrower, Vector3 point, byte seq)
+        {
             if (HorizontalDistance(point) > _balloonHitRadius || Mathf.Abs(point.y - transform.position.y) > AreaHeight)
                 return;
 
             if (_hasBalloonHit && NetAnchor.Elapsed(Runner, _lastBalloonHitTick) < _balloonMinInterval)
                 return;
 
-            if (!thrower.TryAcceptHit(point))
+            if (!thrower.TryAcceptHit(point, seq))
                 return;
 
             _hasBalloonHit = true;
@@ -590,6 +661,7 @@ namespace BetterTogether.Fireplace
             LogsInside = _pinned.Count;
 
             TickPour();
+            TickPendingHits();
             TickEjectedLog();
 
             if (IsLit && !HasEnoughWood)
@@ -657,7 +729,6 @@ namespace BetterTogether.Fireplace
         // The water is out: the fire dies, the bucket is empty and one log jumps out, so lighting it again takes a log and matches.
         private void FinishPour(WaterBucket bucket)
         {
-            if (Telemetry.Enabled) LogDoused();
             var pourer = Pourer;
             bucket.RequestSpill();
             PutOut(pourer);
@@ -667,6 +738,7 @@ namespace BetterTogether.Fireplace
         // and the comeback starts after enough fires put out. Called after the bucket was spilled, if there was one.
         private void PutOut(PlayerInteractor by)
         {
+            if (Telemetry.Enabled) LogDoused(by);
             if (MatchManager.Instance != null && by != null && by.Object != null && by.Object.IsValid)
                 MatchManager.Instance.Award(by.Object.StateAuthority, MatchManager.ScoreReason.Douse);
             ClearPour();
@@ -795,13 +867,16 @@ namespace BetterTogether.Fireplace
             e.Int("log", (int)log.Object.Id.Raw).Int("count", _pinned.Count).Str("how", how).Send();
         }
 
-        // Telemetry only (authority): the pour reached its end, so the fire goes out. Called before the pour state is cleared.
-        private void LogDoused()
+        // Telemetry only (authority): the fire goes out (a finished pour or a second balloon). Called before the pour state is cleared.
+        private void LogDoused(PlayerInteractor pourer)
         {
-            var pourer = Pourer;
             var valid = pourer != null && pourer.Object != null && pourer.Object.IsValid;
-            var e = valid ? Telemetry.Begin("pour_end", pourer) : Telemetry.Begin("pour_end");
-            e.Str("result", "doused").Str("reason", "none").Send();
+            if (PourTimer.IsRunning)
+            {
+                var e = valid ? Telemetry.Begin("pour_end", pourer) : Telemetry.Begin("pour_end");
+                e.Str("result", "doused").Str("reason", "none").Send();
+            }
+
             var f = valid ? Telemetry.Begin("fire_out", pourer) : Telemetry.Begin("fire_out");
             f.Int("logs", LogsInside).Int("extinguish", ExtinguishCount + 1).Send();
         }
