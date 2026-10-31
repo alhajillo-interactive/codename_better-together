@@ -181,7 +181,7 @@ namespace BetterTogether.EditorTools
 
         // ---- Sector: pool ----
         private static readonly Vector2 WaterSourceSpot = new(26f, 22f);
-        private static readonly Vector2 PoolWoodSpot = new(26f, 30f);
+        private static readonly Vector2 PoolWoodSpot = new(16.5f, 30f);
         private static readonly Vector2 DockSausageSpot = new(34f, 28f);
         private static readonly Vector2 BucketSpot = new(32f, 6f);
         private const float DockTopY = -0.8f;
@@ -279,7 +279,9 @@ namespace BetterTogether.EditorTools
         private const string BushHex = "#3E6B34";
         private const string BranchHex = "#E6DCC8";
         private const string BedHex = "#6B4A2F";
-        private const string WaterHex = "#3D7FA8";
+        private const string WaterHex = "#1F86B8";
+        private const float WaterAlpha = 0.72f;
+        private const float WaterSmoothness = 0.75f;
         private const string RoofHex = "#6F5A44";
         private const string SignPostHex = "#5B4636";
 
@@ -983,6 +985,28 @@ namespace BetterTogether.EditorTools
             var water = Cylinder(parent, "Agua", new Vector3(PozaCenter.x, WaterTopY - WaterThickness * 0.5f, PozaCenter.y),
                 WaterRadius * 2f, WaterThickness, Quaternion.identity, Mat("Agua", WaterHex), _layerWater, false);
             water.name = "Agua";
+            MakeWaterTransparent(water);
+        }
+
+        // URP Lit in transparent mode: the sandy bottom shows through, and the surface keeps a soft shine.
+        private static void MakeWaterTransparent(GameObject water)
+        {
+            var renderer = water.GetComponent<Renderer>();
+            var material = renderer.sharedMaterial;
+            ColorUtility.TryParseHtmlString(WaterHex, out var color);
+            color.a = WaterAlpha;
+            material.SetColor("_BaseColor", color);
+            material.SetFloat("_Smoothness", WaterSmoothness);
+            material.SetFloat("_Surface", 1f);
+            material.SetFloat("_Blend", 0f);
+            material.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            material.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            material.SetFloat("_ZWrite", 0f);
+            material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            material.SetOverrideTag("RenderType", "Transparent");
+            material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            EditorUtility.SetDirty(material);
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         }
 
         // ================================================================== Border
