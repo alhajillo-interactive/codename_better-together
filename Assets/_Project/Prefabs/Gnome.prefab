@@ -10628,6 +10628,7 @@ GameObject:
   - component: {fileID: 5551872472618260760}
   - component: {fileID: 3644464259120405354}
   - component: {fileID: 5581577799647099026}
+  - component: {fileID: 8267190075791073561}
   m_Layer: 9
   m_Name: Gnome
   m_TagString: Untagged
@@ -10717,6 +10718,7 @@ MonoBehaviour:
   - {fileID: 2902491068937995564}
   - {fileID: 3644464259120405354}
   - {fileID: 5581577799647099026}
+  - {fileID: 8267190075791073561}
   - {fileID: 6775593931138393117}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &2317096137556648295
@@ -11261,6 +11263,38 @@ MonoBehaviour:
   _escapeRollPunch: 1.5
   _escapePunchTime: 0.25
   _exitImmunity: 3
+--- !u!114 &8267190075791073561
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7618880620199038078}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f19f5f0af9814c0cb733b497f8652381, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Fireplace.BalloonThrower
+  _lifeSeconds: 30
+  _throwSpeed: 9
+  _throwUpAngle: 12
+  _gravity: 9.81
+  _impactMask:
+    serializedVersion: 2
+    m_Bits: 2048
+  _minThrowInterval: 0.6
+  _shader: {fileID: 4800000, guid: 650dd9526735d5b46b79224bc6e94025, type: 3}
+  _balloonDiameter: 0.13
+  _outlineScale: 1.15
+  _ownerHandOffset: {x: 0.18, y: -0.22, z: 0.45}
+  _ringRadius: 0.35
+  _lineWidth: 0.03
+  _splashCount: 18
+  _warnFraction: 0.2
+  _fillSfx: {fileID: 0}
+  _throwSfx: {fileID: 0}
+  _splashSfx: {fileID: 0}
+  _popSfx: {fileID: 0}
 --- !u!1 &7806569061932256634
 GameObject:
   m_ObjectHideFlags: 0
