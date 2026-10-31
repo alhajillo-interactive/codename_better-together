@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using BetterTogether.Audio;
 using BetterTogether.Combat;
 using BetterTogether.Diagnostics;
+using BetterTogether.Environment;
 using BetterTogether.Fireplace;
 using BetterTogether.Gaze;
 using BetterTogether.Player;
@@ -34,6 +35,9 @@ namespace BetterTogether.Interaction
     public class Carryable : NetworkBehaviour, IInteractable, IMatchResettable, IStateAuthorityChanged
     {
         private static readonly List<Carryable> All = new();
+
+        /// <summary>Every spawned item on this peer (read-only, for local presentation such as water ripples).</summary>
+        public static IReadOnlyList<Carryable> AllItems => All;
 
         [SerializeField] private string _displayName = "objeto";
         [Tooltip("Gnomes needed to move it (1 or 2). The camper always carries it alone.")]
@@ -96,6 +100,18 @@ namespace BetterTogether.Interaction
         [SerializeField, Min(0f)] private float _lostSeconds = 20f;
         [Tooltip("Heard by everyone, from the start pose, when a lost item returns.")]
         [SerializeField] private SoundCue _respawnSfx;
+
+        [Header("Water")]
+        [Tooltip("Buoyancy of a loose item in water: upward acceleration at full submersion as a multiple of gravity. Above 1 it floats; the equilibrium sits at 1 / this fraction submerged.")]
+        [SerializeField, Min(0f)] private float _buoyancy = 2.2f;
+        [Tooltip("Depth (m) of the item's centre below the surface at which it counts as fully submerged.")]
+        [SerializeField, Min(0.01f)] private float _buoyancyDepth = 0.2f;
+        [Tooltip("Linear damping in water (1/s) applied at full submersion.")]
+        [SerializeField, Min(0f)] private float _waterDrag = 3f;
+        [Tooltip("Angular damping in water (1/s) applied at full submersion.")]
+        [SerializeField, Min(0f)] private float _waterAngularDrag = 4f;
+        [Tooltip("Below this speed (m/s), with net acceleration near zero, a floating item is put to sleep so it stops writing poses.")]
+        [SerializeField, Min(0f)] private float _waterRestSpeed = 0.03f;
 
         private const float ReceiveFovPunch = 2f;
         private const float ReceiveFovPunchTime = 0.12f;
@@ -1038,6 +1054,7 @@ namespace BetterTogether.Interaction
             CheckLost(HolderCount == 0 && !IsPinned && !Inert);
 
             ApplyAuthorityKinematic();
+            ApplyBuoyancy();
 
             // Loose and falling under physics: the campfire waits for it to settle before snapping it in.
             if (HolderCount == 0 && !IsPinned && !_body.isKinematic)
@@ -1121,6 +1138,33 @@ namespace BetterTogether.Interaction
                 _body.linearVelocity = Vector3.zero;
                 _body.angularVelocity = Vector3.zero;
             }
+        }
+
+        // Authority only, loose items only (never held, pinned, inert or kinematic): a force that grows with how deep the centre
+        // is under the surface, plus damping, so the item bobs near the surface and still sleeps once calm.
+        // No networked state: the NetworkTransform replicates the pose; proxies stay kinematic.
+        private void ApplyBuoyancy()
+        {
+            if (_body.isKinematic || HolderCount > 0 || IsPinned || Inert || _body.IsSleeping())
+                return;
+
+            var centre = _body.worldCenterOfMass;
+            if (!WaterBody.TryGetSurface(centre, out var topY) || centre.y >= topY)
+                return;
+
+            var fraction = Mathf.Clamp01((topY - centre.y) / _buoyancyDepth);
+            var gravity = -Physics.gravity.y;
+            var net = gravity * (_buoyancy * fraction - 1f);
+            if (Mathf.Abs(net) < 0.05f && _body.linearVelocity.sqrMagnitude < _waterRestSpeed * _waterRestSpeed
+                && _body.angularVelocity.sqrMagnitude < _waterRestSpeed * _waterRestSpeed)
+            {
+                _body.Sleep(); // Calm and balanced: let it rest (a bump wakes it); no forces, no per-tick pose changes.
+                return;
+            }
+
+            _body.AddForce(Vector3.up * (gravity * _buoyancy * fraction), ForceMode.Acceleration);
+            _body.AddForce(-_body.linearVelocity * (_waterDrag * fraction), ForceMode.Acceleration);
+            _body.AddTorque(-_body.angularVelocity * (_waterAngularDrag * fraction), ForceMode.Acceleration);
         }
 
         // Authority only. A loose item below the kill height returns at once; one outside LevelBounds returns after _lostSeconds.
