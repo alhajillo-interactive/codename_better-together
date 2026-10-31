@@ -328,7 +328,8 @@ namespace BetterTogether.EditorTools
                 return;
             }
 
-            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+            // No dialog: this tool also runs from the command line, where a prompt would block the editor.
+            if (!EditorSceneManager.SaveOpenScenes())
             {
                 Debug.LogError($"{LogPrefix} Cancelled: save the open scenes first.");
                 return;
