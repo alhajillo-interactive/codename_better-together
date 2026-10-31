@@ -109,11 +109,14 @@ namespace BetterTogether.EditorTools
             Set(so, "_reduceFlashesButton", content.Find("Window/ReduceFlashes")?.GetComponent<Button>());
             Set(so, "_reduceFlashesLabel", content.Find("Window/ReduceFlashes/Label")?.GetComponent<TMP_Text>());
             EnsureMapMode(content, font);
-            Set(so, "_mapModeButton", content.Find("Window/MapMode")?.GetComponent<Button>());
-            Set(so, "_mapModeLabel", content.Find("Window/MapMode/Label")?.GetComponent<TMP_Text>());
             EnsureSpeedFx(content, font);
             Set(so, "_speedFxButton", content.Find("Window/SpeedFx")?.GetComponent<Button>());
             Set(so, "_speedFxLabel", content.Find("Window/SpeedFx/Label")?.GetComponent<TMP_Text>());
+            EnsureDisplayRow(content);
+            Set(so, "_mapModeButton", content.Find("Window/Row_Display/MapMode")?.GetComponent<Button>());
+            Set(so, "_mapModeLabel", content.Find("Window/Row_Display/MapMode/Label")?.GetComponent<TMP_Text>());
+            Set(so, "_renderScaleButton", content.Find("Window/Row_Display/RenderScale")?.GetComponent<Button>());
+            Set(so, "_renderScaleLabel", content.Find("Window/Row_Display/RenderScale/Label")?.GetComponent<TMP_Text>());
             Set(so, "_closeButton", content.Find("Window/Close")?.GetComponent<Button>());
             Set(so, "_voiceSettings", FindVoiceSettings());
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -181,7 +184,7 @@ namespace BetterTogether.EditorTools
         private static void EnsureMapMode(Transform content, TMP_FontAsset font)
         {
             var window = content.Find("Window") as RectTransform;
-            if (window == null || window.Find("MapMode") != null)
+            if (window == null || window.Find("MapMode") != null || window.Find("Row_Display/MapMode") != null)
                 return;
 
             CreateButton("MapMode", window, font, "Mapa: mantener", 70f);
@@ -210,6 +213,33 @@ namespace BetterTogether.EditorTools
 
             if (window.TryGetComponent<VerticalLayoutGroup>(out var layout) && layout.spacing > 8f)
                 layout.spacing = 8f;
+        }
+
+        // C10.1: the map button shares a row with its copy "Resolución", so the window keeps its height. The copy inherits the
+        // applied UI theme. Nothing is written when the row exists.
+        private static void EnsureDisplayRow(Transform content)
+        {
+            var window = content.Find("Window");
+            var mapMode = window != null ? window.Find("MapMode") : null;
+            if (mapMode == null)
+                return;
+
+            var row = NewRect("Row_Display", window);
+            row.SetSiblingIndex(mapMode.GetSiblingIndex());
+            var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.spacing = 20f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = true;
+            row.gameObject.AddComponent<LayoutElement>().preferredHeight = 70f;
+
+            mapMode.SetParent(row, false);
+            var renderScale = Object.Instantiate(mapMode.gameObject, row);
+            renderScale.name = "RenderScale";
+            renderScale.GetComponentInChildren<TMP_Text>(true).text = "Resolución: 100 %";
+            mapMode.GetComponent<LayoutElement>().flexibleWidth = 1f;
+            renderScale.GetComponent<LayoutElement>().flexibleWidth = 1f;
         }
 
         private static void CreateSliderRow(Transform parent, TMP_FontAsset font, string rowName, string label, float min, float max)

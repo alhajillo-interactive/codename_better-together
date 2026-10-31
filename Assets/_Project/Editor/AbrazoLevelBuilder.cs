@@ -11,9 +11,11 @@ using BetterTogether.Helpers;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
 using BetterTogether.Networking;
+using Unity.Cinemachine;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 
 namespace BetterTogether.EditorTools
@@ -342,6 +344,9 @@ namespace BetterTogether.EditorTools
         private static int _bushCount;
         private static Vector3 _canopyCenter;
 
+        // Longest sight line of the playable area is about 105 m; the border forest ends before this.
+        private const float CameraFarClip = 160f;
+
         // ================================================================== Entry points
 
         [MenuItem("GnoMore/Construir nivel El Abrazo")]
@@ -382,6 +387,7 @@ namespace BetterTogether.EditorTools
             FillSightLines(Group("Relleno"));
             ConfigureLevelBounds();
             MarkStaticScenery();
+            ApplyRenderBudget();
             Validate();
 
             // C9.5: fresh minimap picture and its MinimapArea (fixed points from the constants above).
@@ -395,6 +401,31 @@ namespace BetterTogether.EditorTools
             AssetDatabase.SaveAssets();
             Debug.Log($"{LogPrefix} Built {AbrazoPath}: {_bushCount} cover bushes, {DecoyPoints.Count} decoys.");
             LogSceneWeight();
+        }
+
+        // C10.1: rendering costs of this level only. The opaque texture stays on in the pipeline asset because Water.mat reads it in
+        // the older scenes; no material of this level does. Works on the open scene and does not save it.
+        public static void ApplyRenderBudget()
+        {
+            var terrain = Object.FindFirstObjectByType<Terrain>();
+            if (terrain != null)
+                terrain.drawInstanced = true;
+
+            var brain = Object.FindFirstObjectByType<CinemachineBrain>();
+            if (brain != null && brain.TryGetComponent<Camera>(out var camera))
+            {
+                camera.farClipPlane = CameraFarClip;
+                camera.GetUniversalAdditionalCameraData().requiresColorOption = CameraOverrideOption.Off;
+                EditorUtility.SetDirty(camera);
+            }
+
+            foreach (var virtualCamera in Object.FindObjectsByType<CinemachineCamera>(FindObjectsSortMode.None))
+            {
+                var lens = virtualCamera.Lens;
+                lens.FarClipPlane = CameraFarClip;
+                virtualCamera.Lens = lens;
+                EditorUtility.SetDirty(virtualCamera);
+            }
         }
 
         [MenuItem("GnoMore/Usar El Abrazo como nivel de juego")]

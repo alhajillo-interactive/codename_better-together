@@ -53,6 +53,9 @@ namespace BetterTogether.UI
         [Tooltip("Toggle for 'Mapa: mantener / alternar' (camp plan key held or toggled). Saved in PlayerPrefs 'mapToggle'.")]
         [SerializeField] private Button _mapModeButton;
         [SerializeField] private TMP_Text _mapModeLabel;
+        [Tooltip("Button that cycles 'Resolución: 100 / 85 / 70 %' (3D image only, the HUD stays sharp). Saved in PlayerPrefs 'renderScale'.")]
+        [SerializeField] private Button _renderScaleButton;
+        [SerializeField] private TMP_Text _renderScaleLabel;
 
         [SerializeField] private Button _closeButton;
 
@@ -81,6 +84,8 @@ namespace BetterTogether.UI
                 _mapModeButton.onClick.AddListener(OnMapModeClicked);
             if (_speedFxButton != null)
                 _speedFxButton.onClick.AddListener(OnSpeedFxClicked);
+            if (_renderScaleButton != null)
+                _renderScaleButton.onClick.AddListener(OnRenderScaleClicked);
             if (_closeButton != null)
                 _closeButton.onClick.AddListener(Close);
 
@@ -104,6 +109,8 @@ namespace BetterTogether.UI
                 _mapModeButton.onClick.RemoveListener(OnMapModeClicked);
             if (_speedFxButton != null)
                 _speedFxButton.onClick.RemoveListener(OnSpeedFxClicked);
+            if (_renderScaleButton != null)
+                _renderScaleButton.onClick.RemoveListener(OnRenderScaleClicked);
             if (_closeButton != null)
                 _closeButton.onClick.RemoveListener(Close);
         }
@@ -188,6 +195,7 @@ namespace BetterTogether.UI
             RefreshFlashes();
             RefreshMapMode();
             RefreshSpeedFx();
+            RefreshRenderScale();
         }
 
         private static void SetSlider(Slider slider, float value)
@@ -253,6 +261,19 @@ namespace BetterTogether.UI
             SpeedFxSettings.Enabled = !SpeedFxSettings.Enabled;
             PlayerPrefs.Save();
             RefreshSpeedFx();
+        }
+
+        private void OnRenderScaleClicked()
+        {
+            RenderScaleSettings.Next();
+            PlayerPrefs.Save();
+            RefreshRenderScale();
+        }
+
+        private void RefreshRenderScale()
+        {
+            if (_renderScaleLabel != null)
+                _renderScaleLabel.text = "Resolución: " + Mathf.RoundToInt(RenderScaleSettings.Value * 100f) + " %";
         }
 
         private void RefreshSpeedFx()

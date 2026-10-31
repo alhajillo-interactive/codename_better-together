@@ -1,5 +1,5 @@
-// Performance probe for playtests: one CSV row per second per machine (FPS, frame times, Fusion RTT, bytes/s, tick
-// rates), plus an optional on-screen summary toggled with F3. Compiles to nothing in release builds.
+// Performance probe for playtests: one CSV row per second per machine (FPS, frame times, CPU, GPU, draw calls, memory,
+// Fusion RTT, bytes/s, tick rates), plus an optional on-screen summary toggled with F3. Compiles to nothing in release builds.
 #if (UNITY_EDITOR || DEVELOPMENT_BUILD) && FUSION_WEAVER
 using System;
 using System.Collections.Generic;
@@ -11,6 +11,7 @@ using BetterTogether.Networking;
 using BetterTogether.Player;
 using Fusion;
 using Fusion.Statistics;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -29,10 +30,12 @@ namespace BetterTogether.Diagnostics
         // Frame times kept for the p99 of one sample. Above this many frames per second, the p99 covers the last ones.
         private const int FrameTimeCapacity = 512;
 
-        private const string CsvHeader = "sample,t_s,session,player_id,role,phase,players,objects,fps_avg,frame_ms_max,frame_ms_p99,rtt_ms,cloud_rtt_ms,in_bytes_s,out_bytes_s,tick_rate,send_rate";
+        private const string CsvHeader = "sample,t_s,session,player_id,role,phase,players,objects,fps_avg,frame_ms_max,frame_ms_p99,rtt_ms,cloud_rtt_ms,in_bytes_s,out_bytes_s,tick_rate,send_rate,cpu_main_ms,cpu_render_ms,gpu_ms,draws_avg,setpass_avg,tris_avg,gc_bytes_s,gc_collections,mem_mb,gfx_mb";
 
         // Shown in the overlay and in the CSV when a text value is unavailable. Numeric columns use -1 instead.
         private const string Missing = "n/d";
+
+        private const float BytesPerMegabyte = 1024f * 1024f;
 
         private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
@@ -44,6 +47,7 @@ namespace BetterTogether.Diagnostics
         private readonly float[] _sortedFrameMs = new float[FrameTimeCapacity];
         private readonly List<NetworkObject> _networkObjects = new List<NetworkObject>(256);
         private readonly GUIContent _overlayText = new GUIContent();
+        private readonly FrameTiming[] _frameTimings = new FrameTiming[1];
 
         private GUIStyle _overlayStyle;
         private StreamWriter _writer;
@@ -68,6 +72,26 @@ namespace BetterTogether.Diagnostics
         private float _frameMsMax;
         private int _sampleIndex;
 
+        // Sums of the current sample; a timing or recorder that gives no data leaves its count at zero and the CSV at -1.
+        private double _cpuMainSum;
+        private double _cpuRenderSum;
+        private double _gpuSum;
+        private int _cpuFrames;
+        private int _gpuFrames;
+        private long _drawsSum;
+        private long _setPassSum;
+        private long _trianglesSum;
+        private long _gcBytesSum;
+        private int _recordedFrames;
+        private int _gcCollections;
+
+        private ProfilerRecorder _drawsRecorder;
+        private ProfilerRecorder _setPassRecorder;
+        private ProfilerRecorder _trianglesRecorder;
+        private ProfilerRecorder _gcBytesRecorder;
+        private ProfilerRecorder _systemMemoryRecorder;
+        private ProfilerRecorder _gfxMemoryRecorder;
+
         // Created at startup so every scene gets one; nothing has to be added by hand.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void CreateAtStartup()
@@ -91,6 +115,61 @@ namespace BetterTogether.Diagnostics
             useGUILayout = false;
         }
 
+        private void OnEnable()
+        {
+            _drawsRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Render, "Draw Calls Count");
+            _setPassRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Render, "SetPass Calls Count");
+            _trianglesRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Render, "Triangles Count");
+            _gcBytesRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Allocated In Frame");
+            _systemMemoryRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "System Used Memory");
+            _gfxMemoryRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "Gfx Used Memory");
+            _gcCollections = GC.CollectionCount(0);
+        }
+
+        private void OnDisable()
+        {
+            _drawsRecorder.Dispose();
+            _setPassRecorder.Dispose();
+            _trianglesRecorder.Dispose();
+            _gcBytesRecorder.Dispose();
+            _systemMemoryRecorder.Dispose();
+            _gfxMemoryRecorder.Dispose();
+        }
+
+        /// <summary>Adds this frame's CPU, GPU and rendering counters to the sample. Reads only: nothing allocates.</summary>
+        private void AccumulateFrameCost()
+        {
+            FrameTimingManager.CaptureFrameTimings();
+            if (FrameTimingManager.GetLatestTimings(1, _frameTimings) > 0)
+            {
+                var timing = _frameTimings[0];
+                if (timing.cpuMainThreadFrameTime > 0.0)
+                {
+                    // Time spent waiting for the screen is not work, and would hide the real cost with vsync on.
+                    _cpuMainSum += Math.Max(0.0, timing.cpuMainThreadFrameTime - timing.cpuMainThreadPresentWaitTime);
+                    _cpuRenderSum += timing.cpuRenderThreadFrameTime;
+                    _cpuFrames++;
+                }
+
+                if (timing.gpuFrameTime > 0.0)
+                {
+                    _gpuSum += timing.gpuFrameTime;
+                    _gpuFrames++;
+                }
+            }
+
+            if (_drawsRecorder.Valid)
+            {
+                _drawsSum += _drawsRecorder.LastValue;
+                _setPassSum += _setPassRecorder.LastValue;
+                _trianglesSum += _trianglesRecorder.LastValue;
+                _recordedFrames++;
+            }
+
+            if (_gcBytesRecorder.Valid)
+                _gcBytesSum += _gcBytesRecorder.LastValue;
+        }
+
         private void Update()
         {
             // Unscaled time: measures real frames even if something else changed Time.timeScale.
@@ -101,6 +180,8 @@ namespace BetterTogether.Diagnostics
             _sampleElapsed += deltaTime;
             if (frameMs > _frameMsMax)
                 _frameMsMax = frameMs;
+
+            AccumulateFrameCost();
 
             // Adds this frame's bandwidth to the sample (no allocations: the dictionary is read, not copied).
             if (_stats != null && _sampleRunner != null)
@@ -141,6 +222,30 @@ namespace BetterTogether.Diagnostics
                 : 0f;
             var frameMsMax = _frameMsMax;
             var sampleTime = Time.realtimeSinceStartup;
+
+            var cpuMainMs = _cpuFrames > 0 ? (float)(_cpuMainSum / _cpuFrames) : -1f;
+            var cpuRenderMs = _cpuFrames > 0 ? (float)(_cpuRenderSum / _cpuFrames) : -1f;
+            var gpuMs = _gpuFrames > 0 ? (float)(_gpuSum / _gpuFrames) : -1f;
+            var drawsAvg = _recordedFrames > 0 ? (float)_drawsSum / _recordedFrames : -1f;
+            var setPassAvg = _recordedFrames > 0 ? (float)_setPassSum / _recordedFrames : -1f;
+            var trianglesAvg = _recordedFrames > 0 ? (float)_trianglesSum / _recordedFrames : -1f;
+            var gcBytesPerSecond = _gcBytesRecorder.Valid ? _gcBytesSum / seconds : -1f;
+            var memoryMb = _systemMemoryRecorder.Valid ? _systemMemoryRecorder.LastValue / BytesPerMegabyte : -1f;
+            var gfxMb = _gfxMemoryRecorder.Valid ? _gfxMemoryRecorder.LastValue / BytesPerMegabyte : -1f;
+            var collections = GC.CollectionCount(0);
+            var gcCollections = collections - _gcCollections;
+            _gcCollections = collections;
+
+            _cpuMainSum = 0.0;
+            _cpuRenderSum = 0.0;
+            _gpuSum = 0.0;
+            _cpuFrames = 0;
+            _gpuFrames = 0;
+            _drawsSum = 0L;
+            _setPassSum = 0L;
+            _trianglesSum = 0L;
+            _gcBytesSum = 0L;
+            _recordedFrames = 0;
 
             _sampleElapsed = 0f;
             _sampleFrames = 0;
@@ -210,9 +315,10 @@ namespace BetterTogether.Diagnostics
                 try
                 {
                     _writer.WriteLine(string.Format(Invariant,
-                        "{0},{1:0.0},{2},{3},{4},{5},{6},{7},{8:0.0},{9:0.00},{10:0.00},{11:0.0},{12:0.0},{13:0},{14:0},{15},{16}",
+                        "{0},{1:0.0},{2},{3},{4},{5},{6},{7},{8:0.0},{9:0.00},{10:0.00},{11:0.0},{12:0.0},{13:0},{14:0},{15},{16},{17:0.00},{18:0.00},{19:0.00},{20:0},{21:0},{22:0},{23:0},{24},{25:0.0},{26:0.0}",
                         _sampleIndex, sampleTime, session.Replace(',', '_'), playerId, role, phase, players, objects,
-                        fps, frameMsMax, frameMsP99, rttMs, cloudRttMs, inBytes, outBytes, tickRateText, _sendRateText));
+                        fps, frameMsMax, frameMsP99, rttMs, cloudRttMs, inBytes, outBytes, tickRateText, _sendRateText,
+                        cpuMainMs, cpuRenderMs, gpuMs, drawsAvg, setPassAvg, trianglesAvg, gcBytesPerSecond, gcCollections, memoryMb, gfxMb));
                     _writer.Flush();
                 }
                 catch (Exception e)
@@ -225,6 +331,9 @@ namespace BetterTogether.Diagnostics
 
             _overlayText.text = string.Format(Invariant,
                 "FPS {0:0} (frame max {1:0} ms, p99 {2:0} ms)\n" +
+                "CPU {13}, render {14}, GPU {15}\n" +
+                "Draws {16}, SetPass {17}, GC {18}\n" +
+                "Memoria {19}, gráfica {20}\n" +
                 "Ping {3} (nube {4})\n" +
                 "Bytes/s entrada {5}, salida {6}\n" +
                 "Jugadores {7}, objetos {8}\n" +
@@ -235,7 +344,10 @@ namespace BetterTogether.Diagnostics
                 Show(inBytes, ""), Show(outBytes, ""),
                 players, objects,
                 role, phase,
-                _sampleIndex, _writer != null ? _fileName : "sin CSV");
+                _sampleIndex, _writer != null ? _fileName : "sin CSV",
+                Show(cpuMainMs, " ms"), Show(cpuRenderMs, " ms"), Show(gpuMs, " ms"),
+                Show(drawsAvg, ""), Show(setPassAvg, ""), Show(gcBytesPerSecond, " B/s"),
+                Show(memoryMb, " MB"), Show(gfxMb, " MB"));
             _hasSample = true;
         }
 
@@ -343,7 +455,7 @@ namespace BetterTogether.Diagnostics
 
             // Bottom right, so it does not cover the top-right role panel (F1).
             const float width = 380f;
-            const float height = 130f;
+            const float height = 180f;
             GUI.Label(new Rect(DebugGuiScale.Width - width - 10f, DebugGuiScale.Height - height - 10f, width, height), _overlayText, _overlayStyle);
         }
 

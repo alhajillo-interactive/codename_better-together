@@ -9,7 +9,7 @@ Con hardware mínimo fijado por el equipo: `frame_ms_p99` ≤ 16,6 ms y memoria 
 Ampliar `PerfProbe` con `cpu_ms`, `gpu_ms`, draws, SetPass, GC y memoria (activar `enableFrameTimingStats`; hoy `in_bytes_s` sale −1 en Release). Ruta fija en build real, master y cliente por separado, un cambio por prueba.
 
 ## Paso 2: acordado, bajo riesgo
-- `m_RequireOpaqueTexture: 0`: ningún material de El Abrazo lee la escena.
+- Opaque texture apagada **sólo en la cámara de `CampAbrazo`**: ningún material de ese nivel la lee, pero `Water.mat` sí en las escenas antiguas (corregido en C10.1; apagarla en `PC_RPAsset` rompía su agua).
 - SSAO `Downsample: 1`.
 - `drawInstanced` en el terreno.
 - `far` de cámara a 160 m (higiene, sin ganancia esperada).

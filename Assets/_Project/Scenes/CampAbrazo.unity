@@ -1795,7 +1795,7 @@ Terrain:
   m_HeightmapMaximumLOD: 0
   m_ShadowCastingMode: 2
   m_DrawHeightmap: 1
-  m_DrawInstanced: 0
+  m_DrawInstanced: 1
   m_DrawTreesAndFoliage: 1
   m_StaticShadowCaster: 0
   m_IgnoreQualitySettings: 0
@@ -99389,7 +99389,7 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.02
-  far clip plane: 1000
+  far clip plane: 160
   field of view: 60
   orthographic: 0
   orthographic size: 10
@@ -99437,7 +99437,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalCameraData
   m_RenderShadows: 1
   m_RequiresDepthTextureOption: 2
-  m_RequiresOpaqueTextureOption: 2
+  m_RequiresOpaqueTextureOption: 0
   m_CameraType: 0
   m_Cameras: []
   m_RendererIndex: -1
@@ -99554,7 +99554,7 @@ MonoBehaviour:
     FieldOfView: 60
     OrthographicSize: 10
     NearClipPlane: 0.02
-    FarClipPlane: 1000
+    FarClipPlane: 160
     Dutch: 0
     ModeOverride: 0
     PhysicalProperties:
