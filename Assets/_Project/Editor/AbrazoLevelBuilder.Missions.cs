@@ -1,5 +1,6 @@
 // Side missions and per-match variation of El Abrazo (C11): the spots each item can use, the places to photograph, the butterflies
-// and the extra gnome spawns. Every spot is measured against the finished level; the ones that fail are logged and left out.
+// and the extra gnome spawns. Every spot is measured against the finished level: a spot rests on the terrain or on a walkable
+// structure, away from vegetation and props. One that fails moves to the nearest place that passes, or is logged and left out.
 using System.Collections.Generic;
 using BetterTogether.Audio;
 using BetterTogether.Interaction;
@@ -21,6 +22,23 @@ namespace BetterTogether.EditorTools
         private static readonly Vector3 SpotProbeOffset = Vector3.up * 0.5f;
         private const float SpotProbeRadius = 0.3f;
         private const float SubjectProbeRadius = 0.15f;
+        private const float SpotSearchRadius = 5f;
+        private const float SpotSearchStep = 0.75f;
+        private const int SpotSearchAngles = 12;
+        private const float SpotSeparation = 1.5f;
+        private const float ClutterMargin = 0.4f;
+        private const float ClutterHeight = 1.4f;
+        private const float ClutterMaxWidth = 10f;
+        private const float SpotMinNormalY = 0.9f;
+
+        // Colliders meant to be walked on; a spot on anything else (a bush, a rock, a tent) is not valid.
+        private static readonly string[] WalkableSurfaces = { "Terreno", "Pasarela", "Terraza", "Hombro", "Tramo", "Muelle" };
+
+        // Parts of the walkable structures themselves: an item may sit next to a railing.
+        private static readonly string[] StructureParts = { "Baranda", "Poste", "Escalera", "Tronco" };
+
+        private static readonly List<Bounds> Clutter = new();
+        private static readonly List<Vector2> TakenSpots = new();
 
         // The first spot of each item is the one of the design: the sector split of 02-diseno-v2.md stays true in every match.
         private static readonly (string item, Vector2[] extra)[] ItemVariants =
@@ -62,6 +80,8 @@ namespace BetterTogether.EditorTools
             var layout = layoutObject.AddComponent<MissionLayout>();
             var serialized = new SerializedObject(layout);
 
+            CollectClutter();
+            TakenSpots.Clear();
             FillItems(serialized.FindProperty("_items"));
             FillSubjects(serialized.FindProperty("_northSubjects"), parent,
                 ("Foto de la Poza", PozaCenter, 1f, 22f),
@@ -97,16 +117,27 @@ namespace BetterTogether.EditorTools
                 }
 
                 var home = go.transform.position;
-                var valid = new List<Vector3> { home };
+                var valid = new List<Vector3>();
+                if (FindClearSpot(new Vector2(home.x, home.z), out var clearHome))
+                {
+                    PlaceOnGround(go.transform, clearHome.x, clearHome.y, 0f, false);
+                    home = go.transform.position;
+                }
+                else
+                {
+                    Debug.LogWarning($"{LogPrefix} No clear spot near the home of {name}; it stays at {home}.");
+                }
+
+                valid.Add(home);
                 foreach (var spot in extra)
                 {
-                    if (!SpotIsFree(spot))
+                    if (!FindClearSpot(spot, out var clear))
                     {
-                        Debug.LogWarning($"{LogPrefix} Spot {spot} of {name} is blocked; left out.");
+                        Debug.LogWarning($"{LogPrefix} No clear spot near {spot} for {name}; left out.");
                         continue;
                     }
 
-                    PlaceOnGround(go.transform, spot.x, spot.y, 0f, false);
+                    PlaceOnGround(go.transform, clear.x, clear.y, 0f, false);
                     valid.Add(go.transform.position);
                 }
 
@@ -117,11 +148,94 @@ namespace BetterTogether.EditorTools
             }
         }
 
-        private static bool SpotIsFree(Vector2 spot)
+        // Every renderer counts, not only what blocks: many bushes have no solid collider.
+        private static void CollectClutter()
         {
-            var ground = GroundPoint(spot);
-            return ground.y > WaterTopY + 0.1f
-                   && !Physics.CheckSphere(ground + SpotProbeOffset, SpotProbeRadius, _groundMask | (1 << _layerOccluder), QueryTriggerInteraction.Ignore);
+            Clutter.Clear();
+            foreach (var renderer in Object.FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+            {
+                if (renderer.gameObject.scene != _scene || renderer.GetComponentInParent<Carryable>() != null)
+                    continue;
+
+                var bounds = renderer.bounds;
+                if (SurfaceKind(renderer.name) < 0 && !IsStructurePart(renderer.name) && Mathf.Max(bounds.size.x, bounds.size.z) <= ClutterMaxWidth)
+                    Clutter.Add(bounds);
+            }
+        }
+
+        private static bool IsStructurePart(string objectName)
+        {
+            for (var i = 0; i < StructureParts.Length; i++)
+            {
+                if (objectName.StartsWith(StructureParts[i]))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static int SurfaceKind(string objectName)
+        {
+            for (var i = 0; i < WalkableSurfaces.Length; i++)
+            {
+                if (objectName.StartsWith(WalkableSurfaces[i]))
+                    return i;
+            }
+
+            return -1;
+        }
+
+        // The spot itself when it passes, otherwise the nearest that does, on the same surface when the spot is on a walkable one:
+        // a log of the design on a footbridge must not end up on the ground below.
+        private static bool FindClearSpot(Vector2 spot, out Vector2 clear)
+        {
+            var kind = TryGround(spot.x, spot.y, null, out var origin) ? SurfaceKind(origin.collider.name) : -1;
+            for (var radius = 0f; radius <= SpotSearchRadius; radius += SpotSearchStep)
+            {
+                for (var i = 0; i < (radius > 0f ? SpotSearchAngles : 1); i++)
+                {
+                    var angle = i * Mathf.PI * 2f / SpotSearchAngles;
+                    clear = spot + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+                    if (!SpotIsFree(clear, kind))
+                        continue;
+
+                    TakenSpots.Add(clear);
+                    return true;
+                }
+            }
+
+            clear = spot;
+            return false;
+        }
+
+        private static bool SpotIsFree(Vector2 spot, int requiredKind)
+        {
+            if (!TryGround(spot.x, spot.y, null, out var hit))
+                return false;
+
+            var kind = SurfaceKind(hit.collider.name);
+            if (kind < 0 || (requiredKind >= 0 && kind != requiredKind) || hit.normal.y < SpotMinNormalY || hit.point.y <= WaterTopY + 0.1f)
+                return false;
+
+            if (Physics.CheckSphere(hit.point + SpotProbeOffset, SpotProbeRadius, _groundMask | (1 << _layerOccluder), QueryTriggerInteraction.Ignore))
+                return false;
+
+            for (var i = 0; i < TakenSpots.Count; i++)
+            {
+                if ((TakenSpots[i] - spot).sqrMagnitude < SpotSeparation * SpotSeparation)
+                    return false;
+            }
+
+            for (var i = 0; i < Clutter.Count; i++)
+            {
+                var bounds = Clutter[i];
+                if (spot.x > bounds.min.x - ClutterMargin && spot.x < bounds.max.x + ClutterMargin
+                    && spot.y > bounds.min.z - ClutterMargin && spot.y < bounds.max.z + ClutterMargin
+                    && bounds.max.y > hit.point.y && bounds.min.y < hit.point.y + ClutterHeight)
+                    return false;
+            }
+
+            return true;
         }
 
         private static void FillSubjects(SerializedProperty array, Transform parent, params (string label, Vector2 spot, float height, float distance)[] places)
@@ -152,13 +266,13 @@ namespace BetterTogether.EditorTools
             var built = new List<ButterflySpot>();
             for (var i = 0; i < ButterflySpots.Length; i++)
             {
-                if (!SpotIsFree(ButterflySpots[i]))
+                if (!FindClearSpot(ButterflySpots[i], out var clear))
                 {
-                    Debug.LogWarning($"{LogPrefix} Butterfly spot {ButterflySpots[i]} is blocked; left out.");
+                    Debug.LogWarning($"{LogPrefix} No clear spot near butterfly {ButterflySpots[i]}; left out.");
                     continue;
                 }
 
-                built.Add(BuildButterfly(parent, i, GroundPoint(ButterflySpots[i]) + Vector3.up * ButterflyHeight, material, cue));
+                built.Add(BuildButterfly(parent, i, GroundPoint(clear) + Vector3.up * ButterflyHeight, material, cue));
             }
 
             array.arraySize = built.Count;
@@ -229,8 +343,7 @@ namespace BetterTogether.EditorTools
                     go.transform.SetParent(first.transform.parent, false);
                 }
 
-                var spot = ExtraGnomeSpawns[i];
-                if (!SpotIsFree(spot))
+                if (!FindClearSpot(ExtraGnomeSpawns[i], out var spot))
                     Debug.LogWarning($"{LogPrefix} {name} at {spot} is blocked.");
 
                 PlaceSpawn(name, spot, new Vector3(-spot.x, 0f, -spot.y));
