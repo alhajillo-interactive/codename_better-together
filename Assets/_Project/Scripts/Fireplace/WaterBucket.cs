@@ -122,6 +122,13 @@ namespace BetterTogether.Fireplace
 
         public Carryable Carryable => _carryable;
 
+        /// <summary>How many buckets are enabled in the scene. Levels without any use <see cref="BalloonThrower"/> instead.</summary>
+        public static int InScene { get; private set; }
+
+        private void OnEnable() => InScene++;
+
+        private void OnDisable() => InScene = Mathf.Max(0, InScene - 1);
+
         private void Awake()
         {
             _carryable = GetComponent<Carryable>();

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using BetterTogether.Audio;
 using BetterTogether.Combat;
 using BetterTogether.Diagnostics;
+using BetterTogether.Fireplace;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
@@ -79,6 +80,7 @@ namespace BetterTogether.Player
         private PlayerInteractor _interactor;
         private Kickable _kickable;
         private Petrifiable _petrifiable;
+        private BalloonThrower _balloon;
         private CharacterController _controller;
         private InputAction _attack;
         private InputAction _jump;
@@ -252,6 +254,7 @@ namespace BetterTogether.Player
             _kickable = GetComponent<Kickable>();
             _petrifiable = GetComponent<Petrifiable>();
             _controller = GetComponent<CharacterController>();
+            TryGetComponent(out _balloon);
         }
 
         public override void Spawned()
@@ -296,6 +299,10 @@ namespace BetterTogether.Player
                 return;
 
             // Left click also re-locks the cursor (FirstPersonCamera), so ignore it while the cursor is free.
+            // With a water balloon in the hands the click throws it instead (BalloonThrower).
+            if (_balloon != null && _balloon.HasBalloon)
+                return;
+
             if (_attack != null && _attack.WasPressedThisFrame() && Cursor.lockState == CursorLockMode.Locked)
                 TryClimb();
         }

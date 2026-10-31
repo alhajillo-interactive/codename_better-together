@@ -59,6 +59,7 @@ namespace BetterTogether.Interaction
         private PlayerCharacter _character;
         private CharacterController _controller;
         private GnomeStack _stack;
+        private BalloonThrower _balloon;
         private bool _isSpawned;
         private float _lastCameraPitch;
         private float _publishPitchUntil;
@@ -127,6 +128,7 @@ namespace BetterTogether.Interaction
         {
             _character = GetComponent<PlayerCharacter>();
             TryGetComponent(out _stack); // Only gnomes can stack.
+            TryGetComponent(out _balloon); // Only gnomes throw water balloons.
             TryGetComponent(out _controller);
             if (_eye == null)
                 _eye = FindByName(transform, "CameraAnchor");
@@ -332,6 +334,10 @@ namespace BetterTogether.Interaction
 
             UpdateFocus();
 
+            // A balloon in the hands: no taking objects (the click throws it instead).
+            if (_balloon != null && _balloon.HasBalloon && Focused is Carryable)
+                Focused = null;
+
             // The action has a Hold interaction; WasPressedThisFrame and IsPressed ignore it.
             if (_interact == null)
                 return;
@@ -354,6 +360,11 @@ namespace BetterTogether.Interaction
             {
                 NoteInteraction();
                 Focused.Interact(this);
+            }
+            else if (_balloon != null && _balloon.TryFill())
+            {
+                // Empty hands at the water, nothing focused that accepts E: fill a balloon (below taking a focused object).
+                NoteInteraction();
             }
             else
                 UseCarried(Carried);

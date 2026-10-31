@@ -1,4 +1,5 @@
 using BetterTogether.Diagnostics;
+using BetterTogether.Fireplace;
 using BetterTogether.Match;
 using BetterTogether.Player;
 using PrimeTween;
@@ -48,6 +49,7 @@ namespace BetterTogether.UI
         private float _startTime;
         private PlayerRole _builtRole;
         private Tween _fade;
+        private bool _throwShown;
 
         private void Awake()
         {
@@ -102,6 +104,22 @@ namespace BetterTogether.UI
             }
 
             DetectUse();
+            ShowThrowVerb(local.Role);
+        }
+
+        // "Clic · lanzar" only while the gnome holds a water balloon; otherwise the attack line teaches climbing again.
+        private void ShowThrowVerb(PlayerRole role)
+        {
+            var throwing = role == PlayerRole.Gnome && BalloonThrower.Local is { HasBalloon: true };
+            if (throwing == _throwShown)
+                return;
+
+            _throwShown = throwing;
+            for (var i = 0; i < _count; i++)
+            {
+                if (_state[i].Entry.Name == "attack" && _lines[i] != null)
+                    _lines[i].text = throwing ? ControlLabels.Format(_state[i].Entry, ControlLabels.ThrowVerb) : ControlLabels.Format(_state[i].Entry);
+            }
         }
 
         private void Activate(PlayerRole role)
@@ -118,6 +136,7 @@ namespace BetterTogether.UI
         private void Rebuild(PlayerRole role)
         {
             _builtRole = role;
+            _throwShown = false;
             var entries = ControlLabels.For(role);
             _count = Mathf.Min(entries.Length, Mathf.Min(_lines.Length, _state.Length));
             _usedCount = 0;

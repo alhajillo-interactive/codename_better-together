@@ -183,7 +183,6 @@ namespace BetterTogether.EditorTools
         private static readonly Vector2 WaterSourceSpot = new(26f, 22f);
         private static readonly Vector2 PoolWoodSpot = new(16.5f, 30f);
         private static readonly Vector2 DockSausageSpot = new(34f, 28f);
-        private static readonly Vector2 BucketSpot = new(32f, 6f);
         private const float DockTopY = -0.8f;
         private const float DockThickness = 0.15f;
 
@@ -1718,7 +1717,7 @@ namespace BetterTogether.EditorTools
             if (fire != null)
                 SeatOnVisualBase(fire, FireplaceSpot);
             _probeTop = GroundProbeTop;
-            MoveExisting("Bucket", BucketSpot, 0f);
+            RemoveBucket(); // C9.7: water balloons replace the bucket in this level.
             MoveExisting("GnomeCage", CageSpot, 90f);
             var water = MoveExisting("WaterSource", WaterSourceSpot, 0f);
             if (water != null)

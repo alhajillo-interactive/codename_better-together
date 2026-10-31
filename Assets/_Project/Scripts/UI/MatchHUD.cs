@@ -363,20 +363,32 @@ namespace BetterTogether.UI
                     ShowPlain(0, variant, false, false, UiIcon.Log, "Roba leños y fósforos", 0, playing);
                     ShowPlain(1, variant, false, false, UiIcon.Hide, "Escóndelos", 0, playing);
                     ShowCount(2, variant, false, false, UiIcon.Log, "Leños del campista {0:0}/{1:0}", wood, required, playing);
-                    ShowPlain(3, variant, false, true, UiIcon.Bucket, "(Si la enciende: busca la cubeta)", 0, playing);
+                    var withBalloons = BalloonThrower.Local is { Active: true };
+                    ShowPlain(3, variant, false, true, UiIcon.Bucket, withBalloons ? "(Si la enciende: llena una bomba)" : "(Si la enciende: busca la cubeta)", withBalloons ? 1 : 0, playing);
                     break;
                 default: // Gnome, milestone 2: bring the water.
                     var held = PlayerInteractor.Local != null ? PlayerInteractor.Local.Carried : null;
                     var bucketState = 0;
-                    if (held != null && held.TryGetComponent<WaterBucket>(out var bucket))
-                        bucketState = bucket.IsFull ? 2 : 1;
-
-                    var bucketText = bucketState switch
+                    string bucketText;
+                    if (BalloonThrower.Local is { Active: true } balloon)
                     {
-                        2 => "¡Llévala a la fogata!",
-                        1 => "Llénala en el río",
-                        _ => "Busca la cubeta",
-                    };
+                        // A level without a bucket: water balloons. The state is the progress (0 = none yet, 1 = filled, 2 = thrown at a weakened fire).
+                        var weakened = fire != null && fire.IsWeakened;
+                        bucketState = balloon.HasBalloon ? 1 : weakened ? 2 : 0;
+                        bucketText = balloon.HasBalloon ? "¡Lánzala a la fogata!" : weakened ? "¡Otra más, ya casi!" : "Llena una bomba en la Poza";
+                    }
+                    else
+                    {
+                        if (held != null && held.TryGetComponent<WaterBucket>(out var bucket))
+                            bucketState = bucket.IsFull ? 2 : 1;
+
+                        bucketText = bucketState switch
+                        {
+                            2 => "¡Llévala a la fogata!",
+                            1 => "Llénala en el río",
+                            _ => "Busca la cubeta",
+                        };
+                    }
 
                     ShowPlain(0, variant, false, false, UiIcon.Fire, "¡Apaga la fogata!", 0, playing);
                     ShowPlain(1, variant, false, false, UiIcon.Bucket, bucketText, bucketState, playing);
