@@ -108,6 +108,9 @@ namespace BetterTogether.EditorTools
             EnsureReduceFlashes(content, font);
             Set(so, "_reduceFlashesButton", content.Find("Window/ReduceFlashes")?.GetComponent<Button>());
             Set(so, "_reduceFlashesLabel", content.Find("Window/ReduceFlashes/Label")?.GetComponent<TMP_Text>());
+            EnsureMapMode(content, font);
+            Set(so, "_mapModeButton", content.Find("Window/MapMode")?.GetComponent<Button>());
+            Set(so, "_mapModeLabel", content.Find("Window/MapMode/Label")?.GetComponent<TMP_Text>());
             Set(so, "_closeButton", content.Find("Window/Close")?.GetComponent<Button>());
             Set(so, "_voiceSettings", FindVoiceSettings());
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -144,6 +147,7 @@ namespace BetterTogether.EditorTools
             CreateButton("MicMode", window, font, "Micrófono: abierto", 70f);
             CreateText("TalkKey", window, font, "", 32, TextAlignmentOptions.Center, 50f);
             CreateButton("ReduceFlashes", window, font, "Reducir destellos: no", 70f);
+            CreateButton("MapMode", window, font, "Mapa: mantener", 70f);
             CreateButton("Close", window, font, "Cerrar", 70f);
             window.sizeDelta = new Vector2(window.sizeDelta.x, ReduceFlashesWindowHeight);
             return content;
@@ -161,6 +165,23 @@ namespace BetterTogether.EditorTools
 
             CreateButton("ReduceFlashes", window, font, "Reducir destellos: no", 70f);
             var created = window.Find("ReduceFlashes");
+            var close = window.Find("Close");
+            if (created != null && close != null)
+                created.SetSiblingIndex(close.GetSiblingIndex());
+
+            if (window.sizeDelta.y < ReduceFlashesWindowHeight)
+                window.sizeDelta = new Vector2(window.sizeDelta.x, ReduceFlashesWindowHeight);
+        }
+
+        // C9.6: an existing prefab gets the "Mapa: mantener / alternar" button above Close. Nothing is written when it exists.
+        private static void EnsureMapMode(Transform content, TMP_FontAsset font)
+        {
+            var window = content.Find("Window") as RectTransform;
+            if (window == null || window.Find("MapMode") != null)
+                return;
+
+            CreateButton("MapMode", window, font, "Mapa: mantener", 70f);
+            var created = window.Find("MapMode");
             var close = window.Find("Close");
             if (created != null && close != null)
                 created.SetSiblingIndex(close.GetSiblingIndex());

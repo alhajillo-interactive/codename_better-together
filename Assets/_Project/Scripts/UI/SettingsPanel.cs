@@ -47,6 +47,9 @@ namespace BetterTogether.UI
         [Tooltip("Toggle (same style as the microphone button) for 'Reducir destellos': caps the camera flashes. Saved in PlayerPrefs 'reduceFlashes'.")]
         [SerializeField] private Button _reduceFlashesButton;
         [SerializeField] private TMP_Text _reduceFlashesLabel;
+        [Tooltip("Toggle for 'Mapa: mantener / alternar' (camp plan key held or toggled). Saved in PlayerPrefs 'mapToggle'.")]
+        [SerializeField] private Button _mapModeButton;
+        [SerializeField] private TMP_Text _mapModeLabel;
 
         [SerializeField] private Button _closeButton;
 
@@ -71,6 +74,8 @@ namespace BetterTogether.UI
                 _micModeButton.onClick.AddListener(OnMicModeClicked);
             if (_reduceFlashesButton != null)
                 _reduceFlashesButton.onClick.AddListener(OnReduceFlashesClicked);
+            if (_mapModeButton != null)
+                _mapModeButton.onClick.AddListener(OnMapModeClicked);
             if (_closeButton != null)
                 _closeButton.onClick.AddListener(Close);
 
@@ -90,6 +95,8 @@ namespace BetterTogether.UI
                 _micModeButton.onClick.RemoveListener(OnMicModeClicked);
             if (_reduceFlashesButton != null)
                 _reduceFlashesButton.onClick.RemoveListener(OnReduceFlashesClicked);
+            if (_mapModeButton != null)
+                _mapModeButton.onClick.RemoveListener(OnMapModeClicked);
             if (_closeButton != null)
                 _closeButton.onClick.RemoveListener(Close);
         }
@@ -172,6 +179,7 @@ namespace BetterTogether.UI
             SetSlider(_bobSlider, PlayerPrefs.GetFloat(CameraFeel.BobPrefsKey, 1f));
             RefreshMic();
             RefreshFlashes();
+            RefreshMapMode();
         }
 
         private static void SetSlider(Slider slider, float value)
@@ -223,6 +231,19 @@ namespace BetterTogether.UI
             FlashSettings.ReduceFlashes = !FlashSettings.ReduceFlashes;
             PlayerPrefs.Save();
             RefreshFlashes();
+        }
+
+        private void OnMapModeClicked()
+        {
+            MapSettings.Toggle = !MapSettings.Toggle;
+            PlayerPrefs.Save();
+            RefreshMapMode();
+        }
+
+        private void RefreshMapMode()
+        {
+            if (_mapModeLabel != null)
+                _mapModeLabel.text = MapSettings.Toggle ? "Mapa: alternar" : "Mapa: mantener";
         }
 
         private void RefreshFlashes()

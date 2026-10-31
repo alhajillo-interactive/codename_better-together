@@ -33,6 +33,7 @@ namespace BetterTogether.UI
             new("attack", "disparar", "Player/Attack"),
             new("focus", "cámara", "Player/Focus"),
             new("crouch", "agacharte", "Player/Crouch"),
+            new("map", "plano", "Player/Map"),
         };
 
         private static readonly Entry[] GnomeEntries =
@@ -43,6 +44,7 @@ namespace BetterTogether.UI
             new("crouch", "agacharte", "Player/Crouch"),
             new("ping", "marcar", "Player/Ping"),
             new("mic", "micro", null, Key.M),
+            new("map", "plano", "Player/Map"),
         };
 
         /// <summary>Text of the camper's shutter key ("Clic"), read from the Attack action. Allocates: cache it.</summary>

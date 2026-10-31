@@ -85,7 +85,7 @@ namespace BetterTogether.EditorTools
             var frozen = BuildFrozenView(rootRect, theme, font);
             var album = BuildAlbumSlot(rootRect, theme);
             BuildTeammates(rootRect, theme, font);
-            BuildMinimap(rootRect, theme);
+            BuildMinimap(rootRect, theme, font);
 
             // Front layer: crosshair, prompt, warnings, badges.
             var crosshair = BuildCrosshair(rootRect);
@@ -611,23 +611,31 @@ namespace BetterTogether.EditorTools
                 array.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
         }
 
-        // Minimap (C9.5): 240x240 board in the top-right corner, 12 px under the Teammates row (which is 78 px tall, 40 px from the top),
-        // so it never overlaps the row whether it is shown or not. Root "Minimap" (MinimapHUD) > Panel (wood frame, ink outline,
-        // CanvasGroup) > Map (RawImage, 12 px inset) > fixed pool of markers. Idempotent: existing objects are kept, references rewired.
-        private const float MinimapSize = 240f;
-        private const float MinimapInset = 12f;
-        private const float MinimapTop = 40f + TeammateIconSize + TeammateNameHeight + 12f;
-        private const float MinimapMarkerSize = 30f;
-        private const float MinimapSelfSize = 28f;
-        private const int MinimapFixedMarkers = 6;
+        // Camp plan (C9.6): a paper sheet 640x580 on the right edge (anchor and pivot (1, 0.5), 64 px from the edge), hidden until the map
+        // key opens it. Root "Minimap" (MinimapHUD, always active so it reads the key) > Panel (paper sprite, CanvasGroup) > Map (RawImage
+        // 576x532) > markers, sector names and the caged counter. An old C9.5 layout (no "CageCount") is deleted and rebuilt; a C9.6 one is
+        // kept and only rewired, so the builder stays idempotent.
+        private const float MinimapWidth = 640f;
+        private const float MinimapHeight = 580f;
+        private const float MinimapMapWidth = 576f;
+        private const float MinimapMapHeight = 532f;
+        private const float MinimapMarkerSize = 40f;
+        private const float MinimapSelfSize = 40f;
+        private const float MinimapLabelSize = 24f;
+        private const int MinimapFixedMarkers = 2;
         private const int MinimapMateMarkers = 2;
+        private const int MinimapLabelCount = 6;
 
-        private static void BuildMinimap(RectTransform parent, UiTheme theme)
+        private static void BuildMinimap(RectTransform parent, UiTheme theme, TMP_FontAsset font)
         {
+            var old = parent.Find("Minimap");
+            if (old != null && old.Find("Panel/Map/CageCount") == null)
+                Object.DestroyImmediate(old.gameObject);
+
             var root = Child(parent, "Minimap", out var created);
             if (created)
             {
-                Place(root, Vector2.one, Vector2.one, Vector2.one, new Vector2(-64f, -MinimapTop), new Vector2(MinimapSize, MinimapSize));
+                Place(root, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-64f, 0f), new Vector2(MinimapWidth, MinimapHeight));
                 root.SetSiblingIndex(4);
             }
 
@@ -637,21 +645,18 @@ namespace BetterTogether.EditorTools
             if (panelCreated)
             {
                 Stretch(panel);
-                if (theme.frame != null)
+                if (theme.panel != null)
                 {
-                    panelImage.sprite = theme.frame;
-                    panelImage.type = Image.Type.Sliced;
+                    panelImage.sprite = theme.panel;
+                    panelImage.type = theme.panel.border.sqrMagnitude > 0f ? Image.Type.Sliced : Image.Type.Simple;
                     panelImage.color = Color.white;
                 }
                 else
                 {
-                    panelImage.color = theme.cream;
+                    panelImage.color = theme.paper;
                 }
 
                 panelImage.raycastTarget = false;
-                var outline = GetOrAdd<Outline>(panel.gameObject);
-                outline.effectColor = theme.ink;
-                outline.effectDistance = new Vector2(3f, -3f);
                 group.interactable = false;
                 group.blocksRaycasts = false;
                 panel.gameObject.SetActive(false);
@@ -661,22 +666,24 @@ namespace BetterTogether.EditorTools
             var raw = GetOrAdd<RawImage>(map.gameObject);
             if (mapCreated)
             {
-                Stretch(map);
-                map.offsetMin = new Vector2(MinimapInset, MinimapInset);
-                map.offsetMax = new Vector2(-MinimapInset, -MinimapInset);
+                Place(map, Center, Center, Center, Vector2.zero, new Vector2(MinimapMapWidth, MinimapMapHeight));
                 raw.color = Color.white;
                 raw.raycastTarget = false;
-                GetOrAdd<RectMask2D>(map.gameObject);
             }
 
             var fixedMarkers = new Object[MinimapFixedMarkers];
             for (var i = 0; i < MinimapFixedMarkers; i++)
                 fixedMarkers[i] = MinimapMarker(map, $"Fixed{i + 1}", MinimapMarkerSize, false);
 
-            var bucket = MinimapMarker(map, "Bucket", MinimapMarkerSize, false);
             var mates = new Object[MinimapMateMarkers];
             for (var i = 0; i < MinimapMateMarkers; i++)
                 mates[i] = MinimapMarker(map, $"Mate{i + 1}", MinimapMarkerSize, false);
+
+            var labels = new Object[MinimapLabelCount];
+            for (var i = 0; i < MinimapLabelCount; i++)
+                labels[i] = MinimapText(map, $"Label{i + 1}", string.Empty, MinimapLabelSize, theme, font);
+
+            var cageCount = MinimapText(map, "CageCount", string.Empty, MinimapLabelSize, theme, font);
 
             // Last child: the arrow of the local player draws over everything else.
             var self = MinimapMarker(map, "Self", MinimapSelfSize, true);
@@ -686,10 +693,11 @@ namespace BetterTogether.EditorTools
             SetObjectField(serialized, "_panel", panel.gameObject);
             SetObjectField(serialized, "_group", group);
             SetObjectField(serialized, "_map", raw);
-            SetObjectField(serialized, "_bucketMarker", bucket);
             SetObjectField(serialized, "_selfMarker", self);
+            SetObjectField(serialized, "_cageCount", cageCount);
             SetArray(serialized.FindProperty("_fixedMarkers"), fixedMarkers);
             SetArray(serialized.FindProperty("_mateMarkers"), mates);
+            SetArray(serialized.FindProperty("_labels"), labels);
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -710,6 +718,20 @@ namespace BetterTogether.EditorTools
                 rect.SetAsLastSibling();
 
             return image;
+        }
+
+        // A centred ink text on the map (sector name or counter); MinimapHUD writes its text and position. Starts hidden.
+        private static TextMeshProUGUI MinimapText(RectTransform map, string name, string content, float size, UiTheme theme, TMP_FontAsset font)
+        {
+            var text = Text(map, name, content, size, theme.ink, TextAlignmentOptions.Center, theme.bodyFont != null ? theme.bodyFont : font,
+                false, out var rect, out var created);
+            if (created)
+            {
+                Place(rect, Center, Center, Center, Vector2.zero, new Vector2(220f, 36f));
+                rect.gameObject.SetActive(false);
+            }
+
+            return text;
         }
 
         private static void SetObjectField(SerializedObject target, string field, Object value)
