@@ -45,6 +45,9 @@ namespace BetterTogether.UI
             new("mic", "micro", null, Key.M),
         };
 
+        /// <summary>Verb of the gnome's attack key while a water balloon is in the hands (it replaces "subirte").</summary>
+        public const string ThrowVerb = "lanzar";
+
         /// <summary>Text of the camper's shutter key ("Clic"), read from the Attack action. Allocates: cache it.</summary>
         public static string FireKeyText() => KeyText(CamperEntries[1]);
 
@@ -95,6 +98,9 @@ namespace BetterTogether.UI
 
         /// <summary>"[E] usar".</summary>
         public static string Format(in Entry entry) => $"[{KeyText(entry)}] {entry.Verb}";
+
+        /// <summary>Same as <see cref="Format(in Entry)"/> with another verb (e.g. "[Clic] lanzar").</summary>
+        public static string Format(in Entry entry, string verb) => $"[{KeyText(entry)}] {verb}";
 
         /// <summary>"[E] usar · [Clic] patear · ..." for a whole role, appended into a reusable builder.</summary>
         public static void AppendAll(StringBuilder builder, PlayerRole role, string separator)

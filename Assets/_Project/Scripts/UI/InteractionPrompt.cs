@@ -184,7 +184,8 @@ namespace BetterTogether.UI
             {
                 text = "[Espacio] Bajarte";
             }
-            else if (local.Focused == null && carried == null && GnomeStack.Local != null && GnomeStack.Local.Aimed != null)
+            else if (local.Focused == null && carried == null && BalloonThrower.Local is not { HasBalloon: true }
+                && GnomeStack.Local != null && GnomeStack.Local.Aimed != null)
             {
                 var stack = GnomeStack.Local;
                 text = stack.CanClimbAimed
@@ -206,6 +207,15 @@ namespace BetterTogether.UI
             else if (local.TryGetComponent<GnomeCarrier>(out var gnomeCarrier) && gnomeCarrier.Carried != null)
             {
                 text = $"[E] Soltar a {gnomeCarrier.Carried.DisplayName}";
+            }
+            else if (BalloonThrower.Local is { HasBalloon: true })
+            {
+                text = "[Clic] Lanzar bomba";
+            }
+            else if (carried == null && BalloonThrower.Local is { CanFill: true })
+            {
+                // Same predicate the thrower validates its fill with.
+                text = "[E] Llenar bomba";
             }
             else if (CamperKick.Local is { HasTargetInRange: true, IsReady: true })
             {

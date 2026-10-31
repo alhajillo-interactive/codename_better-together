@@ -38,6 +38,7 @@ El campista necesita 5 de 7 leños y sólo 3 están al sur: **tiene que cruzar a
 ## 5. Colocación
 - **Leños (7)**: los seis de arriba + Hombro (−8, −5, 6).
 - **Fósforos**: Hombro (−6, −7, 6).
+- **Cubeta**: ya no hay; en El Abrazo la sustituyen las bombas de agua (C9.7). Se llenan en la orilla de la Poza, sin objeto que colocar.
 - **Salchichas (3)**: Copa (arriba, la más cercana a la fogata: riesgo a cambio de tiempo), Risco, muelle.
 - **Escondites (8)**: Huerto (−24, −14) (−34, −14); Serrería (34, −18); Hondonada (−8, 28) (10, 24) (0, 33); Risco (−36, 12); Poza (20, 31).
 - **Señuelos**: 10 Huerto, 5 Hondonada.
@@ -46,7 +47,8 @@ El campista necesita 5 de 7 leños y sólo 3 están al sur: **tiene que cruzar a
 ## 6. Cambios de reglas
 - **Cocción**: `_cookedAt` 15 → 30 s, `_burntAt` 25 → 42 s, para que el humo sea una alarma real.
 - **La cubeta gotea**: una cubeta llena se vacía en 30 s si no se vierte. Así acaba la estrategia de esperar con ella junto a la fogata.
-- Circuito de cubeta: (32, 6) → agua (26, 22) → punta de raíz → boca ≈ 74 m (21 s a sprint, 37 a paso).
+- **Bombas de agua (C9.7)** en lugar de la cubeta (que sigue en CampBryan): un gnomo con las manos vacías pulsa E en la orilla y tiene una bomba (recarga sin límite); clic izquierdo la lanza en arco, alcance ≈ 8 m. Dura 30 s en la mano; se revienta si lo fotografían, lo patean o lo capturan. **Dos impactos para apagar**: el primero debilita la fogata, el segundo, antes de 20 s, la apaga; pasados los 20 s se recupera. Con bomba en mano no se cogen objetos ni se sube a la torre.
+- Circuito del agua: Poza (orilla del muelle) → lanzamiento desde la boca de la Grieta o desde la rampa (≤ 8 m de la fogata). Sustituye al circuito de la cubeta (≈ 74 m).
 
 ## 7. Fuera de este prototipo (decidido por la crítica)
 Lanzar leños, canoa empujable, tablón pateable, humo que cierra la Grieta, cubeta que no cabe en túneles. Si el mapa funciona, se valoran después.

@@ -5,6 +5,7 @@ using BetterTogether.Diagnostics;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
+using BetterTogether.Networking;
 using BetterTogether.Player;
 using Fusion;
 using TMPro;
@@ -98,6 +99,16 @@ namespace BetterTogether.Fireplace
         [FormerlySerializedAs("_douseSfx")]
         [Tooltip("Heard by everyone, from the fireplace, when a pour starts (the hiss).")]
         [SerializeField] private SoundCue _pourSfx;
+
+        [Header("Water balloons")]
+        [Tooltip("A balloon only counts when it lands within this distance (m, horizontally) of the fire.")]
+        [SerializeField, Min(0f)] private float _balloonHitRadius = 2.5f;
+        [Tooltip("Seconds the fire stays weakened after the first balloon; a second hit inside this window puts it out.")]
+        [SerializeField, Min(1f)] private float _weakenSeconds = 20f;
+        [Tooltip("Seconds that must pass between two accepted balloon hits (two gnomes hitting together count once).")]
+        [SerializeField, Min(0f)] private float _balloonMinInterval = 0.5f;
+        [Tooltip("How much a weakened fire looks doused (0 = like a full fire, 1 = like a finished pour): lower flames, more steam.")]
+        [SerializeField, Range(0f, 1f)] private float _weakenedDouse = 0.5f;
         [Tooltip("Optional smoke puff played when the fire goes out.")]
         [SerializeField] private ParticleSystem _smokePuff;
 
@@ -192,6 +203,9 @@ namespace BetterTogether.Fireplace
         private float _fireFactor = 1f;
         private Vector3 _fireScale = Vector3.one;
         private bool _isSpawned;
+        // Authority only (never networked): tick of the last accepted balloon hit; after a master change the first hit is free.
+        private bool _hasBalloonHit;
+        private int _lastBalloonHitTick;
         // Presentation only: when the fire was last lit on this peer (a late joiner sees it fully grown) and the light smoothing.
         private float _igniteStart = float.NegativeInfinity;
         private float _lightLevel;
@@ -222,6 +236,10 @@ namespace BetterTogether.Fireplace
 
         [Networked] private WaterBucket PourBucket { get; set; }
 
+        // Anchor + tick (CLAUDE.md rule 4): the tick of the first balloon hit, 0 when the fire is not weakened. The window is
+        // derived from it on every peer, and a new master keeps counting from the same tick.
+        [Networked] private int WeakenedTick { get; set; }
+
         public static FireplaceManager Instance { get; private set; }
 
         /// <summary>Times the fire has been put out this match (replicated).</summary>
@@ -246,6 +264,15 @@ namespace BetterTogether.Fireplace
                 return Mathf.Clamp01(1f - remaining / _pourTime);
             }
         }
+
+        /// <summary>
+        /// True while the fire is lit and a first balloon hit is still inside its window. Derived from the replicated tick,
+        /// so a proxy's tick can lag a little: for presentation. The authority decides the second hit with its own tick.
+        /// </summary>
+        public bool IsWeakened => _isSpawned && IsLit && WeakenedTick != 0 && NetAnchor.Elapsed(Runner, WeakenedTick) < _weakenSeconds;
+
+        // How doused the flames look: the pour progress, or the weakened level if that is higher.
+        private float DouseLook => Mathf.Max(DouseFraction, IsWeakened ? _weakenedDouse : 0f);
 
         /// <summary>True while a gnome is pouring water on the fire.</summary>
         public bool IsBeingDoused => _isSpawned && IsLit && PourTimer.IsRunning;
@@ -336,6 +363,8 @@ namespace BetterTogether.Fireplace
             ExtinguishCount = 0;
             LitGrace = default;
             ComebackTimer = default;
+            WeakenedTick = 0;
+            _hasBalloonHit = false;
             ClearPour();
             _ejectedLog = null;
             _ejectPending = false;
@@ -471,6 +500,7 @@ namespace BetterTogether.Fireplace
 
             IsLit = true;
             LitGrace = TickTimer.CreateFromSeconds(Runner, _litGraceTime);
+            WeakenedTick = 0;
             ClearPour();
             if (Telemetry.Enabled) Telemetry.Begin("fire_lit", who).Int("logs", LogsInside).Send();
             if (MatchManager.Instance != null) MatchManager.Instance.NoteFireLit();
@@ -486,6 +516,54 @@ namespace BetterTogether.Fireplace
             Pourer = who;
             PourTimer = TickTimer.CreateFromSeconds(Runner, _pourTime);
             if (Telemetry.Enabled) Telemetry.Begin("pour_start", who).Send();
+        }
+
+        /// <summary>
+        /// A gnome's water balloon landed at <paramref name="point"/>. The authority validates: match running, fire lit and
+        /// past its grace, the thrower is a gnome whose own client sent this, the point is within the hit radius, the throw
+        /// really landed there and it is the first report of that throw, and no hit was accepted in the last moments.
+        /// The first hit weakens the fire; a second one inside the window puts it out through the same path as a pour.
+        /// A camper (or anyone who is not that gnome's client) is refused.
+        /// </summary>
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        public void RPC_BalloonHit(Vector3 point, NetworkBehaviourId throwerId, RpcInfo info = default)
+        {
+            if (!_isSpawned || !MatchManager.AllowsInteraction || !IsLit || !LitGrace.ExpiredOrNotRunning(Runner))
+                return;
+
+            if (!Runner.TryFindBehaviour(throwerId, out BalloonThrower thrower) || !thrower.IsGnome)
+                return;
+
+            // Only the thrower's own client may report its hit. A call made on this very peer carries no remote source.
+            var owner = thrower.Object.StateAuthority;
+            if (info.Source != owner && !(info.Source == PlayerRef.None && Runner.LocalPlayer == owner))
+                return;
+
+            if (HorizontalDistance(point) > _balloonHitRadius || Mathf.Abs(point.y - transform.position.y) > AreaHeight)
+                return;
+
+            if (_hasBalloonHit && NetAnchor.Elapsed(Runner, _lastBalloonHitTick) < _balloonMinInterval)
+                return;
+
+            if (!thrower.TryAcceptHit(point))
+                return;
+
+            _hasBalloonHit = true;
+            _lastBalloonHitTick = Runner.Tick.Raw;
+            var by = thrower.GetComponent<PlayerInteractor>();
+            var weakened = WeakenedTick != 0 && NetAnchor.Elapsed(Runner, WeakenedTick) < _weakenSeconds;
+            if (Telemetry.Enabled) Telemetry.Begin("balloon_hit", by).Bool("weakened", weakened).Send();
+            if (!weakened)
+            {
+                WeakenedTick = Runner.Tick.Raw;
+                return;
+            }
+
+            // The second hit: the fire goes out like a finished pour (a pour in progress is dropped by PutOut).
+            var bucket = PourBucket;
+            if (bucket != null)
+                bucket.RequestSpill();
+            PutOut(by);
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -517,6 +595,7 @@ namespace BetterTogether.Fireplace
             if (IsLit && !HasEnoughWood)
             {
                 IsLit = false;
+                WeakenedTick = 0;
                 ClearPour();
             }
         }
@@ -580,12 +659,20 @@ namespace BetterTogether.Fireplace
         {
             if (Telemetry.Enabled) LogDoused();
             var pourer = Pourer;
-            if (MatchManager.Instance != null && pourer != null && pourer.Object != null && pourer.Object.IsValid)
-                MatchManager.Instance.Award(pourer.Object.StateAuthority, MatchManager.ScoreReason.Douse);
             bucket.RequestSpill();
+            PutOut(pourer);
+        }
+
+        // Authority only: the fire dies for whoever put it out (a pour or a second balloon): points, one log jumps out,
+        // and the comeback starts after enough fires put out. Called after the bucket was spilled, if there was one.
+        private void PutOut(PlayerInteractor by)
+        {
+            if (MatchManager.Instance != null && by != null && by.Object != null && by.Object.IsValid)
+                MatchManager.Instance.Award(by.Object.StateAuthority, MatchManager.ScoreReason.Douse);
             ClearPour();
             IsLit = false;
             LitGrace = default;
+            WeakenedTick = 0;
             ExtinguishCount++;
             EjectTopLog();
             if (ExtinguishCount >= _comebackFromExtinguish)
@@ -946,7 +1033,7 @@ namespace BetterTogether.Fireplace
             if (_fire == null)
                 return;
 
-            var target = Mathf.Lerp(1f, DouseFireScale, DouseFraction);
+            var target = Mathf.Lerp(1f, DouseFireScale, DouseLook);
             _fireFactor = Mathf.MoveTowards(_fireFactor, target, FireScaleSmoothing * Time.deltaTime);
             _fire.transform.localScale = _fireScale * (_fireFactor * Mathf.Lerp(_igniteStartScale, 1f, IgniteProgress));
         }
@@ -965,7 +1052,7 @@ namespace BetterTogether.Fireplace
         private void UpdateFeel()
         {
             bool lit = IsLit;
-            var douse = DouseFraction;
+            var douse = DouseLook;
             var woodFraction = Mathf.Clamp01(LogsInside / (float)_requiredWood);
 
             UpdateLight(lit, douse, woodFraction);
