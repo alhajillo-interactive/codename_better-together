@@ -35,10 +35,10 @@ namespace BetterTogether.Gaze
 
         [Header("Break free")]
         [Tooltip("Presses needed to break free the first time.")]
-        [SerializeField] private float _basePresses = 14f;
+        [SerializeField] private float _basePresses = 22f;
         [Tooltip("Extra presses for every time already frozen in this match.")]
-        [SerializeField] private float _pressesPerFreeze = 3f;
-        [SerializeField] private float _maxPresses = 26f;
+        [SerializeField] private float _pressesPerFreeze = 4f;
+        [SerializeField] private float _maxPresses = 36f;
         [Tooltip("Presses lost per second once the player stops pressing.")]
         [SerializeField] private float _decayPerSecond = 3f;
         [Tooltip("Seconds without a press before the progress starts to decay.")]
@@ -305,7 +305,7 @@ namespace BetterTogether.Gaze
             _wasLocked = locked;
             IsLockTarget = locked;
 
-            if (IsPetrified && _interact != null && _interact.WasPressedThisFrame())
+            if (IsPetrified && _interact != null && _interact.WasPressedThisFrame() && !GnomeCage.IsCaged(Object.Id))
             {
                 _pendingPresses++;
                 PressCount++;
@@ -333,7 +333,8 @@ namespace BetterTogether.Gaze
                 ClearStone("reset");
 
             var locker = LockedBy;
-            var shouldFreeze = !betweenMatches && locker != null && locker.LockProgress >= 1f && !IsGazeImmune;
+            var shouldFreeze = !betweenMatches && locker != null && locker.LockProgress >= 1f && !IsGazeImmune
+                              && !GnomeCage.IsCaged(Object.Id); // A caged gnome can't be frozen again: it would mash its way out.
             if (shouldFreeze && !IsPetrified)
                 BeginFreeze();
 

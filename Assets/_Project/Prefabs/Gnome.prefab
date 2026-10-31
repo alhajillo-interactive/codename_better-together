@@ -11001,9 +11001,9 @@ MonoBehaviour:
   - 0.4
   _headHeight: 0.7
   _coneWarning: 0.6
-  _basePresses: 14
-  _pressesPerFreeze: 3
-  _maxPresses: 26
+  _basePresses: 22
+  _pressesPerFreeze: 4
+  _maxPresses: 36
   _decayPerSecond: 3
   _decayDelay: 0.4
   _releaseImmunity: 2.5

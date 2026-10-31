@@ -2595,7 +2595,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Interaction.GnomeCage
   _cageSeconds: 20
-  _freeSeconds: 2
+  _freeSeconds: 3
   _maxDistance: 2.75
   _inside: {fileID: 8514780257219317534}
   _exit: {fileID: 7166213070288456286}

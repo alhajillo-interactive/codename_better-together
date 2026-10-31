@@ -17,7 +17,7 @@ namespace BetterTogether.Player
         [SerializeField] private float _transitionTime = 0.2f;
         [Tooltip("Mouse sensitivity multiplier while focusing.")]
         [Range(0.1f, 1f)]
-        [SerializeField] private float _focusSensitivity = 0.55f;
+        [SerializeField] private float _focusSensitivity = 0.3f;
 
         private CameraPunch _punch;
         private float _normalFov;

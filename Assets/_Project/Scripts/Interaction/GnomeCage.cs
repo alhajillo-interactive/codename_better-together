@@ -15,14 +15,15 @@ namespace BetterTogether.Interaction
     /// validates caging and freeing with the same predicates the clients use for the prompt (<see cref="CanCage"/>,
     /// <see cref="CanFree"/>) and is the only writer of <see cref="Caged"/> and <see cref="CageTimer"/>.
     /// The caged gnome (its own authority) reads the id and places itself inside, then outside when it is cleared.
-    /// Holds one gnome. A teammate frees it by holding the interact key; otherwise the timer frees it.
+    /// Holds one gnome. Only a free teammate frees it, by holding the interact key; the cage never opens by time alone.
+    /// Safety net: if the caged gnome is the only gnome left in the match, the authority opens the cage after the wait.
     /// </summary>
     public class GnomeCage : NetworkBehaviour, IInteractable, IHoldInteractable, IMatchResettable
     {
-        [Tooltip("Seconds a gnome stays locked before the cage opens by itself.")]
-        [SerializeField, Min(1f)] private float _cageSeconds = 20f;
+        [Tooltip("Safety net only: seconds a gnome must have been locked before the cage opens by itself, and only when no other gnome is left in the match to free it. Otherwise the cage never opens by time.")]
+        [SerializeField, Min(0f)] private float _cageSeconds = 20f;
         [Tooltip("Seconds a free gnome holds the interact key to open the cage.")]
-        [SerializeField, Min(0.1f)] private float _freeSeconds = 2f;
+        [SerializeField, Min(0.1f)] private float _freeSeconds = 3f;
         [Tooltip("Distance (m) from the player's eyes to the cage that the authority accepts; a little more than the interaction reach to absorb latency.")]
         [SerializeField, Min(0f)] private float _maxDistance = 2.75f;
         [Tooltip("Where the caged gnome stands (its feet), inside the bars.")]
@@ -31,7 +32,7 @@ namespace BetterTogether.Interaction
         [SerializeField] private Transform _exit;
         [Tooltip("Heard by everyone from the cage when a gnome is locked in.")]
         [SerializeField] private SoundCue _lockSfx;
-        [Tooltip("Heard by everyone from the cage when the cage opens (freed or timed out).")]
+        [Tooltip("Heard by everyone from the cage when the cage opens (freed or safety net).")]
         [SerializeField] private SoundCue _openSfx;
 
         private static readonly List<GnomeCage> AllCages = new();
@@ -43,7 +44,7 @@ namespace BetterTogether.Interaction
         /// <summary>Id of the gnome locked in (default when empty). Written only by the state authority.</summary>
         [Networked] private NetworkId Caged { get; set; }
 
-        /// <summary>When the cage opens by itself. Written only by the state authority.</summary>
+        /// <summary>Earliest moment the safety net may open the cage. Written only by the state authority.</summary>
         [Networked] private TickTimer CageTimer { get; set; }
 
         public float CageSeconds => _cageSeconds;
@@ -52,9 +53,6 @@ namespace BetterTogether.Interaction
 
         /// <summary>The gnome locked in, or null. Safe to read at any time.</summary>
         public GnomeCapture Occupant => _isSpawned && Caged.IsValid ? GnomeCapture.Find(Caged) : null;
-
-        /// <summary>Seconds until the cage opens by itself (0 when empty). Safe to read at any time.</summary>
-        public float SecondsLeft => _isSpawned && Caged.IsValid ? CageTimer.RemainingTime(Runner) ?? 0f : 0f;
 
         /// <summary>The cage that holds the gnome with this id, or null. Safe to call at any time.</summary>
         public static GnomeCage FindHolding(NetworkId gnomeId)
@@ -200,7 +198,8 @@ namespace BetterTogether.Interaction
                 Telemetry.Begin("gnome_freed", who).Str("by", "teammate").Int("gnome", GnomeOwnerId(gnome)).Send();
         }
 
-        // The cage opens when the timer runs out, when the gnome is gone, and between matches (all decided here, by the authority).
+        // The cage opens when the gnome is gone, between matches, or as a safety net when no other gnome is left to free it
+        // (all decided here, by the authority). Never by time alone. A frozen or carried teammate still counts as "another gnome".
         public override void FixedUpdateNetwork()
         {
             if (!HasStateAuthority || !Caged.IsValid)
@@ -212,8 +211,8 @@ namespace BetterTogether.Interaction
             string how = null;
             if (occupant == null)
                 how = "left";
-            else if (CageTimer.ExpiredOrNotRunning(Runner))
-                how = "timeout";
+            else if (CageTimer.ExpiredOrNotRunning(Runner) && !AnotherGnomeLeft(gnome))
+                how = "alone";
             else if (match != null && match.Phase != MatchPhase.Playing)
                 how = "reset";
 
@@ -224,6 +223,20 @@ namespace BetterTogether.Interaction
             Open();
             if (Telemetry.Enabled)
                 Telemetry.Begin("gnome_freed").Str("by", how).Int("gnome", owner).Send();
+        }
+
+        // No LINQ, no allocation: scans the spawned gnomes for any besides the caged one.
+        private static bool AnotherGnomeLeft(NetworkId caged)
+        {
+            var all = Petrifiable.All;
+            for (var i = 0; i < all.Count; i++)
+            {
+                var other = all[i];
+                if (other != null && other.IsAvailable && other.Object.Id != caged)
+                    return true;
+            }
+
+            return false;
         }
 
         private static int GnomeOwnerId(NetworkId id)

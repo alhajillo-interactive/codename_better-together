@@ -1,5 +1,6 @@
 using BetterTogether.Audio;
 using BetterTogether.Gaze;
+using BetterTogether.Interaction;
 using BetterTogether.Player;
 using PrimeTween;
 using TMPro;
@@ -183,6 +184,10 @@ namespace BetterTogether.UI
         private int _lastThreatLevel;
         private float _lastRingFill = -1f;
         private Tween _ringPulse;
+        private GnomeCapture _capture;
+        private Petrifiable _captureOwner;
+        private string _shakeText;
+        private bool _cagedShown;
 
         // Album.
         private Tween _albumTween;
@@ -709,6 +714,31 @@ namespace BetterTogether.UI
             {
                 HudSupport.SetEnabled(_threatGlint, false);
                 HudSupport.SetActive(_frozenRoot, false);
+                return;
+            }
+
+            if (_captureOwner != gnome)
+            {
+                _captureOwner = gnome;
+                _capture = gnome.GetComponent<GnomeCapture>();
+            }
+
+            // Locked in the cage: mashing does nothing, so the ring gives way to a waiting message (written on change only).
+            var caged = _capture != null && _capture.IsCaged;
+            if (caged != _cagedShown)
+            {
+                _cagedShown = caged;
+                _shakeText ??= _shakeLabel.text;
+                _shakeLabel.text = caged ? "Enjaulado · espera a tus compañeros" : _shakeText;
+                _ringRoot.gameObject.SetActive(!caged);
+            }
+
+            if (caged)
+            {
+                _lastThreatLevel = 3;
+                HudSupport.SetEnabled(_threatGlint, false);
+                HudSupport.SetActive(_frozenRoot, true);
+                _lastRingFill = -1f;
                 return;
             }
 
