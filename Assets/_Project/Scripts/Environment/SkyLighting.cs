@@ -5,7 +5,8 @@ namespace BetterTogether.Environment
 {
     /// <summary>
     /// Presentation of the time of day: rotates the sun, fades its light and the ambient colour, and feeds the
-    /// sun and moon directions to the skybox shader. TimeOfDay is 0 at sunrise, 0.25 noon, 0.5 sunset,
+    /// sun and moon directions to the skybox shader. At night the same light turns into a faint moon, opposite the sun: no extra
+    /// light or shadow pass, and the swap happens while it is off, so it never jumps. TimeOfDay is 0 at sunrise, 0.25 noon, 0.5 sunset,
     /// 0.75 midnight and 1 the next sunrise. In edit mode it previews <c>_previewTimeOfDay</c>.
     /// </summary>
     [ExecuteAlways]
@@ -27,6 +28,15 @@ namespace BetterTogether.Environment
         [Tooltip("The sun light fades to zero over this many degrees around the horizon.")]
         [SerializeField] private float _horizonFadeDegrees = 12f;
 
+        [Header("Moon")]
+        [Tooltip("Moonlight intensity at night; 0 leaves the night lit only by the ambient colour.")]
+        [SerializeField, Min(0f)] private float _moonIntensity;
+        [SerializeField] private Color _moonColor = new Color(0.62f, 0.72f, 1f);
+        [Tooltip("The moon appears once the sun is fully off, and rises to full over this many degrees above that point.")]
+        [SerializeField, Min(0.1f)] private float _moonFadeDegrees = 6f;
+
+        private Color _sunColor;
+        private bool _hasSunColor;
         private float _drivenTimeOfDay;
         private bool _isDriven;
 
@@ -43,11 +53,18 @@ namespace BetterTogether.Environment
         private void OnEnable()
         {
             RenderSettings.ambientMode = AmbientMode.Flat;
+            if (_sun != null && !_hasSunColor)
+            {
+                _sunColor = _sun.color;
+                _hasSunColor = true;
+            }
         }
 
         private void OnDisable()
         {
             _isDriven = false;
+            if (_sun != null && _hasSunColor)
+                _sun.color = _sunColor;
         }
 
         private void LateUpdate()
@@ -66,7 +83,22 @@ namespace BetterTogether.Environment
             float elevation = Mathf.Asin(Mathf.Clamp(-forward.y, -1f, 1f)) * Mathf.Rad2Deg;
             float light = Mathf.InverseLerp(-_horizonFadeDegrees * 0.5f, _horizonFadeDegrees, elevation);
 
-            _sun.intensity = _sunIntensity * light;
+            // The moon starts where the sun's fade ends, so both are dark at the swap.
+            float moonStart = _horizonFadeDegrees * 0.5f;
+            float moon = _moonIntensity > 0f ? Mathf.InverseLerp(moonStart, moonStart + _moonFadeDegrees, -elevation) : 0f;
+            if (moon > 0f)
+            {
+                _sun.transform.rotation = Quaternion.LookRotation(-forward);
+                _sun.color = _moonColor;
+                _sun.intensity = _moonIntensity * moon;
+            }
+            else
+            {
+                if (_hasSunColor)
+                    _sun.color = _sunColor;
+                _sun.intensity = _sunIntensity * light;
+            }
+
             RenderSettings.ambientLight = Color.Lerp(_nightAmbient, _dayAmbient, light);
 
             Shader.SetGlobalVector(SunDirId, -forward);

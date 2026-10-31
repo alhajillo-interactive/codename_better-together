@@ -161215,8 +161215,11 @@ MonoBehaviour:
   _sunYaw: 170
   _sunIntensity: 1.2
   _dayAmbient: {r: 0.55, g: 0.6, b: 0.7, a: 1}
-  _nightAmbient: {r: 0.06, g: 0.08, b: 0.15, a: 1}
+  _nightAmbient: {r: 0.14, g: 0.17, b: 0.27, a: 1}
   _horizonFadeDegrees: 12
+  _moonIntensity: 0.4
+  _moonColor: {r: 0.62, g: 0.72, b: 1, a: 1}
+  _moonFadeDegrees: 6
 --- !u!114 &8120500099
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -161248,8 +161251,8 @@ MonoBehaviour:
   _volume: {fileID: 47379301}
   _duskVolumeWeight: 0.5
   _dayFogColor: {r: 0.7, g: 0.75, b: 0.85, a: 1}
-  _nightFogColor: {r: 0.04, g: 0.06, b: 0.12, a: 1}
-  _nightFogDensity: 0.1
+  _nightFogColor: {r: 0.09, g: 0.12, b: 0.2, a: 1}
+  _nightFogDensity: 0.022
   _duskFogDensity: 0.01
 --- !u!1001 &8130500021
 PrefabInstance:
