@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fd77393abf6441459fe19769897749e8, type: 3}
+  m_Name: SFX_WaterSplash
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Audio.SoundCue
+  Sound: {fileID: 0}
+  Variations:
+  - {fileID: 8300000, guid: eba703dea99bb3b47bc82dabdfafaf61, type: 3}
+  - {fileID: 8300000, guid: 65ab46bbc0f9f5d4ca0bcb7af1ea87ee, type: 3}
+  Volume: 0.75
+  PitchRange: {x: 0.92, y: 1.08}
+  Spatial: 1
+  MaxDistance: 20
+  MinInterval: 0.1

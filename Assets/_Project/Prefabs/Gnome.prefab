@@ -10798,15 +10798,15 @@ MonoBehaviour:
   _landPunchMinSpeed: 5.5
   _landPunchMaxSpeed: 9
   _verticalSpeedSmoothing: 0.1
-  _landSfx: {fileID: 0}
-  _kickSwingSfx: {fileID: 0}
+  _landSfx: {fileID: 11400000, guid: 084c17ac8911fe143a010aa0daa5548b, type: 2}
+  _kickSwingSfx: {fileID: 11400000, guid: 7aa6b956ba554a34b988b9859c5085ca, type: 2}
   _pairTurnSpeed: 90
   _pairSpanLimit: 0.9
   _pairTurnMaxSpeed: 3.5
   _strainPull: 0.08
   _strainShake: 0.015
   _strainShakeHz: 14
-  _strainSfx: {fileID: 0}
+  _strainSfx: {fileID: 11400000, guid: 8f206f5d02dc5bd46a4bfea06fc67781, type: 2}
   _strainSfxInterval: 0.7
   _strainHintSeconds: 3
   _wadeSpeedMultiplier: 0.6
@@ -11159,8 +11159,8 @@ MonoBehaviour:
   _handOffCooldown: 0.35
   _mountFovPunch: 3
   _mountFovPunchTime: 0.2
-  _mountSfx: {fileID: 0}
-  _dismountSfx: {fileID: 0}
+  _mountSfx: {fileID: 11400000, guid: 0c11d64643e6f6842977f14f07f7d875, type: 2}
+  _dismountSfx: {fileID: 11400000, guid: da447565d6e1f7d418b323f6e9503ad7, type: 2}
 --- !u!114 &8800000000000000099
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11201,7 +11201,7 @@ MonoBehaviour:
   _placeColor: {r: 1, g: 0.85, b: 0.2, a: 1}
   _objectColor: {r: 0.4, g: 0.9, b: 1, a: 1}
   _camperColor: {r: 1, g: 0.3, b: 0.3, a: 1}
-  _pingSfx: {fileID: 0}
+  _pingSfx: {fileID: 11400000, guid: 40fcee7ce2dc9bd478a69505ddbab398, type: 2}
 --- !u!114 &5551872472618260760
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11226,8 +11226,8 @@ MonoBehaviour:
   _fragments: {fileID: 2799087667209436192}
   _shatterCount: 32
   _crackSfx: {fileID: 11400000, guid: 3a7dcf34839041f38a88f4cb35cc37ec, type: 2}
-  _ceramicClinkSfx: {fileID: 0}
-  _shatterSfx: {fileID: 0}
+  _ceramicClinkSfx: {fileID: 11400000, guid: 22bcdb650f6a21e408d54625f75ae119, type: 2}
+  _shatterSfx: {fileID: 11400000, guid: 570fa282ec524c24ab80324ed9d20880, type: 2}
 --- !u!114 &3644464259120405354
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11312,10 +11312,10 @@ MonoBehaviour:
   _waterRingSize: 1.4
   _waterContactHeight: 0.3
   _warnFraction: 0.2
-  _fillSfx: {fileID: 0}
-  _throwSfx: {fileID: 0}
-  _splashSfx: {fileID: 0}
-  _popSfx: {fileID: 0}
+  _fillSfx: {fileID: 11400000, guid: a403f57b8af1faf40aa2dab2b024eaee, type: 2}
+  _throwSfx: {fileID: 11400000, guid: 34a4bfe060b455749837ea37ff8bbc38, type: 2}
+  _splashSfx: {fileID: 11400000, guid: 21ad293af7b996e4892977b272748726, type: 2}
+  _popSfx: {fileID: 11400000, guid: 9327ca6e8258ec748a92c13a934b248c, type: 2}
 --- !u!114 &7167397901127304381
 MonoBehaviour:
   m_ObjectHideFlags: 0

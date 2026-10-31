@@ -12,9 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fd77393abf6441459fe19769897749e8, type: 3}
   m_Name: SFX_LogSnap
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Audio.SoundCue
-  Sound: {fileID: 0}
-  Volume: 1
+  Sound: {fileID: 8300000, guid: 095d99e6dfae0fe41a7cc20d89814301, type: 3}
+  Variations: []
+  Volume: 0.8
   PitchRange: {x: 0.95, y: 1.05}
   Spatial: 1
-  MaxDistance: 25
+  MaxDistance: 20
   MinInterval: 0.05

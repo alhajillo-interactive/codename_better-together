@@ -122,7 +122,7 @@ MonoBehaviour:
   _maxGnomeSpan: 1.6
   _maxSoloGrabDistance: 1.2
   _handOffSfx: {fileID: 11400000, guid: efdcfbc4017178e1d68f4205c06124be, type: 2}
-  _impactSfx: {fileID: 0}
+  _impactSfx: {fileID: 11400000, guid: 17c39cc5a6e074241a1c7274356c7b8d, type: 2}
   _impactMinSpeed: 1.5
   _handOffBlendTime: 0.18
   _handOffArc: 0.15
@@ -140,7 +140,7 @@ MonoBehaviour:
   _pickupFovPunchTime: 0.1
   _killHeight: -5
   _lostSeconds: 20
-  _respawnSfx: {fileID: 0}
+  _respawnSfx: {fileID: 11400000, guid: 5b4c823feec981c488fb01ce2a25db3a, type: 2}
 --- !u!65 &6672794288001521450
 BoxCollider:
   m_ObjectHideFlags: 0

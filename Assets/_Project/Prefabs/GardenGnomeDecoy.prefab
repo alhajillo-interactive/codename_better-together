@@ -3295,7 +3295,7 @@ MonoBehaviour:
   _wobbleDegrees: 14
   _wobbleTime: 0.5
   _wobbleHz: 6
-  _clinkSfx: {fileID: 0}
+  _clinkSfx: {fileID: 11400000, guid: 22bcdb650f6a21e408d54625f75ae119, type: 2}
 --- !u!1 &5628284372522213077
 GameObject:
   m_ObjectHideFlags: 0

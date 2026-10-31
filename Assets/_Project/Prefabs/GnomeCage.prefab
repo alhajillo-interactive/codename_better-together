@@ -2599,8 +2599,8 @@ MonoBehaviour:
   _maxDistance: 2.75
   _inside: {fileID: 8514780257219317534}
   _exit: {fileID: 7166213070288456286}
-  _lockSfx: {fileID: 0}
-  _openSfx: {fileID: 0}
+  _lockSfx: {fileID: 11400000, guid: 51987c66d8d2e9c45acda59d30823429, type: 2}
+  _openSfx: {fileID: 11400000, guid: bbdaa6f735f51a644a0614088432de25, type: 2}
 --- !u!65 &6434120128843970090
 BoxCollider:
   m_ObjectHideFlags: 0

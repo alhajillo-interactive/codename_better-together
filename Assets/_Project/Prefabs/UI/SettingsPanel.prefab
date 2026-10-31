@@ -3034,8 +3034,8 @@ MonoBehaviour:
   _hoverScale: 1.04
   _pressedScale: 0.97
   _duration: 0.08
-  _hoverCue: {fileID: 0}
-  _clickCue: {fileID: 0}
+  _hoverCue: {fileID: 11400000, guid: cb3aba3247844044dbe936eaeaec9d3b, type: 2}
+  _clickCue: {fileID: 11400000, guid: 052af1cb4040d91408eb069a913420fc, type: 2}
 --- !u!1 &2994948033569232230
 GameObject:
   m_ObjectHideFlags: 0
@@ -4061,8 +4061,8 @@ MonoBehaviour:
   _hoverScale: 1.04
   _pressedScale: 0.97
   _duration: 0.08
-  _hoverCue: {fileID: 0}
-  _clickCue: {fileID: 0}
+  _hoverCue: {fileID: 11400000, guid: cb3aba3247844044dbe936eaeaec9d3b, type: 2}
+  _clickCue: {fileID: 11400000, guid: 052af1cb4040d91408eb069a913420fc, type: 2}
 --- !u!1 &4974125898692878905
 GameObject:
   m_ObjectHideFlags: 0
@@ -5247,8 +5247,8 @@ MonoBehaviour:
   _hoverScale: 1.04
   _pressedScale: 0.97
   _duration: 0.08
-  _hoverCue: {fileID: 0}
-  _clickCue: {fileID: 0}
+  _hoverCue: {fileID: 11400000, guid: cb3aba3247844044dbe936eaeaec9d3b, type: 2}
+  _clickCue: {fileID: 11400000, guid: 052af1cb4040d91408eb069a913420fc, type: 2}
 --- !u!1 &5821026381174985612
 GameObject:
   m_ObjectHideFlags: 0

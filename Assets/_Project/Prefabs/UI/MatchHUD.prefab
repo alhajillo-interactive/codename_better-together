@@ -7494,7 +7494,7 @@ MonoBehaviour:
   _ringRoot: {fileID: 7646824028587754451}
   _ringImage: {fileID: 8091435518198453636}
   _shakeLabel: {fileID: 5272622219901582176}
-  _lockedTickSfx: {fileID: 0}
+  _lockedTickSfx: {fileID: 11400000, guid: 14827ed94ec13c74ba9086070907d2be, type: 2}
   _maxViewfinderFraction: 0.96
   _cornerSize: 110
   _dimStrength: 0.7
@@ -7655,7 +7655,7 @@ MonoBehaviour:
   _fovPunch: -3
   _fovPunchTime: 0.15
   _reducedScale: 0.5
-  _hitSfx: {fileID: 0}
+  _hitSfx: {fileID: 11400000, guid: a2b4335d317cbbb48a4a53691452bed8, type: 2}
 --- !u!1 &7200000000000000007
 GameObject:
   m_ObjectHideFlags: 0

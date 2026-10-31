@@ -12,9 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fd77393abf6441459fe19769897749e8, type: 3}
   m_Name: SFX_BreakFree
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Audio.SoundCue
-  Sound: {fileID: 0}
-  Volume: 1
-  PitchRange: {x: 0.95, y: 1.05}
+  Sound: {fileID: 8300000, guid: 4c75c6283d7935d4a9cafd8ce04707cd, type: 3}
+  Variations: []
+  Volume: 0.7
+  PitchRange: {x: 0.97, y: 1.03}
   Spatial: 1
-  MaxDistance: 20
-  MinInterval: 0.05
+  MaxDistance: 18
+  MinInterval: 0.1

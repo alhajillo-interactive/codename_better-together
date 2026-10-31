@@ -137,7 +137,7 @@ MonoBehaviour:
   _pickupFovPunchTime: 0.1
   _killHeight: -5
   _lostSeconds: 20
-  _respawnSfx: {fileID: 0}
+  _respawnSfx: {fileID: 11400000, guid: 5b4c823feec981c488fb01ce2a25db3a, type: 2}
 --- !u!136 &2427449002643352461
 CapsuleCollider:
   m_ObjectHideFlags: 0

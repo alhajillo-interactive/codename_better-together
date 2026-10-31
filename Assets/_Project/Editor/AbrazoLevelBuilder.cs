@@ -388,6 +388,7 @@ namespace BetterTogether.EditorTools
             ConfigureLevelBounds();
             MarkStaticScenery();
             ApplyRenderBudget();
+            GeneratedSfxBuilder.AssignScene();
             Validate();
 
             // C9.5: fresh minimap picture and its MinimapArea (fixed points from the constants above).

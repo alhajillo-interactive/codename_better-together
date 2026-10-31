@@ -13,8 +13,11 @@ MonoBehaviour:
   m_Name: SFX_LogHandOff
   m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Audio.SoundCue
   Sound: {fileID: 0}
-  Volume: 1
-  PitchRange: {x: 0.95, y: 1.05}
+  Variations:
+  - {fileID: 8300000, guid: c4a6c2ef907f43b44ac8e94d8ad54b8f, type: 3}
+  - {fileID: 8300000, guid: 27b32d09f0c992e4f98a80c63f9ba81e, type: 3}
+  Volume: 0.6
+  PitchRange: {x: 0.93, y: 1.07}
   Spatial: 1
-  MaxDistance: 25
-  MinInterval: 0.05
+  MaxDistance: 14
+  MinInterval: 0.08

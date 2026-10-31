@@ -216,7 +216,7 @@ MonoBehaviour:
   _landPunchMinSpeed: 5.5
   _landPunchMaxSpeed: 9
   _verticalSpeedSmoothing: 0.1
-  _landSfx: {fileID: 0}
+  _landSfx: {fileID: 11400000, guid: c38ff156134709641bd4409b17c3dce0, type: 2}
   _kickSwingSfx: {fileID: 11400000, guid: 7aa6b956ba554a34b988b9859c5085ca, type: 2}
   _pairTurnSpeed: 90
   _pairSpanLimit: 0.9
@@ -224,7 +224,7 @@ MonoBehaviour:
   _strainPull: 0.08
   _strainShake: 0.015
   _strainShakeHz: 14
-  _strainSfx: {fileID: 0}
+  _strainSfx: {fileID: 11400000, guid: 790d799f419f5844987d1cd9933c77b4, type: 2}
   _strainSfxInterval: 0.7
   _strainHintSeconds: 3
   _wadeSpeedMultiplier: 0.6
@@ -446,10 +446,10 @@ MonoBehaviour:
   _plateRegenDelay: 1
   _minShotInterval: 0.4
   _defaultMode: 1
-  _raiseSfx: {fileID: 0}
-  _shutterSfx: {fileID: 0}
-  _drySfx: {fileID: 0}
-  _plateReadySfx: {fileID: 0}
+  _raiseSfx: {fileID: 11400000, guid: dfc5343f2388db44b9465c5e69299640, type: 2}
+  _shutterSfx: {fileID: 11400000, guid: d24806c9f7b786a4386077955bf3e6b0, type: 2}
+  _drySfx: {fileID: 11400000, guid: 2ff0574b12514024b8a08d60e34d5338, type: 2}
+  _plateReadySfx: {fileID: 11400000, guid: e7c9e2579f5017c4595058f97d469f5e, type: 2}
   _IsGazeEnabled:
     RawValue: 0
 --- !u!114 &8800000000000000002
