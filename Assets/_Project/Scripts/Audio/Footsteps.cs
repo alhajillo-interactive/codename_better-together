@@ -20,6 +20,9 @@ namespace BetterTogether.Audio
         [Tooltip("A single-frame move longer than this (m) is a teleport and does not count.")]
         [SerializeField, Min(0f)] private float _teleportDistance = 2f;
 
+        // Matches the gnome's default float depth: a gnome deeper than this swims instead of stepping.
+        private const float FloatingDepth = 0.3f;
+
         private PlayerMovement _movement;
         private GnomeStack _stack;
         private bool _isGnome;
@@ -68,6 +71,6 @@ namespace BetterTogether.Audio
 
         // A crouching gnome is silent; IsCrouching is replicated, so every peer agrees.
         private bool CanStep() => !_movement.IsAirborne && (_stack == null || !_stack.IsRiding) &&
-            !(_isGnome && _movement.IsCrouching);
+            !(_isGnome && _movement.IsCrouching) && !(_isGnome && _movement.WaterDepthUnderFeet > FloatingDepth);
     }
 }

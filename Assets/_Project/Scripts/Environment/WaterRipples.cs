@@ -30,6 +30,10 @@ namespace BetterTogether.Environment
         [SerializeField, Min(0f)] private float _swellAmplitude = 0.02f;
         [Tooltip("Frequency (Hz) of the surface swell.")]
         [SerializeField, Min(0f)] private float _swellHz = 0.35f;
+        [Tooltip("Minimum seconds between two wading sounds.")]
+        [SerializeField, Min(0f)] private float _wadeSfxCooldown = 0.5f;
+        [Tooltip("Height (m) of the rings above the water surface, so they do not z-fight with the disc.")]
+        [SerializeField, Min(0f)] private float _ringLift = 0.04f;
         [Tooltip("Heard where something falls into the water. May be empty (silence).")]
         [SerializeField] private SoundCue _splashSfx;
         [Tooltip("Heard where something wades through the water, at most once per scan. May be empty (silence).")]
@@ -52,6 +56,7 @@ namespace BetterTogether.Environment
         private Vector3 _basePosition;
         private ParticleSystem.EmitParams _emit;
         private bool _wadeThisScan;
+        private float _nextWadeSfx;
 
         private void Awake()
         {
@@ -145,10 +150,11 @@ namespace BetterTogether.Environment
                 return;
 
             Emit(surface, _ringSize);
-            if (_wadeThisScan)
+            if (_wadeThisScan || Time.time < _nextWadeSfx)
                 return;
 
             _wadeThisScan = true;
+            _nextWadeSfx = Time.time + _wadeSfxCooldown;
             _wadeSfx.PlayAt(surface);
         }
 
@@ -158,7 +164,7 @@ namespace BetterTogether.Environment
             if (_rings == null)
                 return;
 
-            _emit.position = surfacePosition;
+            _emit.position = surfacePosition + Vector3.up * _ringLift;
             _emit.startSize = size;
             _rings.Emit(_emit, 1);
         }

@@ -539,7 +539,10 @@ namespace BetterTogether.Player
             var waterDepth = WaterDepthUnderFeet;
             var isGnome = _petrifiable != null;
             var surfaceHeight = transform.position.y + waterDepth;
-            _floating = isGnome && waterDepth > _floatDepth && !(_swimJumped && _verticalVelocity > 0f);
+            // Hysteresis: it starts floating past _floatDepth, but keeps floating while any water is under the feet and nothing
+            // solid is (the spring lifts the feet to _floatDraft, which is shallower than _floatDepth).
+            _floating = isGnome && !(_swimJumped && _verticalVelocity > 0f) &&
+                (waterDepth > _floatDepth || (_floating && waterDepth > 0f && !touching));
             if (!_floating && (_verticalVelocity <= 0f || waterDepth <= 0f))
                 _swimJumped = false;
 
@@ -561,7 +564,7 @@ namespace BetterTogether.Player
             var jumped = _jumpBufferTimer > 0f && (grounded || viaCoyote) && !jumpBlocked;
             if (jumped)
             {
-                _verticalVelocity = JumpSpeedForHeight(_jumpHeight) * (_floating ? _swimJumpMultiplier : 1f);
+                _verticalVelocity = JumpSpeedForHeight(_floating ? _jumpHeight * _swimJumpMultiplier : _jumpHeight);
                 if (_floating)
                     _swimJumped = true;
                 if (Telemetry.Enabled) Telemetry.Begin("jump").Int("coyote", viaCoyote ? 1 : 0).Send();
@@ -866,7 +869,8 @@ namespace BetterTogether.Player
             _peakFallSpeed = 0f;
             if (fallSpeed >= _landPunchMinSpeed)
             {
-                _landSfx.PlayAt(transform.position);
+                if (!InWater)
+                    _landSfx.PlayAt(transform.position);
                 var feel = CameraFeel.Instance;
                 var view = FirstPersonCamera.Instance;
                 if (feel != null && view != null && view.TargetMovement == this)

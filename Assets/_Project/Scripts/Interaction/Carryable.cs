@@ -1154,6 +1154,7 @@ namespace BetterTogether.Interaction
 
             var fraction = Mathf.Clamp01((topY - centre.y) / _buoyancyDepth);
             var gravity = -Physics.gravity.y;
+            var dt = Runner.DeltaTime;
             var net = gravity * (_buoyancy * fraction - 1f);
             if (Mathf.Abs(net) < 0.05f && _body.linearVelocity.sqrMagnitude < _waterRestSpeed * _waterRestSpeed
                 && _body.angularVelocity.sqrMagnitude < _waterRestSpeed * _waterRestSpeed)
@@ -1162,9 +1163,11 @@ namespace BetterTogether.Interaction
                 return;
             }
 
-            _body.AddForce(Vector3.up * (gravity * _buoyancy * fraction), ForceMode.Acceleration);
-            _body.AddForce(-_body.linearVelocity * (_waterDrag * fraction), ForceMode.Acceleration);
-            _body.AddTorque(-_body.angularVelocity * (_waterAngularDrag * fraction), ForceMode.Acceleration);
+            // Applied once per network tick as an impulse (velocity change = acceleration x tick time).
+            var lift = Vector3.up * (gravity * _buoyancy * fraction);
+            var drag = -_body.linearVelocity * (_waterDrag * fraction);
+            _body.AddForce((lift + drag) * dt, ForceMode.VelocityChange);
+            _body.AddTorque(-_body.angularVelocity * (_waterAngularDrag * fraction) * dt, ForceMode.VelocityChange);
         }
 
         // Authority only. A loose item below the kill height returns at once; one outside LevelBounds returns after _lostSeconds.
