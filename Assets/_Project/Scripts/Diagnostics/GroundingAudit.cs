@@ -5,6 +5,7 @@
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
+using BetterTogether.Environment;
 using BetterTogether.Interaction;
 using BetterTogether.Networking;
 using BetterTogether.Player;
@@ -245,6 +246,10 @@ namespace BetterTogether.Diagnostics
                 return;
             }
 
+            // Items afloat in a pool are not on the ground by design.
+            if (WaterBody.TryGetSurface(item.transform.position, out var waterTop) && item.transform.position.y < waterTop + 0.3f)
+                return;
+
             GatherColliders(item.transform);
             if (_colliders.Count == 0)
                 return;
@@ -479,6 +484,8 @@ namespace BetterTogether.Diagnostics
                 return;
 
             var position = character.transform.position;
+            if (movement != null && WaterBody.TryGetSurface(position, out var poolTop) && position.y < poolTop + 0.3f)
+                return; // Floating or wading in a pool.
             var view = character.GetComponentInChildren<LocalPlayerView>(true);
             var body = view != null && view.Body != null ? view.Body : character.transform;
 

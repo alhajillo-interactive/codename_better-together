@@ -1,6 +1,7 @@
 using BetterTogether.Audio;
 using BetterTogether.Combat;
 using BetterTogether.Diagnostics;
+using BetterTogether.Environment;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
@@ -80,6 +81,25 @@ namespace BetterTogether.Player
         [SerializeField, Min(0.1f)] private float _strainSfxInterval = 0.7f;
         [Tooltip("Seconds the too-heavy hint stays on screen after the last push.")]
         [SerializeField, Min(0f)] private float _strainHintSeconds = 3f;
+        [Header("Water")]
+        [Tooltip("Camper: walk speed multiplier once the water is wading deep (interpolated from dry up to the wading depth).")]
+        [SerializeField, Range(0.1f, 1f)] private float _wadeSpeedMultiplier = 0.6f;
+        [Tooltip("Camper: depth under the feet (m) at which the full wading slowdown applies.")]
+        [SerializeField, Min(0.01f)] private float _wadeDepth = 0.25f;
+        [Tooltip("Gnome: depth under the feet (m) above which the gnome floats instead of walking on the bottom.")]
+        [SerializeField, Min(0f)] private float _floatDepth = 0.3f;
+        [Tooltip("Gnome: how far below the water surface (m) the feet float.")]
+        [SerializeField, Min(0f)] private float _floatDraft = 0.18f;
+        [Tooltip("Gnome: spring towards the floating height (1/s of height error to vertical speed).")]
+        [SerializeField, Min(0.1f)] private float _floatSpring = 6f;
+        [Tooltip("Gnome: top vertical speed (m/s) of the float spring.")]
+        [SerializeField, Min(0.1f)] private float _floatMaxSpeed = 2f;
+        [Tooltip("Gnome: how fast the vertical speed follows the spring (m/s per second); keeps the bobbing soft, with no steps.")]
+        [SerializeField, Min(0.1f)] private float _floatAcceleration = 25f;
+        [Tooltip("Gnome: walk speed multiplier while floating (no sprint).")]
+        [SerializeField, Range(0.1f, 1f)] private float _swimSpeedMultiplier = 0.7f;
+        [Tooltip("Gnome: jump height multiplier when jumping off the water.")]
+        [SerializeField, Range(0.1f, 1f)] private float _swimJumpMultiplier = 0.6f;
         [Header("Knockback")]
         [Tooltip("How fast knockback slows down while airborne (m/s per second).")]
         [SerializeField] private float _knockbackAirDrag = 1.5f;
@@ -110,6 +130,9 @@ namespace BetterTogether.Player
         private bool _isRiding;
         private bool _isCaptured;
         private bool _isSpawned;
+        // Owner only, local simulation state: floating gnome, and the jump that leaves the surface (gravity stays normal until it falls back).
+        private bool _floating;
+        private bool _swimJumped;
         private InputAction _crouch;
         private GnomeStack _stack;
         private float _standHeight;
@@ -450,6 +473,22 @@ namespace BetterTogether.Player
             _groundThisMove = _groundLastMove = false;
         }
 
+        /// <summary>
+        /// Metres of water under the feet, 0 when dry. Derived from the replicated position and the scene's
+        /// <see cref="WaterBody"/>, so every peer reads the same without any network state.
+        /// </summary>
+        public float WaterDepthUnderFeet
+        {
+            get
+            {
+                var feet = transform.position;
+                return WaterBody.TryGetSurface(feet, out var topY) ? Mathf.Max(0f, topY - feet.y) : 0f;
+            }
+        }
+
+        /// <summary>True while the feet are under the water surface (derived locally, safe at any time).</summary>
+        public bool InWater => WaterDepthUnderFeet > 0.01f;
+
         /// <summary>Upward speed that reaches the given jump height with this player's gravity.</summary>
         public float JumpSpeedForHeight(float height) => Mathf.Sqrt(2f * Mathf.Max(0f, height) * -_gravity);
 
@@ -497,11 +536,27 @@ namespace BetterTogether.Player
             TickCrouch(stunned || locked);
             TickHeavyCarry(move, yaw, stunned || locked, dt);
             var crouching = Crouching;
-            var sprinting = !locked && !crouching && _sprint.IsPressed();
-            var speed = (sprinting ? _sprintSpeed : _walkSpeed) * SpeedMultiplier * LoadMultiplier * PairCarryMultiplier * (crouching ? CrouchSpeed : 1f);
+            var waterDepth = WaterDepthUnderFeet;
+            var isGnome = _petrifiable != null;
+            var surfaceHeight = transform.position.y + waterDepth;
+            // Hysteresis: it starts floating past _floatDepth, but keeps floating while any water is under the feet and nothing
+            // solid is (the spring lifts the feet to _floatDraft, which is shallower than _floatDepth).
+            _floating = isGnome && !(_swimJumped && _verticalVelocity > 0f) &&
+                (waterDepth > _floatDepth || (_floating && waterDepth > 0f && !touching));
+            if (!_floating && (_verticalVelocity <= 0f || waterDepth <= 0f))
+                _swimJumped = false;
+
+            var sprinting = !locked && !crouching && !_floating && _sprint.IsPressed();
+            var waterSpeed = 1f;
+            if (_floating)
+                waterSpeed = _swimSpeedMultiplier;
+            else if (!isGnome && waterDepth > 0f)
+                waterSpeed = Mathf.Lerp(1f, _wadeSpeedMultiplier, Mathf.Clamp01(waterDepth / _wadeDepth));
+
+            var speed = (sprinting ? _sprintSpeed : _walkSpeed) * SpeedMultiplier * LoadMultiplier * PairCarryMultiplier * (crouching ? CrouchSpeed : 1f) * waterSpeed;
 
             var jumpBlocked = stunned || locked || crouching;
-            if (grounded)
+            if (grounded || _floating)
                 _coyoteTimer = _coyoteTime;
             else if (onPlayer)
                 _coyoteTimer = 0f;
@@ -509,7 +564,9 @@ namespace BetterTogether.Player
             var jumped = _jumpBufferTimer > 0f && (grounded || viaCoyote) && !jumpBlocked;
             if (jumped)
             {
-                _verticalVelocity = JumpSpeedForHeight(_jumpHeight);
+                _verticalVelocity = JumpSpeedForHeight(_floating ? _jumpHeight * _swimJumpMultiplier : _jumpHeight);
+                if (_floating)
+                    _swimJumped = true;
                 if (Telemetry.Enabled) Telemetry.Begin("jump").Int("coyote", viaCoyote ? 1 : 0).Send();
             }
 
@@ -533,7 +590,18 @@ namespace BetterTogether.Player
 
             _knockback = Vector3.MoveTowards(_knockback, Vector3.zero, (grounded ? _knockbackGroundDrag : _knockbackAirDrag) * dt);
 
-            _verticalVelocity += _gravity * dt;
+            if (_floating && !jumped)
+            {
+                // Buoyant: no gravity; a soft spring takes the feet towards the floating height (never steps, never sinks).
+                var error = surfaceHeight - _floatDraft - transform.position.y;
+                var wanted = Mathf.Clamp(error * _floatSpring, -_floatMaxSpeed, _floatMaxSpeed);
+                _verticalVelocity = Mathf.MoveTowards(_verticalVelocity, wanted, _floatAcceleration * dt);
+            }
+            else
+            {
+                _verticalVelocity += _gravity * dt;
+            }
+
             _onPlayerThisMove = false;
             _groundThisMove = false;
             _controller.Move((PlanarVelocity(direction * speed) + _knockback + slide + Vector3.up * _verticalVelocity) * dt);
@@ -549,7 +617,7 @@ namespace BetterTogether.Player
             // Quantized to steps of 0.05: Fusion doesn't send a write that leaves the value unchanged, so the
             // quantization is what saves bandwidth (analogue noise no longer changes the value every tick).
             AnimationMovement = Mathf.Round(Mathf.Clamp01(move.magnitude) * movementScale * 20f) / 20f;
-            AnimationJump = !stunned && (jumped || !_controller.isGrounded);
+            AnimationJump = !stunned && (jumped || (!_controller.isGrounded && !_floating));
             AnimationDancing = _petrifiable != null && _dance != null && _dance.IsPressed() && !stunned && !locked &&
                 _controller.isGrounded && move.sqrMagnitude < 0.01f && _knockback.sqrMagnitude < 0.01f;
         }
@@ -801,7 +869,8 @@ namespace BetterTogether.Player
             _peakFallSpeed = 0f;
             if (fallSpeed >= _landPunchMinSpeed)
             {
-                _landSfx.PlayAt(transform.position);
+                if (!InWater)
+                    _landSfx.PlayAt(transform.position);
                 var feel = CameraFeel.Instance;
                 var view = FirstPersonCamera.Instance;
                 if (feel != null && view != null && view.TargetMovement == this)

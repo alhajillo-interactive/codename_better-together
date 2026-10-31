@@ -985,6 +985,49 @@ namespace BetterTogether.EditorTools
                 WaterRadius * 2f, WaterThickness, Quaternion.identity, Mat("Agua", WaterHex), _layerWater, false);
             water.name = "Agua";
             MakeWaterTransparent(water);
+            BuildWaterPhysics(water, parent);
+        }
+
+        // Water physics and local presentation (the stream stays out: it is shallow).
+        private static void BuildWaterPhysics(GameObject water, Transform parent)
+        {
+            var body = water.AddComponent<WaterBody>();
+            body.Configure(PozaCenter, WaterRadius, WaterTopY);
+
+            var rings = new GameObject("OndasAgua");
+            rings.transform.SetParent(parent, false);
+            rings.transform.SetPositionAndRotation(new Vector3(PozaCenter.x, WaterTopY + 0.01f, PozaCenter.y), Quaternion.identity);
+            var system = rings.AddComponent<ParticleSystem>();
+            var main = system.main;
+            main.playOnAwake = true;
+            main.loop = true;
+            main.startLifetime = 1.4f;
+            main.startSpeed = 0f;
+            main.startSize = 0.6f;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.maxParticles = 96;
+            var emission = system.emission;
+            emission.enabled = false;
+            var shape = system.shape;
+            shape.enabled = false;
+            var size = system.sizeOverLifetime;
+            size.enabled = true;
+            size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 0.3f, 1f, 1.5f));
+            var colour = system.colorOverLifetime;
+            colour.enabled = true;
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(new Color(0.8f, 0.92f, 1f), 1f) },
+                new[] { new GradientAlphaKey(0.55f, 0f), new GradientAlphaKey(0f, 1f) });
+            colour.color = new ParticleSystem.MinMaxGradient(gradient);
+            var renderer = rings.GetComponent<ParticleSystemRenderer>();
+            renderer.renderMode = ParticleSystemRenderMode.HorizontalBillboard;
+            renderer.sharedMaterial = AssetDatabase.LoadAssetAtPath<Material>(SmokeMaterialPath);
+
+            var ripples = water.AddComponent<WaterRipples>();
+            var serialized = new SerializedObject(ripples);
+            serialized.FindProperty("_rings").objectReferenceValue = system;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
         // URP Lit in transparent mode: the sandy bottom shows through, and the surface keeps a soft shine.
