@@ -69,6 +69,12 @@ namespace BetterTogether.UI
             var match = MatchManager.Instance;
             var layout = MissionLayout.Current;
             var local = PlayerCharacter.Local;
+            if (match != null && local != null && match.TravesurasRunning)
+            {
+                ShowTravesuras(match, local.Role == PlayerRole.Camper);
+                return;
+            }
+
             if (match == null || layout == null || local == null || !match.MissionsRunning)
             {
                 Hide();
@@ -91,6 +97,39 @@ namespace BetterTogether.UI
 
             UpdateSounds(done, camper ? MissionLayout.PhotoTasks : layout.ButterfliesNeeded);
             UpdateRewards(match, camper);
+        }
+
+        // The list of pranks: one line for each team, rewritten only when something changes.
+        private void ShowTravesuras(MatchManager match, bool camper)
+        {
+            if (!_panel.activeSelf)
+                _panel.SetActive(true);
+
+            var list = TravesuraLayout.Current;
+            var done = match.TravesurasDone;
+            var active = match.ActiveTravesura;
+            var armed = match.BombIsArmed;
+            var state = done | ((active + 1) << 4) | (armed ? 1 << 8 : 0) | (camper ? 1 << 9 : 0);
+            UpdateSounds(done, list.Count);
+            if (state == _shownState)
+                return;
+
+            _shownState = state;
+            _title.text = camper ? "Los gnomos llevan " + done + " de " + list.Count : "Lista de Travesuras: " + done + " / " + list.Count;
+            string line;
+            if (active < 0)
+                line = camper ? "Disfruta de tu cena mientras puedas" : "Esperad la siguiente travesura";
+            else if (camper)
+                line = "Algo traman " + list.Get(active).CamperHint;
+            else if (armed)
+                line = "Atraed al campista hacia la estatua";
+            else
+                line = list.Get(active).Label;
+
+            _rows[0].text = line;
+            _rows[0].gameObject.SetActive(true);
+            for (var i = 1; i < _rows.Length; i++)
+                _rows[i].gameObject.SetActive(false);
         }
 
         private void Refresh(MatchManager match, MissionLayout layout, bool camper)

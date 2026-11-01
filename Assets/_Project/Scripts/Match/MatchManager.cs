@@ -469,6 +469,7 @@ namespace BetterTogether.Match
 
             ResetWorld();
             BeginMissions();
+            BeginTravesuras();
             CurrentCamper = ChooseCamper();
             ResetScores();
             CurrentResult = MatchResult.None;
@@ -519,15 +520,17 @@ namespace BetterTogether.Match
 
         private void UpdatePlaying()
         {
-            if (Sausage.AnyEaten)
-                End(MatchResult.CamperWins);
+            if (UpdateTravesuras())
+                End(MatchResult.GnomesWin, "travesuras");
+            else if (Sausage.AnyEaten)
+                End(MatchResult.CamperWins, "sausage_eaten");
             else if (MatchTimer.Expired(Runner))
-                End(MatchResult.GnomesWin);
+                End(MatchResult.GnomesWin, "timeout");
         }
 
-        private void End(MatchResult result)
+        private void End(MatchResult result, string cause)
         {
-            if (Telemetry.Enabled) Telemetry.Begin("match_end").Str("result", result == MatchResult.CamperWins ? "camper_wins" : "gnomes_win").Str("cause", result == MatchResult.CamperWins ? "sausage_eaten" : "timeout").Float("duration", Telemetry.T).Send();
+            if (Telemetry.Enabled) Telemetry.Begin("match_end").Str("result", result == MatchResult.CamperWins ? "camper_wins" : "gnomes_win").Str("cause", cause).Float("duration", Telemetry.T).Send();
             CurrentResult = result;
             MatchTimer = default;
             CurrentPhase = MatchPhase.Ended;
