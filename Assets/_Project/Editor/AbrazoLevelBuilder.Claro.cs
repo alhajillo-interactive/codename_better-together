@@ -323,12 +323,14 @@ namespace BetterTogether.EditorTools
 
             var boot = Box(parent, "BotaEnHielera", new Vector3(-4f, 0.62f, -2.6f), new Vector3(0.3f, 0.32f, 0.16f), dark, _layerEnv, false);
 
-            Box(parent, "Lena", new Vector3(13f, 0.45f, -5f), new Vector3(3f, 0.9f, 1f), dark, _layerEnv);
-            for (var i = 0; i < 3; i++)
-                Box(parent, "TroncosLena", new Vector3(11.8f + i * 1.2f, 1.05f, -5f), new Vector3(1f, 0.3f, 0.9f), wood, _layerEnv, false);
+            Solid(parent, "Lena", new Vector3(13f, 0.45f, -5f), new Vector3(3f, 0.9f, 1f), dark);
+            Prop("SM_FirewoodPile", parent, new Vector2(13f, -5f), 0f, 1f);
+            Prop("SM_StumpAxe", parent, new Vector2(15.8f, -5.2f), 40f, 0.9f);
 
-            Box(parent, "Caja", new Vector3(1.8f, 0.225f, 1.2f), new Vector3(0.7f, 0.45f, 0.7f), wood, _layerEnv);
-            Box(parent, "CajaAlta", new Vector3(2.45f, 0.45f, 1.2f), new Vector3(0.6f, 0.9f, 0.7f), dark, _layerEnv);
+            Solid(parent, "Caja", new Vector3(1.8f, 0.225f, 1.2f), new Vector3(0.7f, 0.45f, 0.7f), wood);
+            Solid(parent, "CajaAlta", new Vector3(2.45f, 0.45f, 1.2f), new Vector3(0.6f, 0.9f, 0.7f), dark);
+            Prop("box", parent, new Vector2(1.8f, 1.2f), 10f, 0.45f);
+            Prop("box-large", parent, new Vector2(2.45f, 1.2f), 0f, 0.9f);
 
             // Dock on posts, reaching out over the water.
             Box(parent, "Muelle", new Vector3(6.2f, 0.12f, 10.5f), new Vector3(6f, 0.12f, 1.4f), wood, _layerEnv);
@@ -344,21 +346,36 @@ namespace BetterTogether.EditorTools
             return new ClaroProps(underpants, fallen, boot, antenna);
         }
 
+        // Real models on top, plain invisible blocks underneath: the heights of the design stay exact whatever the model's shape.
         private static void BuildClaroTable(Transform parent, Material wood, Material dark, Material blue)
         {
-            for (var i = 0; i < 5; i++)
-                Box(parent, "TablaMesa", new Vector3(-6f, 0.72f, -2.44f + i * 0.22f), new Vector3(2.2f, 0.06f, 0.2f), wood, _layerEnv);
+            Solid(parent, "Mesa", new Vector3(-6f, 0.72f, -2f), new Vector3(2.2f, 0.06f, 1.1f), wood);
             foreach (var (x, z) in new[] { (-7f, -2.45f), (-5f, -2.45f), (-7f, -1.55f), (-5f, -1.55f) })
-                Box(parent, "PataMesa", new Vector3(x, 0.345f, z), new Vector3(0.1f, 0.69f, 0.1f), dark, _layerEnv);
+                Solid(parent, "PataMesa", new Vector3(x, 0.345f, z), new Vector3(0.1f, 0.69f, 0.1f), dark);
 
-            foreach (var (x, z, back) in new[] { (-6.6f, -3.1f, -0.22f), (-5.4f, -3.1f, -0.22f), (-6.6f, -0.9f, 0.22f), (-5.4f, -0.9f, 0.22f) })
+            Prop("SM_PicnicTable", parent, new Vector2(-6f, -2f), 90f, 0.75f);
+
+            foreach (var (x, z, yaw) in new[] { (-6.6f, -3.1f, 0f), (-5.4f, -3.1f, 0f), (-6.6f, -0.9f, 180f), (-5.4f, -0.9f, 180f) })
             {
-                Box(parent, "Silla", new Vector3(x, 0.225f, z), new Vector3(0.5f, 0.45f, 0.5f), wood, _layerEnv);
-                Box(parent, "RespaldoSilla", new Vector3(x, 0.7f, z + back), new Vector3(0.5f, 0.5f, 0.06f), dark, _layerEnv);
+                Solid(parent, "Silla", new Vector3(x, 0.225f, z), new Vector3(0.5f, 0.45f, 0.5f), wood);
+                Prop("SM_CampChair", parent, new Vector2(x, z), yaw, 0.9f);
             }
 
-            Box(parent, "Hielera", new Vector3(-4f, 0.2f, -2.6f), new Vector3(0.9f, 0.4f, 0.55f), blue, _layerEnv);
-            Box(parent, "TapaHielera", new Vector3(-4f, 0.43f, -2.6f), new Vector3(0.94f, 0.06f, 0.59f), Mat("ClaroTapa", "#F4F0E2"), _layerEnv);
+            Solid(parent, "Hielera", new Vector3(-4f, 0.225f, -2.6f), new Vector3(0.9f, 0.45f, 0.55f), blue);
+            Prop("SM_Cooler", parent, new Vector2(-4f, -2.6f), 0f, 0.45f);
+            Prop("SM_Lantern", parent, new Vector2(-6.8f, -2f), 0f, 0.35f, 0.75f);
+        }
+
+        private static void Solid(Transform parent, string name, Vector3 center, Vector3 size, Material material) =>
+            Box(parent, name, center, size, material, _layerEnv).GetComponent<Renderer>().enabled = false;
+
+        // A model without a collider, on the ground or at a given height.
+        private static void Prop(string model, Transform parent, Vector2 at, float yaw, float height, float atY = float.NaN)
+        {
+            if (float.IsNaN(atY))
+                Spawn(model, parent, model, at, yaw, height, Body.None, _layerEnv, true, Support.Terrain, false, 0.02f, 0f, 0f, false);
+            else
+                Spawn(model, parent, model, at, yaw, height, Body.None, _layerEnv, true, Support.Fixed, false, 0f, 0f, atY, false);
         }
 
         private static (GameObject underpants, GameObject fallen, Transform antenna) BuildClaroCaravan(Transform parent, Material white, Material red, Material grey, Material tyre, Material glass)
@@ -514,6 +531,31 @@ namespace BetterTogether.EditorTools
                     ClaroTree(parent, row, index++, new Vector2(x, t));
                     ClaroTree(parent, row, index++, new Vector2(-x, t + 1.5f));
                 }
+            }
+
+            // Camp life: what a camper leaves lying around.
+            Prop("SM_LogBench", parent, new Vector2(-2.6f, -5.8f), 60f, 0.45f);
+            Prop("SM_LogBench", parent, new Vector2(2.6f, -6f), 120f, 0.45f);
+            Prop("SM_Backpack", parent, new Vector2(-9.6f, 7.6f), 200f, 0.7f);
+            Prop("SM_SleepingBag_Rolled", parent, new Vector2(-14.6f, 7.8f), 30f, 0.35f);
+            Prop("SM_Lantern", parent, new Vector2(-10.5f, 3.6f), 0f, 0.4f);
+            Prop("SM_Canoe", parent, new Vector2(3.4f, 13.2f), 20f, 0.7f);
+            Prop("SM_Paddle", parent, new Vector2(1.8f, 12.4f), 75f, 0.2f);
+            Prop("SM_FishingRod", parent, new Vector2(7.8f, 9.2f), 0f, 1.6f, 0.18f);
+            Prop("SM_Signpost", parent, new Vector2(-2f, 4f), 150f, 1.6f);
+            Prop("barrel", parent, new Vector2(10.2f, 0.4f), 0f, 0.8f);
+            Prop("barrel", parent, new Vector2(10.9f, 0.9f), 40f, 0.8f);
+            Prop("SM_Rock_Cluster", parent, new Vector2(-18f, -4f), 80f, 0.9f);
+            Prop("SM_Rock_Flat", parent, new Vector2(17.5f, 6f), 20f, 0.5f);
+            Prop("SM_Mushrooms", parent, new Vector2(-5f, 10f), 0f, 0.3f);
+            Prop("SM_Mushrooms", parent, new Vector2(7f, -14f), 90f, 0.3f);
+            foreach (var (x, z) in new[] { (-16f, -15f), (-11f, -15.5f), (-7f, -9.5f), (-17f, -9.5f), (-14.5f, -10.5f), (-11.5f, -13.2f) })
+                Prop(x < -12f ? "SM_Flowers_Purple" : "SM_Flowers_Yellow", parent, new Vector2(x, z), x * 31f, 0.35f);
+            for (var i = 0; i < 26; i++)
+            {
+                var at = new Vector2(-19f + Hash01(i, 2.1f) * 38f, -17f + Hash01(i, 5.3f) * 34f);
+                if (Vector2.Distance(at, ClaroFire) > 7f && Vector2.Distance(at, ClaroPond) > ClaroPondRadius + 2f && Vector2.Distance(at, new Vector2(6f, 2f)) > 5f)
+                    Prop(i % 2 == 0 ? "SM_Grass_01" : "SM_Grass_02", parent, at, i * 37f, 0.4f);
             }
 
             foreach (var (model, at, height) in ClaroBushes)
