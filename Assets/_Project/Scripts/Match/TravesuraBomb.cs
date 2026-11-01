@@ -38,7 +38,7 @@ namespace BetterTogether.Match
             }
 
             var local = PlayerCharacter.Local;
-            if (_fired || local == null || local.Role != PlayerRole.Camper)
+            if (local == null || local.Role != PlayerRole.Camper)
                 return;
 
             var offset = local.transform.position - transform.position;
@@ -47,6 +47,9 @@ namespace BetterTogether.Match
                 _fired = false; // A report the master refused can be sent again.
                 return;
             }
+
+            if (_fired)
+                return;
 
             _fired = true;
             if (local.TryGetComponent<PlayerMovement>(out var movement))
