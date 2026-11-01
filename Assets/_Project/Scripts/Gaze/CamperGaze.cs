@@ -42,6 +42,8 @@ namespace BetterTogether.Gaze
         [SerializeField] private float _comebackHalfAngle = 26f;
         [Tooltip("Base reach of the gaze in metres.")]
         [SerializeField] private float _range = 8f;
+        [Tooltip("Metres at which a gnome crouched in tall grass can be picked out.")]
+        [SerializeField, Min(0f)] private float _grassSightDistance = 2f;
         [Tooltip("Layers that block the gaze (walls, tents, trees...).")]
         [SerializeField] private LayerMask _occluders = ~0;
         [SerializeField] private bool _enabledOnSpawn = true;
@@ -520,6 +522,10 @@ namespace BetterTogether.Gaze
                 MatchManager.Instance.ReportPhoto(this);
         }
 
+        // Grass only hides from afar: someone standing on top of a gnome finds it.
+        private bool WithinGrassSight(Petrifiable gnome) =>
+            (gnome.transform.position - transform.position).sqrMagnitude <= _grassSightDistance * _grassSightDistance;
+
         /// <summary>True if the point is in the picture right now, up to <paramref name="maxDistance"/>: same cone and occlusion as a gnome.</summary>
         public bool CanPhotograph(Vector3 point, Transform target, float maxDistance) =>
             CanSee(point, target, 0f, Mathf.Max(0f, maxDistance - Range));
@@ -681,7 +687,7 @@ namespace BetterTogether.Gaze
                     continue;
 
                 // A disguised gnome can't become a new target (decided with the bool its owner replicates).
-                if (candidate.Disguise != null && candidate.Disguise.IsDisguised)
+                if (candidate.Disguise != null && (candidate.Disguise.IsDisguised || (candidate.Disguise.IsHiddenInGrass && !WithinGrassSight(candidate))))
                     continue;
 
                 if (!candidate.IsVisibleTo(this))

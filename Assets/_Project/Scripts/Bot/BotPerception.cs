@@ -80,6 +80,8 @@ namespace BetterTogether.Bot
             public float MinCuriousSeconds = 0.6f;
             [Tooltip("Random change per check, so the bot is not a machine.")]
             public float Noise = 0.05f;
+            [Tooltip("Metres at which a gnome crouched in tall grass can be seen.")]
+            public float GrassSightDistance = 2f;
             [Tooltip("Metres at which the bot looks closely at an ornament that was not there before.")]
             public float StatueCheckDistance = 7f;
         }
@@ -213,7 +215,7 @@ namespace BetterTogether.Bot
         {
             var gnome = contact.Gnome;
             var position = gnome.transform.position;
-            contact.Visible = !gnome.IsLockedInCage && CanSee(position + Vector3.up * 0.3f);
+            contact.Visible = !gnome.IsLockedInCage && !IsHidden(gnome, position) && CanSee(position + Vector3.up * 0.3f);
 
             if (contact.Visible)
             {
@@ -232,6 +234,11 @@ namespace BetterTogether.Bot
 
             contact.Level = NextLevel(contact);
         }
+
+        // Crouched in tall grass nobody is seen, until the bot almost steps on them.
+        private bool IsHidden(Petrifiable gnome, Vector3 position) =>
+            gnome.TryGetComponent<GardenDisguise>(out var disguise) && disguise.IsHiddenInGrass
+            && (position - _body.position).sqrMagnitude > _settings.GrassSightDistance * _settings.GrassSightDistance;
 
         // How much a sighting tells the bot. Near and moving says everything; a still ornament where one always stood says nothing.
         private float Conspicuousness(Petrifiable gnome, Vector3 position)

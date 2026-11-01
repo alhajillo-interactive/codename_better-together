@@ -79,7 +79,7 @@ namespace BetterTogether.UI
                          + "Cada una necesita a dos gnomos distintos.\n\n"
                          + "<b>G</b>  Dejar una estatua tuya\n"
                          + "<b>H</b>  Dejar una estatua explosiva\n"
-                         + "<b>C</b>  Agacharte quieto para ser un adorno\n"
+                         + "<b>C</b>  Agachado en la hierba alta no te ven; quieto, eres un adorno\n"
                          + "<b>Q</b>  Bailar y burlarte\n"
                          + "<b>F</b>  Marcar un lugar\n"
                          + "<b>E</b>  Saltar por un hueco, con las manos vacías\n"

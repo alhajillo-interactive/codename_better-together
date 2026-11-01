@@ -3,6 +3,7 @@
 using System.Collections.Generic;
 using BetterTogether.Audio;
 using BetterTogether.Bot;
+using BetterTogether.Environment;
 using BetterTogether.Fireplace;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
@@ -107,6 +108,7 @@ namespace BetterTogether.EditorTools
             PlaceClaroGameplay(Group("Items"));
             BuildClaroHoles(Group("Huecos"));
             BuildClaroDecoration(Group("Bosque"));
+            BuildClaroGrass(Group("Hierba"));
             BuildClaroStatues(Group("Estatuas"));
             ConfigureClaroMatch();
             BuildTravesuras(Group("Travesuras"), props);
@@ -551,12 +553,6 @@ namespace BetterTogether.EditorTools
             Prop("SM_Mushrooms", parent, new Vector2(7f, -14f), 90f, 0.3f);
             foreach (var (x, z) in new[] { (-16f, -15f), (-11f, -15.5f), (-7f, -9.5f), (-17f, -9.5f), (-14.5f, -10.5f), (-11.5f, -13.2f) })
                 Prop(x < -12f ? "SM_Flowers_Purple" : "SM_Flowers_Yellow", parent, new Vector2(x, z), x * 31f, 0.35f);
-            for (var i = 0; i < 26; i++)
-            {
-                var at = new Vector2(-19f + Hash01(i, 2.1f) * 38f, -17f + Hash01(i, 5.3f) * 34f);
-                if (Vector2.Distance(at, ClaroFire) > 7f && Vector2.Distance(at, ClaroPond) > ClaroPondRadius + 2f && Vector2.Distance(at, new Vector2(6f, 2f)) > 5f)
-                    Prop(i % 2 == 0 ? "SM_Grass_01" : "SM_Grass_02", parent, at, i * 37f, 0.4f);
-            }
 
             foreach (var (model, at, height) in ClaroBushes)
                 Spawn(model, parent, model, at, Hash01(at.x, at.y) * 360f, height, Body.None, _layerEnv, true, Support.Terrain, false, 0.06f, 0f, 0f, false);
@@ -596,6 +592,138 @@ namespace BetterTogether.EditorTools
                 serialized.FindProperty("_botCamper").boolValue = true;
                 serialized.ApplyModifiedPropertiesWithoutUndo();
             }
+        }
+
+        // ================================================================== Tall grass
+
+        private const int GrassGridX = 48;
+        private const int GrassGridZ = 44;
+        private const int GrassDetailResolution = 256;
+        private const float GrassCoverage = 0.5f;
+        private const float GrassDrawDistance = 45f;
+
+        // Meadows between the zones (x, z, radius): every crossing has a covered way.
+        private static readonly Vector3[] GrassMeadows =
+        {
+            new(-15f, -1.5f, 5f), new(-6f, 6.5f, 5.5f), new(-15f, 13f, 6f), new(-3f, 13f, 5f), new(8f, -11f, 5.5f), new(-3f, -12f, 6f),
+            new(17f, 0f, 4.5f), new(17f, -14f, 3.5f), new(17f, 15f, 3f), new(3f, -9f, 3f), new(-9f, 13f, 4f), new(14f, 3f, 3f),
+        };
+
+        private static readonly (Vector2 a, Vector2 b)[] GrassPaths =
+        {
+            (new Vector2(0f, -4f), new Vector2(-6f, -2f)), (new Vector2(0f, -4f), new Vector2(6f, 0f)), (new Vector2(0f, -4f), new Vector2(13f, -7f)),
+            (new Vector2(13f, -7f), new Vector2(13f, -13f)), (new Vector2(-6f, -2f), new Vector2(-12f, 4f)), (new Vector2(-6f, -2f), new Vector2(-12f, -9f)),
+            (new Vector2(3f, 1f), new Vector2(4f, 10f)),
+        };
+
+        private static bool GrassGrows(Vector2 p)
+        {
+            var inMeadow = false;
+            foreach (var meadow in GrassMeadows)
+                inMeadow |= Vector2.Distance(p, new Vector2(meadow.x, meadow.y)) <= meadow.z;
+
+            if (!inMeadow || Vector2.Distance(p, ClaroFire) < 5f || Vector2.Distance(p, ClaroPond) < ClaroPondRadius + 1.5f || Vector2.Distance(p, ClaroCage) < 3f)
+                return false;
+
+            foreach (var (a, b) in GrassPaths)
+            {
+                if (DistanceToSegment(p, a, b) < 0.9f)
+                    return false;
+            }
+
+            var inCaravan = p.x > 1.5f && p.x < 11f && p.y > -1f && p.y < 4.5f;
+            var inTable = p.x > -8.5f && p.x < -3f && p.y > -4f && p.y < 0f;
+            var inTent = p.x > -14.5f && p.x < -9.5f && p.y > 3.5f && p.y < 8.5f;
+            var inWood = p.x > 10.5f && p.x < 16.5f && p.y > -9f && p.y < -3.5f;
+            return !inCaravan && !inTable && !inTent && !inWood;
+        }
+
+        private static void BuildClaroGrass(Transform parent)
+        {
+            var origin = new Vector2(-GrassGridX * 0.5f, -GrassGridZ * 0.5f);
+            var cells = new bool[GrassGridX * GrassGridZ];
+            for (var z = 0; z < GrassGridZ; z++)
+            {
+                for (var x = 0; x < GrassGridX; x++)
+                    cells[z * GrassGridX + x] = GrassGrows(origin + new Vector2(x + 0.5f, z + 0.5f));
+            }
+
+            var fieldObject = new GameObject("CampoHierba");
+            fieldObject.transform.SetParent(parent, false);
+            fieldObject.AddComponent<TallGrassField>().Configure(origin, GrassGridX, GrassGridZ, cells);
+            PaintClaroGrass(origin, cells);
+        }
+
+        // Terrain details: instanced, culled in patches and without shadows, far cheaper than one object per tuft.
+        private static void PaintClaroGrass(Vector2 origin, bool[] cells)
+        {
+            var data = _terrain.terrainData;
+            data.detailPrototypes = new[] { GrassPrototype("SM_Grass_01", 1), GrassPrototype("SM_Grass_02", 2) };
+            data.SetDetailResolution(GrassDetailResolution, 32);
+            var layerA = new int[GrassDetailResolution, GrassDetailResolution];
+            var layerB = new int[GrassDetailResolution, GrassDetailResolution];
+            var half = ClaroTerrainSize * 0.5f;
+            for (var zi = 0; zi < GrassDetailResolution; zi++)
+            {
+                for (var xi = 0; xi < GrassDetailResolution; xi++)
+                {
+                    var world = new Vector2(-half + (xi + 0.5f) / GrassDetailResolution * ClaroTerrainSize, -half + (zi + 0.5f) / GrassDetailResolution * ClaroTerrainSize);
+                    var cellX = Mathf.FloorToInt(world.x - origin.x);
+                    var cellZ = Mathf.FloorToInt(world.y - origin.y);
+                    if (cellX < 0 || cellZ < 0 || cellX >= GrassGridX || cellZ >= GrassGridZ || !cells[cellZ * GrassGridX + cellX])
+                        continue;
+
+                    var roll = Hash01(world.x * 3.1f, world.y * 2.7f);
+                    if (roll < GrassCoverage * 0.5f)
+                        layerA[zi, xi] = 1;
+                    else if (roll < GrassCoverage)
+                        layerB[zi, xi] = 1;
+                }
+            }
+
+            data.SetDetailLayer(0, 0, 0, layerA);
+            data.SetDetailLayer(0, 0, 1, layerB);
+            _terrain.detailObjectDistance = GrassDrawDistance;
+            _terrain.detailObjectDensity = 1f;
+            EditorUtility.SetDirty(data);
+        }
+
+        // A small prefab with an instancing copy of the material: the model's own material lives inside the FBX and can't be changed.
+        private static DetailPrototype GrassPrototype(string model, int index)
+        {
+            var source = LoadModel(model).GetComponentInChildren<MeshFilter>();
+            var materialPath = $"{SettingsDir}/Mat_ClaroHierba.mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+            if (material == null)
+            {
+                material = new Material(source.GetComponent<MeshRenderer>().sharedMaterial);
+                AssetDatabase.CreateAsset(material, materialPath);
+            }
+
+            material.enableInstancing = true;
+            EditorUtility.SetDirty(material);
+
+            var go = new GameObject($"ClaroHierba{index}");
+            go.AddComponent<MeshFilter>().sharedMesh = source.sharedMesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            var prefab = PrefabUtility.SaveAsPrefabAsset(go, $"{SettingsDir}/ClaroHierba{index}.prefab");
+            Object.DestroyImmediate(go);
+            return new DetailPrototype
+            {
+                prototype = prefab,
+                usePrototypeMesh = true,
+                renderMode = DetailRenderMode.VertexLit,
+                useInstancing = true,
+                minWidth = 1.2f,
+                maxWidth = 1.8f,
+                minHeight = 1.3f,
+                maxHeight = 1.8f,
+                noiseSpread = 0.2f,
+                dryColor = new Color(0.82f, 0.9f, 0.55f),
+                healthyColor = Color.white,
+            };
         }
 
         // ================================================================== Bot camper
@@ -648,8 +776,8 @@ namespace BetterTogether.EditorTools
             var camperAnimator = AssetDatabase.LoadAssetAtPath<GameObject>(CamperPrefabPath).GetComponentInChildren<Animator>(true);
             var visual = Object.Instantiate(camperAnimator.gameObject, root.transform);
             visual.name = "Modelo";
-            visual.transform.localPosition = Vector3.zero;
-            visual.transform.localRotation = Quaternion.identity;
+            visual.transform.localPosition = camperAnimator.transform.localPosition;
+            visual.transform.localRotation = camperAnimator.transform.localRotation;
             foreach (var behaviour in visual.GetComponentsInChildren<NetworkBehaviour>(true))
                 Object.DestroyImmediate(behaviour);
             foreach (var collider in visual.GetComponentsInChildren<Collider>(true))

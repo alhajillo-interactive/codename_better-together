@@ -110,7 +110,8 @@ namespace BetterTogether.UI
             var active = match.ActiveTravesura;
             var isBoss = match.TravesuraBoss == PlayerCharacter.Local.Object.StateAuthority;
             var open = match.TravesuraOpenToAll;
-            var state = done | ((active + 1) << 4) | (isBoss ? 1 << 8 : 0) | (camper ? 1 << 9 : 0) | (open ? 1 << 10 : 0) | (match.TravesuraBoss.PlayerId << 11);
+            var hidden = PlayerCharacter.Local.TryGetComponent<GardenDisguise>(out var disguise) && disguise.IsHiddenInGrass;
+            var state = done | ((active + 1) << 4) | (isBoss ? 1 << 8 : 0) | (camper ? 1 << 9 : 0) | (open ? 1 << 10 : 0) | (hidden ? 1 << 11 : 0) | (match.TravesuraBoss.PlayerId << 12);
             UpdateSounds(done, list.Needed);
             if (state == _shownState)
                 return;
@@ -131,7 +132,7 @@ namespace BetterTogether.UI
 
             _rows[0].text = line;
             _rows[0].gameObject.SetActive(true);
-            _rows[1].text = "[Tab] Manual";
+            _rows[1].text = hidden ? "Oculto en la hierba" : "[Tab] Manual";
             _rows[1].gameObject.SetActive(true);
             for (var i = 2; i < _rows.Length; i++)
                 _rows[i].gameObject.SetActive(false);

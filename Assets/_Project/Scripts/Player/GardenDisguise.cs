@@ -1,5 +1,6 @@
 using BetterTogether.Combat;
 using BetterTogether.Diagnostics;
+using BetterTogether.Environment;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
 using Fusion;
@@ -75,6 +76,11 @@ namespace BetterTogether.Player
         /// <summary>True while this gnome looks like an ornament. Safe to read at any time.</summary>
         public bool IsDisguised => _isSpawned && Disguised;
 
+        /// <summary>True while crouched in tall grass, moving or not. Written by the owner, so the camper decides with what really is.</summary>
+        public bool IsHiddenInGrass => _isSpawned && HiddenInGrass;
+
+        [Networked] private NetworkBool HiddenInGrass { get; set; }
+
         private void Awake()
         {
             _movement = GetComponent<PlayerMovement>();
@@ -122,6 +128,10 @@ namespace BetterTogether.Player
 
             var dt = Runner.DeltaTime;
             var position = transform.position;
+            var hidden = _movement.IsCrouching && TallGrassField.Contains(position) && CanKeepDisguise(_kickable != null && _kickable.IsStunned);
+            if (hidden != HiddenInGrass)
+                HiddenInGrass = hidden;
+
             var speed = _hasLastPosition && dt > 0f ? (position - _lastPosition).magnitude / dt : float.MaxValue;
             _lastPosition = position;
             _hasLastPosition = true;

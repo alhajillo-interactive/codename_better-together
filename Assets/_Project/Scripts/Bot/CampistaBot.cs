@@ -87,7 +87,8 @@ namespace BetterTogether.Bot
         [Networked] private BotGoal NetGoal { get; set; }
         [Networked] private SuspicionLevel NetSuspicion { get; set; }
         [Networked] private byte NetFlashSeq { get; set; }
-        [Networked] private float NetSpeed { get; set; }
+        [Networked] private float NetMovement { get; set; }
+        [Networked] private NetworkBool NetAirborne { get; set; }
 
         private readonly List<Vector3> _ornaments = new(64);
         private readonly List<Carryable> _wood = new(8);
@@ -706,7 +707,11 @@ namespace BetterTogether.Bot
             _verticalSpeed = _controller.isGrounded && _verticalSpeed < 0f ? -1f : _verticalSpeed + Gravity * dt;
             _knockback = Vector3.MoveTowards(_knockback, Vector3.zero, 6f * dt);
             _controller.Move((velocity + _knockback + Vector3.up * _verticalSpeed) * dt);
-            NetSpeed = velocity.magnitude;
+            // The camper's tree has walk at 0.5 and sprint at 1. Quantized, so a constant speed sends nothing.
+            var speed = velocity.magnitude;
+            var movement = speed <= _walkSpeed ? 0.5f * speed / _walkSpeed : Mathf.Lerp(0.5f, 1f, Mathf.InverseLerp(_walkSpeed, _runSpeed, speed));
+            NetMovement = Mathf.Round(movement * 20f) / 20f;
+            NetAirborne = !_controller.isGrounded && _verticalSpeed > 0f || Time.time < _stunUntil;
         }
 
         // ---- Presentation: replicated state, shown by everyone ----
@@ -724,7 +729,10 @@ namespace BetterTogether.Bot
                 return;
 
             if (_animator != null)
-                _animator.SetFloat(MovementParameter, NetSpeed / _walkSpeed);
+            {
+                _animator.SetFloat(MovementParameter, NetMovement, 0.1f, Time.deltaTime);
+                _animator.SetBool(JumpParameter, NetAirborne);
+            }
 
             if (_feedbackReady)
             {
@@ -781,6 +789,7 @@ namespace BetterTogether.Bot
         }
 
         private static readonly int MovementParameter = Animator.StringToHash("Movement");
+        private static readonly int JumpParameter = Animator.StringToHash("IsJump");
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         private bool _showDebug;
