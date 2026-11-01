@@ -108,28 +108,44 @@ namespace BetterTogether.UI
             var list = TravesuraLayout.Current;
             var done = match.TravesurasDone;
             var active = match.ActiveTravesura;
-            var armed = match.BombIsArmed;
-            var state = done | ((active + 1) << 4) | (armed ? 1 << 8 : 0) | (camper ? 1 << 9 : 0);
-            UpdateSounds(done, list.Count);
+            var isBoss = match.TravesuraBoss == PlayerCharacter.Local.Object.StateAuthority;
+            var open = match.TravesuraOpenToAll;
+            var state = done | ((active + 1) << 4) | (isBoss ? 1 << 8 : 0) | (camper ? 1 << 9 : 0) | (open ? 1 << 10 : 0) | (match.TravesuraBoss.PlayerId << 11);
+            UpdateSounds(done, list.Needed);
             if (state == _shownState)
                 return;
 
             _shownState = state;
-            _title.text = camper ? "Los gnomos llevan " + done + " de " + list.Count : "Lista de Travesuras: " + done + " / " + list.Count;
+            _title.text = camper ? "Los gnomos llevan " + done + " de " + list.Needed : "Lista de Travesuras: " + done + " / " + list.Needed;
             string line;
             if (active < 0)
                 line = camper ? "Disfruta de tu cena mientras puedas" : "Esperad la siguiente travesura";
             else if (camper)
                 line = "Algo traman " + list.Get(active).CamperHint;
-            else if (armed)
-                line = "Atraed al campista hacia la estatua";
-            else
+            else if (isBoss)
+                line = "Eres el Jefe. Explica: " + list.Get(active).Label;
+            else if (open)
                 line = list.Get(active).Label;
+            else
+                line = "Pregúntale al Jefe: " + BossName(match);
 
             _rows[0].text = line;
             _rows[0].gameObject.SetActive(true);
-            for (var i = 1; i < _rows.Length; i++)
+            _rows[1].text = "[Tab] Manual";
+            _rows[1].gameObject.SetActive(true);
+            for (var i = 2; i < _rows.Length; i++)
                 _rows[i].gameObject.SetActive(false);
+        }
+
+        private static string BossName(MatchManager match)
+        {
+            foreach (var character in PlayerCharacter.All)
+            {
+                if (character != null && character.Object != null && character.Object.StateAuthority == match.TravesuraBoss)
+                    return character.DisplayName;
+            }
+
+            return "?";
         }
 
         private void Refresh(MatchManager match, MissionLayout layout, bool camper)

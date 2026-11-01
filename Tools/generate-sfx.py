@@ -315,6 +315,26 @@ def swarm():
     return band(noise(d), 500, 3500) * flutter * np.hanning(int(d * SR)) ** 0.6
 
 
+def horn():
+    d = 0.8
+    wave_a = np.sign(tone(d, 392)) * 0.5 + np.sign(tone(d, 494)) * 0.5
+    return band(wave_a, 200, 3000) * attack(np.ones(int(d * SR)), 0.01) * 0.6
+
+
+def rabbit_hole():
+    d = 0.26
+    return tone(d, 700, 180, 0.6) * decay(d, 0.09) * 0.7 + mix(d, (0.0, hit(0.05, 300, 1800, 0.015, 0.5)))
+
+
+def statue_place():
+    return modal(0.16, [(1450, 0.03, 0.6), (2300, 0.02, 0.3)]) + mix(0.16, (0.0, hit(0.03, 300, 1600, 0.01, 0.5)))
+
+
+def statue_boom():
+    d = 0.8
+    return thud(d, 120, 35, 0.2) * 1.2 + band(noise(d), 80, 2400) * decay(d, 0.16) * 0.9
+
+
 # ------------------------------------------------------------------ UI
 
 def ui_click():
@@ -348,6 +368,7 @@ CLIPS = {
     "log_snap": log_snap, "log_unsnap": log_unsnap, "fire_ready": fire_ready,
     "watched": watched, "break_press": break_press, "break_free": break_free,
     "butterfly_catch": butterfly_catch, "mission_step": mission_step, "mission_complete": mission_complete, "swarm": swarm,
+    "horn": horn, "rabbit_hole": rabbit_hole, "statue_place": statue_place, "statue_boom": statue_boom,
 }
 
 

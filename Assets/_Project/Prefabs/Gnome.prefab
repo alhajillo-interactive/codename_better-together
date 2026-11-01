@@ -10630,6 +10630,7 @@ GameObject:
   - component: {fileID: 5581577799647099026}
   - component: {fileID: 8267190075791073561}
   - component: {fileID: 7167397901127304381}
+  - component: {fileID: 954822345947241294}
   m_Layer: 9
   m_Name: Gnome
   m_TagString: Untagged
@@ -10722,6 +10723,7 @@ MonoBehaviour:
   - {fileID: 3644464259120405354}
   - {fileID: 5581577799647099026}
   - {fileID: 8267190075791073561}
+  - {fileID: 954822345947241294}
   - {fileID: 6775593931138393117}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &2317096137556648295
@@ -11340,6 +11342,28 @@ MonoBehaviour:
   _dustSize: 0.12
   _leafSize: 0.06
   _gnomeScale: 0.35
+--- !u!114 &954822345947241294
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7618880620199038078}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: acd739a1638fc004ca6557c2005cdebb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BetterTogether.Player.GnomeStatues
+  _statuePrefab: {fileID: 5621808665992392766, guid: cf74ddd7916808f4c90aeea1fb1ec68f, type: 3}
+  _placeCooldown: 1
+  _bombCooldown: 12
+  _triggerRadius: 1.2
+  _launchUp: 9
+  _launchBack: 5
+  _stunSeconds: 1.5
+  _placeSfx: {fileID: 11400000, guid: b0c0417b3bd141448921a639f296f078, type: 2}
+  _hopSfx: {fileID: 11400000, guid: 6eb382b630e997a44bd5c23a89521c66, type: 2}
+  _boomSfx: {fileID: 11400000, guid: 7308fc3f08786284285e6a9d6fbc8c8d, type: 2}
 --- !u!1 &7782089374642317358
 GameObject:
   m_ObjectHideFlags: 0

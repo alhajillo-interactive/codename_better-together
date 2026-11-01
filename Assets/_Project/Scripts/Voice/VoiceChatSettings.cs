@@ -40,7 +40,7 @@ namespace BetterTogether.Voice
         [SerializeField] private float _minDistance = 4f;
 
         [Tooltip("Silent beyond this radius.")]
-        [SerializeField] private float _maxDistance = 30f;
+        [SerializeField] private float _maxDistance = 12f;
 
         public const string PushToTalkPrefsKey = "gm_ptt";
 

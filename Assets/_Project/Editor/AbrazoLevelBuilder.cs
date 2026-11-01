@@ -1018,18 +1018,18 @@ namespace BetterTogether.EditorTools
                 WaterRadius * 2f, WaterThickness, Quaternion.identity, Mat("Agua", WaterHex), _layerWater, false);
             water.name = "Agua";
             MakeWaterTransparent(water);
-            BuildWaterPhysics(water, parent);
+            BuildWaterPhysics(water, parent, PozaCenter, WaterRadius, WaterTopY);
         }
 
         // Water physics and local presentation (the stream stays out: it is shallow).
-        private static void BuildWaterPhysics(GameObject water, Transform parent)
+        private static void BuildWaterPhysics(GameObject water, Transform parent, Vector2 center, float radius, float topY)
         {
             var body = water.AddComponent<WaterBody>();
-            body.Configure(PozaCenter, WaterRadius, WaterTopY);
+            body.Configure(center, radius, topY);
 
             var rings = new GameObject("OndasAgua");
             rings.transform.SetParent(parent, false);
-            rings.transform.SetPositionAndRotation(new Vector3(PozaCenter.x, WaterTopY + 0.01f, PozaCenter.y), Quaternion.identity);
+            rings.transform.SetPositionAndRotation(new Vector3(center.x, topY + 0.01f, center.y), Quaternion.identity);
             var system = rings.AddComponent<ParticleSystem>();
             var main = system.main;
             main.playOnAwake = true;

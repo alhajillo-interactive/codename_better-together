@@ -88,6 +88,7 @@ namespace BetterTogether.EditorTools
             BuildTeammates(rootRect, theme, font);
             BuildMinimap(rootRect, theme, font);
             BuildMissions(rootRect, theme, font);
+            BuildManual(rootRect, theme, font);
 
             // Front layer: crosshair, prompt, warnings, badges.
             var crosshair = BuildCrosshair(rootRect);
@@ -680,6 +681,54 @@ namespace BetterTogether.EditorTools
             SetObjectField(serialized, "_stepSfx", AssetDatabase.LoadAssetAtPath<SoundCue>("Assets/_Project/Audio/SFX/SFX_MissionStep.asset"));
             SetObjectField(serialized, "_completeSfx", AssetDatabase.LoadAssetAtPath<SoundCue>("Assets/_Project/Audio/SFX/SFX_MissionComplete.asset"));
             SetObjectField(serialized, "_swarmSfx", AssetDatabase.LoadAssetAtPath<SoundCue>("Assets/_Project/Audio/SFX/SFX_Swarm.asset"));
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // The camp notebook: same paper as the plan, at the right edge.
+        private static void BuildManual(RectTransform parent, UiTheme theme, TMP_FontAsset font)
+        {
+            var root = Child(parent, "Manual", out var created);
+            if (created)
+                Place(root, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-64f, 0f), new Vector2(680f, 640f));
+
+            var panel = Child(root, "Panel", out var panelCreated);
+            var image = GetOrAdd<Image>(panel.gameObject);
+            if (panelCreated)
+            {
+                Stretch(panel);
+                if (theme.panel != null)
+                {
+                    image.sprite = theme.panel;
+                    image.type = theme.panel.border.sqrMagnitude > 0f ? Image.Type.Sliced : Image.Type.Simple;
+                    image.color = Color.white;
+                }
+                else
+                {
+                    image.color = theme.paper;
+                }
+
+                image.raycastTarget = false;
+            }
+
+            var title = Text(panel, "Title", "Manual", theme.hintSize * 1.5f, theme.ink, TextAlignmentOptions.Center, font, false, out var titleRect, out var titleCreated);
+            if (titleCreated)
+                Place(titleRect, new Vector2(0f, 1f), Vector2.one, new Vector2(0.5f, 1f), new Vector2(0f, -28f), new Vector2(-64f, 56f));
+
+            var body = Text(panel, "Body", "", theme.hintSize, theme.ink, TextAlignmentOptions.TopLeft, font, true, out var bodyRect, out var bodyCreated);
+            if (bodyCreated)
+            {
+                bodyRect.anchorMin = Vector2.zero;
+                bodyRect.anchorMax = Vector2.one;
+                bodyRect.offsetMin = new Vector2(44f, 36f);
+                bodyRect.offsetMax = new Vector2(-44f, -96f);
+                body.fontStyle = FontStyles.Normal;
+            }
+
+            var hud = GetOrAdd<ManualHUD>(root.gameObject);
+            var serialized = new SerializedObject(hud);
+            SetObjectField(serialized, "_panel", panel.gameObject);
+            SetObjectField(serialized, "_title", title);
+            SetObjectField(serialized, "_body", body);
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
