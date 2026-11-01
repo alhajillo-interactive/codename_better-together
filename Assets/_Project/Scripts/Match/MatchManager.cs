@@ -25,6 +25,9 @@ namespace BetterTogether.Match
         [Tooltip("Start the countdown as soon as there are enough players, without waiting for the lobby button.")]
         [SerializeField] private bool _autoStart;
 
+        [Tooltip("The game plays the camper and everybody is a gnome. Needs a CampistaBot in the scene.")]
+        [SerializeField] private bool _botCamper;
+
         [Tooltip("Each rematch the next player (by PlayerId) becomes the camper; off picks a random player every time.")]
         [SerializeField] private bool _rotateCamper = true;
 
@@ -390,7 +393,10 @@ namespace BetterTogether.Match
             }
         }
 
-        public int MinPlayers => _allowSoloStart ? 1 : _minPlayers;
+        public int MinPlayers => _allowSoloStart || _botCamper ? 1 : _minPlayers;
+
+        /// <summary>True when the game plays the camper.</summary>
+        public bool HasBotCamper => _botCamper;
 
         /// <summary>Raised on every client when the replicated phase changes.</summary>
         public event Action<MatchPhase> PhaseChanged;
@@ -479,6 +485,9 @@ namespace BetterTogether.Match
 
         private PlayerRef ChooseCamper()
         {
+            if (_botCamper)
+                return PlayerRef.None;
+
             var players = new List<PlayerRef>();
             foreach (var player in Runner.ActivePlayers)
                 players.Add(player);
@@ -627,7 +636,7 @@ namespace BetterTogether.Match
         {
             var camper = CurrentCamper;
             var spawner = PlayerSpawner.Instance;
-            if (camper == PlayerRef.None || spawner == null)
+            if ((camper == PlayerRef.None && !_botCamper) || spawner == null)
                 return;
 
             _roleApplied = true;

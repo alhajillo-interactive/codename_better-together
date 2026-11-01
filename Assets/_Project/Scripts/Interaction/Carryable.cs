@@ -160,6 +160,7 @@ namespace BetterTogether.Interaction
         private Rigidbody _body;
         private NetworkTransform _networkTransform;
         private Vector3 _startPosition;
+        private Transform _botHand;
         private Quaternion _startRotation;
         private bool _collidersEnabled = true;
         private bool _isSpawned;
@@ -273,7 +274,16 @@ namespace BetterTogether.Interaction
         /// When set, the item has no colliders, can't be grabbed and stays frozen (e.g. an eaten sausage).
         /// Set it on every peer; it is not networked.
         /// </summary>
-        public bool Inert { get; set; }
+        public bool Inert
+        {
+            get => _inert || (_isSpawned && BotHeld);
+            set => _inert = value;
+        }
+
+        private bool _inert;
+
+        // Written by the master while the bot camper carries the item: no one else can take it, on any peer.
+        [Networked] private NetworkBool BotHeld { get; set; }
 
         /// <summary>True while two gnomes are carrying the item together.</summary>
         public bool IsPairCarry => IsMoving && HolderCount == 2;
@@ -672,8 +682,56 @@ namespace BetterTogether.Interaction
             PinSlot = 0;
         }
 
+        /// <summary>Authority only: the bot camper carries this item. It has no PlayerInteractor, so the item just follows its hand.</summary>
+        public void BotHold(Transform hand)
+        {
+            if (!HasStateAuthority)
+                return;
+
+            ForceReleaseAll();
+            Unpin();
+            _botHand = hand;
+            BotHeld = true;
+            ApplyAuthorityKinematic();
+        }
+
+        /// <summary>Authority only: the bot lets go of the item at this pose.</summary>
+        public void BotRelease(Vector3 position, Quaternion rotation)
+        {
+            ClearBotHold();
+            PlaceAt(position, rotation);
+        }
+
+        /// <summary>Authority only: the bot let go because the item now rests on a spot.</summary>
+        public void ClearBotHold()
+        {
+            _botHand = null;
+            BotHeld = false;
+        }
+
+        // A new master has no hand to follow: the item drops where it is.
+        private bool TickBotHold()
+        {
+            if (!BotHeld)
+                return false;
+
+            if (_botHand == null)
+            {
+                ClearBotHold();
+                ApplyAuthorityKinematic();
+                return false;
+            }
+
+            transform.position = _botHand.position;
+            return true;
+        }
+
         /// <summary>Authority only: drops the item and puts it back where it started, without a sound.</summary>
-        public void ResetForMatch() => ReturnToStart(false);
+        public void ResetForMatch()
+        {
+            ClearBotHold();
+            ReturnToStart(false);
+        }
 
         /// <summary>Where the item starts this match.</summary>
         public Vector3 StartPosition => _startPosition;
@@ -1042,6 +1100,9 @@ namespace BetterTogether.Interaction
         public override void FixedUpdateNetwork()
         {
             if (!HasStateAuthority)
+                return;
+
+            if (TickBotHold())
                 return;
 
             Compact();

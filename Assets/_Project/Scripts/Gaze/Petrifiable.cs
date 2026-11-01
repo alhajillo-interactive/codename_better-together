@@ -270,6 +270,18 @@ namespace BetterTogether.Gaze
             return false;
         }
 
+        /// <summary>The bot camper's flash reached this gnome. Its owner decides, with the same rules as the camera.</summary>
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        public void RPC_BotFreeze()
+        {
+            var match = MatchManager.Instance;
+            if (IsPetrified || IsGazeImmune || GnomeCage.IsCaged(Object.Id) || match == null || match.Phase != MatchPhase.Playing)
+                return;
+
+            BeginFreeze();
+            _movement.IsFrozen = true;
+        }
+
         /// <summary>Owner only: frees a stone gnome that was put in the cage, silently (no release count or sound), with immunity.</summary>
         public void ReleaseForCage(float immunitySeconds)
         {

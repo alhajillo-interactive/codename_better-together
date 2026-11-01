@@ -44,6 +44,18 @@ namespace BetterTogether.Fireplace
             Placed = null;
         }
 
+        /// <summary>Authority only: the bot camper puts the sausage on the grill. False when the grill is busy.</summary>
+        public bool BotPlace(Carryable item)
+        {
+            if (!HasStateAuthority || !SpotFree || !item.TryGetComponent<Sausage>(out var sausage))
+                return false;
+
+            item.ClearBotHold();
+            item.Pin(this);
+            Placed = sausage;
+            return true;
+        }
+
         public string GetPrompt(PlayerInteractor interactor) => "Poner salchicha";
 
         /// <summary>Mirrors the authority's rules using the replicated state.</summary>

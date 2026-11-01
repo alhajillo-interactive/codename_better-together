@@ -246,6 +246,17 @@ namespace BetterTogether.Fireplace
 
         public void RequestEat(PlayerInteractor interactor) => RPC_RequestEat(interactor.Id);
 
+        /// <summary>Authority only: the bot camper eats it, wherever it is, once it is cooked.</summary>
+        public void BotEat()
+        {
+            if (!HasStateAuthority || IsEaten || State != CookState.Cooked)
+                return;
+
+            _carryable.ForceReleaseAll();
+            IsEaten = true;
+            ApplyEaten();
+        }
+
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         private void RPC_RequestEat(NetworkBehaviourId interactorId)
         {

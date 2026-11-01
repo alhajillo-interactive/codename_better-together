@@ -1,3 +1,4 @@
+using BetterTogether.Bot;
 using BetterTogether.Diagnostics;
 using BetterTogether.Fireplace;
 using BetterTogether.Gaze;
@@ -24,6 +25,8 @@ namespace BetterTogether.Match
         [SerializeField, Min(0f)] private float _bombDistance = 3f;
         [Tooltip("Seconds a prank stays active with no part done before another replaces it, so an unreachable point never freezes the list.")]
         [SerializeField, Min(1f)] private float _travesuraPatience = 75f;
+        [Tooltip("Metres at which the bot camper hears a prank in progress.")]
+        [SerializeField, Min(0f)] private float _pointNoiseRadius = 14f;
         [Tooltip("Seconds only the Boss reads the prank; after that every gnome sees it, so nobody is stuck with a silent Boss.")]
         [SerializeField, Min(0f)] private float _bossSeconds = 20f;
 
@@ -109,6 +112,7 @@ namespace BetterTogether.Match
             }
 
             TravPoints = (byte)(TravPoints | (1 << pointIndex));
+            BotEars.Report(point.Position, _pointNoiseRadius);
             var item = who.Carried;
             if (item != null && !string.IsNullOrEmpty(point.RequiredItemTag))
                 item.PlaceAt(point.Position, item.transform.rotation);
@@ -128,6 +132,13 @@ namespace BetterTogether.Match
         {
             if (CanBomb(camper, bomb))
                 RPC_TravesuraBomb(camper.Id, bomb);
+        }
+
+        /// <summary>Authority only: the bot camper walked into a bomb.</summary>
+        public void BotHitBomb()
+        {
+            if (HasStateAuthority && ActiveTravesura >= 0 && TravesuraLayout.Current.Get(TravActive).Kind == TravesuraLayout.Kind.Bomb)
+                FinishTravesura();
         }
 
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]

@@ -1,4 +1,5 @@
 using BetterTogether.Audio;
+using BetterTogether.Bot;
 using BetterTogether.Environment;
 using BetterTogether.Gaze;
 using BetterTogether.Interaction;
@@ -18,6 +19,14 @@ namespace BetterTogether.Player
     /// </summary>
     public class GnomeStatues : NetworkBehaviour
     {
+        private static readonly System.Collections.Generic.List<GnomeStatues> _all = new();
+
+        /// <summary>Every gnome's statues.</summary>
+        public static System.Collections.Generic.IReadOnlyList<GnomeStatues> All => _all;
+
+        /// <summary>Slots one gnome has.</summary>
+        public const int SlotTotal = SlotCount;
+
         private const int PlainSlots = 2;
         private const int BombSlot = PlainSlots;
         private const int SlotCount = PlainSlots + 1;
@@ -46,6 +55,8 @@ namespace BetterTogether.Player
         [SerializeField, Min(0f)] private float _launchBack = 5f;
         [Tooltip("Seconds the camper cannot act after the explosion.")]
         [SerializeField, Min(0f)] private float _stunSeconds = 1.5f;
+        [Tooltip("Metres at which the bot hears a hop through a rabbit hole.")]
+        [SerializeField, Min(0f)] private float _hopNoiseRadius = 9f;
         [SerializeField] private SoundCue _placeSfx;
         [Tooltip("Heard at both ends of a rabbit hole, so the camper can follow the sound.")]
         [SerializeField] private SoundCue _hopSfx;
@@ -87,6 +98,7 @@ namespace BetterTogether.Player
         public override void Spawned()
         {
             _isSpawned = true;
+            _all.Add(this);
             for (var i = 0; i < SlotCount; i++)
             {
                 _shown[i] = Instantiate(_statuePrefab);
@@ -105,6 +117,7 @@ namespace BetterTogether.Player
         public override void Despawned(NetworkRunner runner, bool hasState)
         {
             _isSpawned = false;
+            _all.Remove(this);
             MatchManager.OnGameStarted -= HandleGameStarted;
             MatchManager.OnGameOver -= HandleGameStarted;
             for (var i = 0; i < SlotCount; i++)
@@ -115,6 +128,18 @@ namespace BetterTogether.Player
         }
 
         private void HandleGameStarted() => _clearRequested = true;
+
+        /// <summary>Where a statue of this gnome stands. Says nothing about what kind it is.</summary>
+        public bool TryGetPosition(int slot, out Vector3 position)
+        {
+            position = default;
+            if (!_isSpawned)
+                return false;
+
+            var value = Slots[slot];
+            position = value.Position;
+            return value.State != Empty;
+        }
 
         // Input is per frame: only flags are kept here, FixedUpdateNetwork decides and writes.
         private void Update()
@@ -188,6 +213,7 @@ namespace BetterTogether.Player
         {
             _hopSfx.PlayAt(from);
             _hopSfx.PlayAt(to);
+            BotEars.Report(to, _hopNoiseRadius);
         }
 
         public override void Render()
@@ -222,6 +248,26 @@ namespace BetterTogether.Player
             statue.transform.SetPositionAndRotation(slot.Position, Quaternion.Euler(0f, slot.Yaw, 0f));
             if (_feedbackReady)
                 _placeSfx.PlayAt(slot.Position);
+        }
+
+        /// <summary>Master only, from the bot's tick: the bot walks into a bomb like anyone else.</summary>
+        public void CheckBot(CampistaBot bot)
+        {
+            var bomb = Slots[BombSlot];
+            if (!_isSpawned || bomb.State != Explosive || Time.time < _reportedAt + 1f)
+                return;
+
+            var offset = bot.transform.position - bomb.Position;
+            if (offset.sqrMagnitude > _triggerRadius * _triggerRadius)
+                return;
+
+            _reportedAt = Time.time;
+            var away = new Vector3(offset.x, 0f, offset.z);
+            away = away.sqrMagnitude > 0.001f ? away.normalized : Vector3.back;
+            bot.Blast(away * _launchBack + Vector3.up * _launchUp, _stunSeconds);
+            RPC_Detonate();
+            if (MatchManager.Instance != null)
+                MatchManager.Instance.BotHitBomb();
         }
 
         // Runs on the camper's client, the only one that can move the camper at once.

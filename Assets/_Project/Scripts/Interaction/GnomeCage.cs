@@ -122,6 +122,18 @@ namespace BetterTogether.Interaction
                 RPC_RequestFree(interactor.Id);
         }
 
+        /// <summary>Authority only: the bot camper cages the gnome it carries.</summary>
+        public bool BotCage(GnomeCarrier carrier)
+        {
+            var carried = carrier.Carried;
+            if (!HasStateAuthority || Caged.IsValid || carried == null || !carried.IsStoneNow)
+                return false;
+
+            Caged = carried.Object.Id;
+            CageTimer = TickTimer.CreateFromSeconds(Runner, _cageSeconds);
+            return true;
+        }
+
         /// <summary>The camper carries a stone gnome, the cage is empty, and the camper is in reach.</summary>
         public bool CanCage(PlayerInteractor who)
         {

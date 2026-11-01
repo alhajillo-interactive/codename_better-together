@@ -523,6 +523,31 @@ namespace BetterTogether.Fireplace
                 CameraPunch.Instance.PunchFov(PlaceFovPunch, PlaceFovPunchTime);
         }
 
+        /// <summary>Authority only: the bot camper puts a log in the fire. False when no slot is free.</summary>
+        public bool BotPlaceLog(Carryable log)
+        {
+            var slot = NearestFreeSlot(log.transform.position, true);
+            if (!HasStateAuthority || slot < 0 || !log.TryGetComponent<FireplaceWood>(out _))
+                return false;
+
+            log.ClearBotHold();
+            log.Pin(this, slot);
+            return true;
+        }
+
+        /// <summary>Authority only: the bot camper lights a ready fire.</summary>
+        public void BotLight()
+        {
+            if (!HasStateAuthority || IsLit || !HasEnoughWood)
+                return;
+
+            IsLit = true;
+            LitGrace = TickTimer.CreateFromSeconds(Runner, _litGraceTime);
+            WeakenedTick = 0;
+            ClearPour();
+            if (MatchManager.Instance != null) MatchManager.Instance.NoteFireLit();
+        }
+
         [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
         private void RPC_RequestLight(NetworkBehaviourId interactorId)
         {

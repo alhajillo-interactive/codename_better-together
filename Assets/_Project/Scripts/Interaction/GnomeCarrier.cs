@@ -17,9 +17,11 @@ namespace BetterTogether.Interaction
     /// interact key when nothing else is focused, and lets go on its own when the gnome broke free, was caged or left.
     /// Presses are buffered in Update and applied in FixedUpdateNetwork, which owns the state.
     /// </summary>
-    [RequireComponent(typeof(PlayerInteractor))]
     public class GnomeCarrier : NetworkBehaviour
     {
+        [Tooltip("On the bot camper: no local input, no local-player role.")]
+        [SerializeField] private bool _botControlled;
+
         [Tooltip("Where the carried gnome's feet are held, as a child of the camper root. If empty, the offset below is used.")]
         [SerializeField] private Transform _carryAnchor;
         [Tooltip("Used only without a carry anchor: offset from the camper root (local space) where the carried gnome is held.")]
@@ -116,7 +118,7 @@ namespace BetterTogether.Interaction
         {
             _isSpawned = true;
             AllCarriers.Add(this);
-            if (!HasStateAuthority)
+            if (!HasStateAuthority || _botControlled)
                 return;
 
             Local = this;
@@ -150,6 +152,16 @@ namespace BetterTogether.Interaction
                 return false;
 
             return gnome.DistanceFrom(_interactor.EyePosition) <= _pickupDistance;
+        }
+
+        /// <summary>Authority only: the bot camper lifts a stone gnome.</summary>
+        public void BotPickUp(GnomeCapture gnome)
+        {
+            if (HasStateAuthority && !CarriedGnome.IsValid && gnome != null && gnome.CanBeCarried)
+            {
+                CarriedGnome = gnome.Object.Id;
+                DropGnome = default;
+            }
         }
 
         /// <summary>Local camper only: asks to pick the gnome up; applied (and re-checked) in the next FixedUpdateNetwork.</summary>

@@ -2,11 +2,15 @@
 // systems and the HUD. Every height is a real camp object, measured from the jump of a gnome (0.5 m) and its tower.
 using System.Collections.Generic;
 using BetterTogether.Audio;
+using BetterTogether.Bot;
 using BetterTogether.Fireplace;
 using BetterTogether.Interaction;
 using BetterTogether.Match;
 using BetterTogether.Player;
 using BetterTogether.UI;
+using Fusion;
+using TMPro;
+using Unity.AI.Navigation;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -107,6 +111,8 @@ namespace BetterTogether.EditorTools
             ConfigureClaroMatch();
             BuildTravesuras(Group("Travesuras"), props);
             ApplyRenderBudget();
+            BuildClaroBot();
+            BakeClaroNavMesh(root);
 
             EditorSceneManager.MarkSceneDirty(_scene);
             EditorSceneManager.SaveScene(_scene);
@@ -545,8 +551,121 @@ namespace BetterTogether.EditorTools
             {
                 var serialized = new SerializedObject(match);
                 serialized.FindProperty("_matchDuration").floatValue = ClaroMatchSeconds;
+                serialized.FindProperty("_botCamper").boolValue = true;
                 serialized.ApplyModifiedPropertiesWithoutUndo();
             }
+        }
+
+        // ================================================================== Bot camper
+
+        private const string BotPrefabPath = "Assets/_Project/Prefabs/CampistaBot.prefab";
+        private const string CamperPrefabPath = "Assets/_Project/Prefabs/Camper.prefab";
+        private const string WoodPrefabPath = "Assets/_Project/Prefabs/Items/Wood.prefab";
+
+        private static void BuildClaroBot()
+        {
+            var old = FindInScene("CampistaBot");
+            if (old != null)
+                Object.DestroyImmediate(old);
+
+            var root = new GameObject("CampistaBot") { layer = LayerMask.NameToLayer("Player") };
+            try
+            {
+                FillBotPrefab(root);
+                PrefabUtility.SaveAsPrefabAsset(root, BotPrefabPath);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(BotPrefabPath), _root);
+            instance.name = "CampistaBot";
+            instance.transform.SetPositionAndRotation(GroundPoint(ClaroCamper), Quaternion.LookRotation(Vector3.forward));
+        }
+
+        private static void FillBotPrefab(GameObject root)
+        {
+            var controller = root.AddComponent<CharacterController>();
+            controller.height = 1.5f;
+            controller.radius = 0.3f;
+            controller.center = new Vector3(0f, 0.75f, 0f);
+            controller.stepOffset = 0.3f;
+
+            var network = root.AddComponent<NetworkObject>();
+            var woodNetwork = AssetDatabase.LoadAssetAtPath<GameObject>(WoodPrefabPath).GetComponent<NetworkObject>();
+            var flags = new SerializedObject(network);
+            flags.FindProperty("Flags").intValue = new SerializedObject(woodNetwork).FindProperty("Flags").intValue;
+            flags.ApplyModifiedPropertiesWithoutUndo();
+            root.AddComponent<NetworkTransform>();
+
+            var eye = NewChild(root.transform, "Ojos", new Vector3(0f, 1.4f, 0.1f));
+            var hand = NewChild(root.transform, "Mano", new Vector3(0.3f, 0.9f, 0.4f));
+            var anchor = NewChild(root.transform, "CarryAnchor", new Vector3(0f, 1.1f, 0.5f));
+
+            var camperAnimator = AssetDatabase.LoadAssetAtPath<GameObject>(CamperPrefabPath).GetComponentInChildren<Animator>(true);
+            var visual = Object.Instantiate(camperAnimator.gameObject, root.transform);
+            visual.name = "Modelo";
+            visual.transform.localPosition = Vector3.zero;
+            visual.transform.localRotation = Quaternion.identity;
+            foreach (var behaviour in visual.GetComponentsInChildren<NetworkBehaviour>(true))
+                Object.DestroyImmediate(behaviour);
+            foreach (var collider in visual.GetComponentsInChildren<Collider>(true))
+                Object.DestroyImmediate(collider);
+
+            var barkObject = NewChild(root.transform, "Globo", new Vector3(0f, 2.1f, 0f));
+            var bark = barkObject.gameObject.AddComponent<TextMeshPro>();
+            bark.fontSize = 3.5f;
+            bark.alignment = TextAlignmentOptions.Center;
+            bark.rectTransform.sizeDelta = new Vector2(6f, 1.2f);
+            bark.text = "";
+
+            var flash = NewChild(root.transform, "Flash", new Vector3(0f, 1.4f, 0.4f)).gameObject.AddComponent<Light>();
+            flash.type = LightType.Point;
+            flash.range = 9f;
+            flash.intensity = 0f;
+
+            var carrier = root.AddComponent<GnomeCarrier>();
+            var carrierSo = new SerializedObject(carrier);
+            carrierSo.FindProperty("_botControlled").boolValue = true;
+            carrierSo.FindProperty("_carryAnchor").objectReferenceValue = anchor;
+            carrierSo.ApplyModifiedPropertiesWithoutUndo();
+
+            var bot = root.AddComponent<CampistaBot>();
+            var so = new SerializedObject(bot);
+            so.FindProperty("_controller").objectReferenceValue = controller;
+            so.FindProperty("_eye").objectReferenceValue = eye;
+            so.FindProperty("_hand").objectReferenceValue = hand;
+            so.FindProperty("_carrier").objectReferenceValue = carrier;
+            so.FindProperty("_animator").objectReferenceValue = visual.GetComponent<Animator>();
+            so.FindProperty("_bark").objectReferenceValue = bark;
+            so.FindProperty("_flash").objectReferenceValue = flash;
+            so.FindProperty("_sightMask").intValue = _groundMask | (1 << _layerOccluder);
+            so.FindProperty("_shutterSfx").objectReferenceValue = LoadCue("SFX_PhotoShutter");
+            so.FindProperty("_noticeSfx").objectReferenceValue = LoadCue("SFX_Watched");
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static Transform NewChild(Transform parent, string name, Vector3 localPosition)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPosition;
+            return go.transform;
+        }
+
+        private static void BakeClaroNavMesh(GameObject root)
+        {
+            Physics.SyncTransforms();
+            var surface = root.AddComponent<NavMeshSurface>();
+            surface.collectObjects = CollectObjects.All;
+            surface.useGeometry = UnityEngine.AI.NavMeshCollectGeometry.PhysicsColliders;
+            surface.layerMask = _groundMask;
+            surface.BuildNavMesh();
+
+            var path = $"{SettingsDir}/ClaroNavMesh.asset";
+            AssetDatabase.DeleteAsset(path);
+            AssetDatabase.CreateAsset(surface.navMeshData, path);
         }
 
         // ================================================================== Pranks
