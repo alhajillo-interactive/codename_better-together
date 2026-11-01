@@ -139,15 +139,6 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
-                },
-                {
-                    "name": "Pan",
-                    "type": "Button",
-                    "id": "70bc9c73-a3f8-4266-9ff4-85ed59ea375f",
-                    "expectedControlType": "Button",
-                    "processors": "",
-                    "interactions": "",
-                    "initialStateCheck": false
                 }
             ],
             "bindings": [
@@ -643,17 +634,6 @@
                     "processors": "",
                     "groups": "Keyboard&Mouse",
                     "action": "PlaceBomb",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "1a73c878-bba1-480b-a590-819fbc6db251",
-                    "path": "<Keyboard>/x",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "Keyboard&Mouse",
-                    "action": "Pan",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

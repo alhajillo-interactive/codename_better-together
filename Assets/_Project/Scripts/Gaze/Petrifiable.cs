@@ -44,9 +44,7 @@ namespace BetterTogether.Gaze
         [Tooltip("Seconds without a press before the progress starts to decay.")]
         [SerializeField] private float _decayDelay = 0.4f;
         [Tooltip("Seconds the camper can't lock this player after it broke free.")]
-        [SerializeField] private float _releaseImmunity = 6f;
-
-        private GnomePan _pan;
+        [SerializeField] private float _releaseImmunity = 2.5f;
         [Tooltip("Forward speed of the hop when released.")]
         [SerializeField] private float _hopForward = 2f;
         [Tooltip("Upward speed of the hop when released.")]
@@ -219,7 +217,6 @@ namespace BetterTogether.Gaze
             Disguise = GetComponent<GardenDisguise>();
             _stack = GetComponent<GnomeStack>();
             TryGetComponent(out _capture);
-            TryGetComponent(out _pan);
             _block = new MaterialPropertyBlock();
             _renderers = _visual != null ? _visual.GetComponentsInChildren<Renderer>() : new Renderer[0];
             BuildTintSlots();
@@ -280,12 +277,6 @@ namespace BetterTogether.Gaze
             var match = MatchManager.Instance;
             if (IsPetrified || IsGazeImmune || GnomeCage.IsCaged(Object.Id) || match == null || match.Phase != MatchPhase.Playing)
                 return;
-
-            if (_pan != null && _pan.IsUp)
-            {
-                _pan.Reflect();
-                return;
-            }
 
             BeginFreeze();
             _movement.IsFrozen = true;
@@ -365,7 +356,7 @@ namespace BetterTogether.Gaze
                 ClearStone("reset");
 
             var locker = LockedBy;
-            var shouldFreeze = !betweenMatches && locker != null && locker.LockProgress >= 1f && !IsGazeImmune && (_pan == null || !_pan.IsUp)
+            var shouldFreeze = !betweenMatches && locker != null && locker.LockProgress >= 1f && !IsGazeImmune
                               && !GnomeCage.IsCaged(Object.Id); // A caged gnome can't be frozen again: it would mash its way out.
             if (shouldFreeze && !IsPetrified)
                 BeginFreeze();

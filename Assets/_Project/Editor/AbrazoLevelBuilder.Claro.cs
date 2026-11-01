@@ -153,6 +153,7 @@ namespace BetterTogether.EditorTools
             var contents = PrefabUtility.LoadPrefabContents(ClaroGnomePrefab);
             try
             {
+                EnsureGnomeDefences(contents);
                 var statues = contents.GetComponent<GnomeStatues>();
                 if (statues == null)
                     statues = contents.AddComponent<GnomeStatues>();
@@ -163,7 +164,6 @@ namespace BetterTogether.EditorTools
                 so.FindProperty("_boomSfx").objectReferenceValue = LoadCue("SFX_StatueBoom");
                 so.FindProperty("_hopSfx").objectReferenceValue = LoadCue("SFX_RabbitHole");
                 so.ApplyModifiedPropertiesWithoutUndo();
-                EnsureGnomeDefences(contents);
                 PrefabUtility.SaveAsPrefabAsset(contents, ClaroGnomePrefab);
             }
             finally
@@ -172,7 +172,7 @@ namespace BetterTogether.EditorTools
             }
         }
 
-        // The rescue target and the frying pan. Idempotent: an existing part is kept.
+        // The rescue target. Idempotent: an existing part is kept.
         private static void EnsureGnomeDefences(GameObject gnome)
         {
             if (gnome.transform.Find("Rescate") == null)
@@ -184,36 +184,11 @@ namespace BetterTogether.EditorTools
                 rescue.AddComponent<StoneRescue>();
             }
 
-            var pan = gnome.GetComponent<GnomePan>();
-            if (pan == null)
-                pan = gnome.AddComponent<GnomePan>();
-
-            var visual = gnome.transform.Find("Sarten");
-            if (visual == null)
-            {
-                visual = new GameObject("Sarten").transform;
-                visual.SetParent(gnome.transform, false);
-                visual.localPosition = new Vector3(0f, 0.5f, 0.3f);
-                var metal = Mat("ClaroSarten", "#3A3A42");
-                var dish = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                Object.DestroyImmediate(dish.GetComponent<Collider>());
-                dish.transform.SetParent(visual, false);
-                dish.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-                dish.transform.localScale = new Vector3(0.32f, 0.015f, 0.32f);
-                dish.GetComponent<Renderer>().sharedMaterial = metal;
-                var handle = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                Object.DestroyImmediate(handle.GetComponent<Collider>());
-                handle.transform.SetParent(visual, false);
-                handle.transform.localPosition = new Vector3(0f, -0.4f, 0f);
-                handle.transform.localScale = new Vector3(0.06f, 0.35f, 0.04f);
-                handle.GetComponent<Renderer>().sharedMaterial = metal;
-            }
-
-            var so = new SerializedObject(pan);
-            so.FindProperty("_visual").objectReferenceValue = visual.gameObject;
-            so.FindProperty("_raiseSfx").objectReferenceValue = LoadCue("SFX_PhotoRaise");
-            so.FindProperty("_reflectSfx").objectReferenceValue = LoadCue("SFX_PanTing");
-            so.ApplyModifiedPropertiesWithoutUndo();
+            // The frying pan was tried and dropped.
+            GameObjectUtility.RemoveMonoBehavioursWithMissingScript(gnome);
+            var oldVisual = gnome.transform.Find("Sarten");
+            if (oldVisual != null)
+                Object.DestroyImmediate(oldVisual.gameObject);
         }
 
         private static SoundCue LoadCue(string name) => AssetDatabase.LoadAssetAtPath<SoundCue>($"{CueDir}{name}.asset");
@@ -647,8 +622,8 @@ namespace BetterTogether.EditorTools
         // Meadows between the zones (x, z, radius): every crossing has a covered way.
         private static readonly Vector3[] GrassMeadows =
         {
-            new(-15f, -1.5f, 5f), new(-6f, 6.5f, 5.5f), new(-15f, 13f, 6f), new(-3f, 13f, 5f), new(8f, -11f, 5.5f), new(-3f, -12f, 6f),
-            new(17f, 0f, 4.5f), new(17f, -14f, 3.5f), new(17f, 15f, 3f), new(3f, -9f, 3f), new(-9f, 13f, 4f), new(14f, 3f, 3f),
+            new(-15f, -1.5f, 6f), new(-6f, 6.5f, 6.5f), new(-15f, 13f, 7f), new(-3f, 13f, 6f), new(8f, -11f, 6.5f), new(-3f, -12f, 7f),
+            new(17f, 0f, 5.5f), new(17f, -14f, 4.5f), new(17f, 15f, 3.5f), new(3f, -9f, 4f), new(-9f, 13f, 5f), new(14f, 3f, 3.5f),
         };
 
         private static readonly (Vector2 a, Vector2 b)[] GrassPaths =

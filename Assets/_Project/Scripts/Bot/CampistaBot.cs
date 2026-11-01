@@ -60,8 +60,6 @@ namespace BetterTogether.Bot
         [SerializeField, Min(0f)] private float _flashWindup = 0.8f;
         [Tooltip("Seconds to recharge a shot.")]
         [SerializeField, Min(0f)] private float _flashCooldown = 10f;
-        [Tooltip("Seconds the bot stays dazzled by a reflected flash.")]
-        [SerializeField, Min(0f)] private float _dazzleSeconds = 3f;
 
         [Tooltip("Metres to look for walkable ground around the bot and its destination.")]
         [SerializeField, Min(0.1f)] private float _meshSearchRadius = 3f;
@@ -211,16 +209,6 @@ namespace BetterTogether.Bot
             _verticalSpeed = velocity.y;
             _stunUntil = Time.time + stunSeconds;
             _raiseStarted = -1f;
-        }
-
-        /// <summary>A gnome's pan bounced the flash: the bot is left blinking. Anyone may call it; only the master acts.</summary>
-        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-        public void RPC_Dazzle()
-        {
-            _stunUntil = Time.time + _dazzleSeconds;
-            _raiseStarted = -1f;
-            
-            DropHeld();
         }
 
         public override void FixedUpdateNetwork()
@@ -802,7 +790,7 @@ namespace BetterTogether.Bot
                 {
                     BotGoal.Carry => "¡A la jaula!",
                     BotGoal.Eat => "¡Por fin, mi cena!",
-                    BotGoal.Recover => "¡Mis ojos!",
+                    BotGoal.Recover => "¡Ay!",
                     _ => "",
                 },
             };

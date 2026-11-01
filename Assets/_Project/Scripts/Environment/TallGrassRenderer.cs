@@ -32,9 +32,9 @@ namespace BetterTogether.Environment
         [Tooltip("Metres from the mesh origin to its bottom at scale 1.")]
         [SerializeField] private float _modelBottom;
         [Tooltip("Tufts per square metre of grass.")]
-        [SerializeField, Min(1)] private int _tuftsPerCell = 4;
+        [SerializeField, Min(1)] private int _tuftsPerCell = 11;
         [Tooltip("Width of a tuft compared with its height, so blades stay thin and the gnome can still see past them.")]
-        [SerializeField, Min(0.05f)] private float _widthFactor = 0.3f;
+        [SerializeField, Min(0.05f)] private float _widthFactor = 0.45f;
         [Tooltip("Shortest and tallest tuft (m). A crouched gnome must fit under it.")]
         [SerializeField] private Vector2 _heightRange = new(0.65f, 0.9f);
         [Tooltip("Metres at which the grass stops being drawn.")]

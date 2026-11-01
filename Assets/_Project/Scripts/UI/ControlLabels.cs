@@ -44,7 +44,6 @@ namespace BetterTogether.UI
             new("ping", "marcar", "Player/Ping"),
             new("statue", "estatua", "Player/PlaceStatue"),
             new("bomb", "explosiva", "Player/PlaceBomb"),
-            new("pan", "sartén", "Player/Pan"),
         };
 
         /// <summary>Verb of the gnome's attack key while a water balloon is in the hands (it replaces "subirte").</summary>

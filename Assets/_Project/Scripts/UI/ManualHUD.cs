@@ -82,7 +82,6 @@ namespace BetterTogether.UI
                          + "<b>C</b>  Agachado en la hierba alta no te ven; quieto, eres un adorno\n"
                          + "<b>Q</b>  Bailar y burlarte\n"
                          + "<b>F</b>  Marcar un lugar\n"
-                         + "<b>X</b>  Levantar la sartén justo antes del flash\n"
                          + "<b>E</b>  Saltar por un hueco, con las manos vacías\n"
                          + "Subid a un compañero para hacer una torre y llegar alto.\n"
                          + "Mantén <b>E</b> sobre un compañero en piedra para liberarlo. Si está enjaulado, id a la jaula.";
