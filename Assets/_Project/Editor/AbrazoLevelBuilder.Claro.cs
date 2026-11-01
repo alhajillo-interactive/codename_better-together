@@ -163,12 +163,57 @@ namespace BetterTogether.EditorTools
                 so.FindProperty("_boomSfx").objectReferenceValue = LoadCue("SFX_StatueBoom");
                 so.FindProperty("_hopSfx").objectReferenceValue = LoadCue("SFX_RabbitHole");
                 so.ApplyModifiedPropertiesWithoutUndo();
+                EnsureGnomeDefences(contents);
                 PrefabUtility.SaveAsPrefabAsset(contents, ClaroGnomePrefab);
             }
             finally
             {
                 PrefabUtility.UnloadPrefabContents(contents);
             }
+        }
+
+        // The rescue target and the frying pan. Idempotent: an existing part is kept.
+        private static void EnsureGnomeDefences(GameObject gnome)
+        {
+            if (gnome.transform.Find("Rescate") == null)
+            {
+                var rescue = new GameObject("Rescate") { layer = LayerMask.NameToLayer("NoCollision") };
+                rescue.transform.SetParent(gnome.transform, false);
+                rescue.transform.localPosition = Vector3.up * 0.3f;
+                rescue.AddComponent<SphereCollider>().radius = 0.5f;
+                rescue.AddComponent<StoneRescue>();
+            }
+
+            var pan = gnome.GetComponent<GnomePan>();
+            if (pan == null)
+                pan = gnome.AddComponent<GnomePan>();
+
+            var visual = gnome.transform.Find("Sarten");
+            if (visual == null)
+            {
+                visual = new GameObject("Sarten").transform;
+                visual.SetParent(gnome.transform, false);
+                visual.localPosition = new Vector3(0f, 0.5f, 0.3f);
+                var metal = Mat("ClaroSarten", "#3A3A42");
+                var dish = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                Object.DestroyImmediate(dish.GetComponent<Collider>());
+                dish.transform.SetParent(visual, false);
+                dish.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                dish.transform.localScale = new Vector3(0.32f, 0.015f, 0.32f);
+                dish.GetComponent<Renderer>().sharedMaterial = metal;
+                var handle = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                Object.DestroyImmediate(handle.GetComponent<Collider>());
+                handle.transform.SetParent(visual, false);
+                handle.transform.localPosition = new Vector3(0f, -0.4f, 0f);
+                handle.transform.localScale = new Vector3(0.06f, 0.35f, 0.04f);
+                handle.GetComponent<Renderer>().sharedMaterial = metal;
+            }
+
+            var so = new SerializedObject(pan);
+            so.FindProperty("_visual").objectReferenceValue = visual.gameObject;
+            so.FindProperty("_raiseSfx").objectReferenceValue = LoadCue("SFX_PhotoRaise");
+            so.FindProperty("_reflectSfx").objectReferenceValue = LoadCue("SFX_PanTing");
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static SoundCue LoadCue(string name) => AssetDatabase.LoadAssetAtPath<SoundCue>($"{CueDir}{name}.asset");
@@ -598,9 +643,6 @@ namespace BetterTogether.EditorTools
 
         private const int GrassGridX = 48;
         private const int GrassGridZ = 44;
-        private const int GrassDetailResolution = 256;
-        private const float GrassCoverage = 0.5f;
-        private const float GrassDrawDistance = 45f;
 
         // Meadows between the zones (x, z, radius): every crossing has a covered way.
         private static readonly Vector3[] GrassMeadows =
@@ -651,47 +693,15 @@ namespace BetterTogether.EditorTools
             var fieldObject = new GameObject("CampoHierba");
             fieldObject.transform.SetParent(parent, false);
             fieldObject.AddComponent<TallGrassField>().Configure(origin, GrassGridX, GrassGridZ, cells);
-            PaintClaroGrass(origin, cells);
+            ConfigureGrassRenderer(fieldObject);
         }
 
-        // Terrain details: instanced, culled in patches and without shadows, far cheaper than one object per tuft.
-        private static void PaintClaroGrass(Vector2 origin, bool[] cells)
+        // A copy of the material with instancing on: the model's own lives inside the FBX and can't be changed.
+        private static void ConfigureGrassRenderer(GameObject field)
         {
-            var data = _terrain.terrainData;
-            data.detailPrototypes = new[] { GrassPrototype("SM_Grass_01", 1), GrassPrototype("SM_Grass_02", 2) };
-            data.SetDetailResolution(GrassDetailResolution, 32);
-            var layerA = new int[GrassDetailResolution, GrassDetailResolution];
-            var layerB = new int[GrassDetailResolution, GrassDetailResolution];
-            var half = ClaroTerrainSize * 0.5f;
-            for (var zi = 0; zi < GrassDetailResolution; zi++)
-            {
-                for (var xi = 0; xi < GrassDetailResolution; xi++)
-                {
-                    var world = new Vector2(-half + (xi + 0.5f) / GrassDetailResolution * ClaroTerrainSize, -half + (zi + 0.5f) / GrassDetailResolution * ClaroTerrainSize);
-                    var cellX = Mathf.FloorToInt(world.x - origin.x);
-                    var cellZ = Mathf.FloorToInt(world.y - origin.y);
-                    if (cellX < 0 || cellZ < 0 || cellX >= GrassGridX || cellZ >= GrassGridZ || !cells[cellZ * GrassGridX + cellX])
-                        continue;
-
-                    var roll = Hash01(world.x * 3.1f, world.y * 2.7f);
-                    if (roll < GrassCoverage * 0.5f)
-                        layerA[zi, xi] = 1;
-                    else if (roll < GrassCoverage)
-                        layerB[zi, xi] = 1;
-                }
-            }
-
-            data.SetDetailLayer(0, 0, 0, layerA);
-            data.SetDetailLayer(0, 0, 1, layerB);
-            _terrain.detailObjectDistance = GrassDrawDistance;
-            _terrain.detailObjectDensity = 1f;
-            EditorUtility.SetDirty(data);
-        }
-
-        // A small prefab with an instancing copy of the material: the model's own material lives inside the FBX and can't be changed.
-        private static DetailPrototype GrassPrototype(string model, int index)
-        {
-            var source = LoadModel(model).GetComponentInChildren<MeshFilter>();
+            var first = LoadModel("SM_Grass_01");
+            var second = LoadModel("SM_Grass_02");
+            var source = first.GetComponentInChildren<MeshFilter>();
             var materialPath = $"{SettingsDir}/Mat_ClaroHierba.mat";
             var material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
             if (material == null)
@@ -703,27 +713,23 @@ namespace BetterTogether.EditorTools
             material.enableInstancing = true;
             EditorUtility.SetDirty(material);
 
-            var go = new GameObject($"ClaroHierba{index}");
-            go.AddComponent<MeshFilter>().sharedMesh = source.sharedMesh;
-            var renderer = go.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = material;
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            var prefab = PrefabUtility.SaveAsPrefabAsset(go, $"{SettingsDir}/ClaroHierba{index}.prefab");
-            Object.DestroyImmediate(go);
-            return new DetailPrototype
+            // Measured from the model as imported: which axis is up depends on the FBX.
+            var rotation = source.transform.rotation;
+            var bounds = GeometryUtility.CalculateBounds(WorldCorners(source.sharedMesh.bounds, rotation), Matrix4x4.identity);
+            field.AddComponent<TallGrassRenderer>().Configure(
+                new[] { source.sharedMesh, second.GetComponentInChildren<MeshFilter>().sharedMesh }, material, rotation, bounds.size.y, bounds.min.y);
+        }
+
+        private static Vector3[] WorldCorners(Bounds bounds, Quaternion rotation)
+        {
+            var corners = new Vector3[8];
+            for (var i = 0; i < 8; i++)
             {
-                prototype = prefab,
-                usePrototypeMesh = true,
-                renderMode = DetailRenderMode.VertexLit,
-                useInstancing = true,
-                minWidth = 1.2f,
-                maxWidth = 1.8f,
-                minHeight = 1.3f,
-                maxHeight = 1.8f,
-                noiseSpread = 0.2f,
-                dryColor = new Color(0.82f, 0.9f, 0.55f),
-                healthyColor = Color.white,
-            };
+                var sign = new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f);
+                corners[i] = rotation * (bounds.center + Vector3.Scale(bounds.extents, sign));
+            }
+
+            return corners;
         }
 
         // ================================================================== Bot camper

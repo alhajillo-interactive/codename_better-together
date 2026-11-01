@@ -38,13 +38,13 @@ namespace BetterTogether.UI
 
         private static readonly Entry[] GnomeEntries =
         {
-            new("interact", "tomar/esconder", "Player/Interact"),
+            new("interact", "usar", "Player/Interact"),
             new("attack", "subirte", "Player/Attack"),
-            new("jump", "bajar", "Player/Jump"),
             new("crouch", "agacharte", "Player/Crouch"),
             new("ping", "marcar", "Player/Ping"),
-            new("mic", "micro", null, Key.M),
-            new("map", "plano", "Player/Map"),
+            new("statue", "estatua", "Player/PlaceStatue"),
+            new("bomb", "explosiva", "Player/PlaceBomb"),
+            new("pan", "sartén", "Player/Pan"),
         };
 
         /// <summary>Verb of the gnome's attack key while a water balloon is in the hands (it replaces "subirte").</summary>

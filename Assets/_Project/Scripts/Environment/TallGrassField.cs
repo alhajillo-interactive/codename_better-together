@@ -33,6 +33,19 @@ namespace BetterTogether.Environment
             return cellX >= 0 && cellZ >= 0 && cellX < _width && cellZ < _height && _cells[cellZ * _width + cellX];
         }
 
+        /// <summary>Calls <paramref name="visit"/> with the corner of every grass cell.</summary>
+        public void ForEachCell(System.Action<Vector2> visit)
+        {
+            for (var z = 0; z < _height; z++)
+            {
+                for (var x = 0; x < _width; x++)
+                {
+                    if (_cells[z * _width + x])
+                        visit(_origin + new Vector2(x, z));
+                }
+            }
+        }
+
 #if UNITY_EDITOR
         /// <summary>Editor only: stores the grid the level builder computed.</summary>
         public void Configure(Vector2 origin, int width, int height, bool[] cells)

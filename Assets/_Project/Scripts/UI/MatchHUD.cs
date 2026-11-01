@@ -322,6 +322,16 @@ namespace BetterTogether.UI
         // of role or milestone rebuilds all of them. Texts are literals or SetText formats: nothing allocates per frame.
         private void UpdateObjectives(bool playing)
         {
+            // A level with a list of pranks has its own panel: this one would tell the old goals.
+            if (TravesuraLayout.Current != null)
+            {
+                var root = _objectivesTitle.transform.parent.parent.gameObject;
+                if (root.activeSelf)
+                    root.SetActive(false);
+
+                return;
+            }
+
             var local = PlayerCharacter.Local;
             var camper = local == null || local.Role == PlayerRole.Camper;
             var defend = MatchStage.Current == MatchStage.Stage.DefendFire;

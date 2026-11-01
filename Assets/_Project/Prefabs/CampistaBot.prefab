@@ -3676,9 +3676,10 @@ MonoBehaviour:
   _reach: 1.6
   _stepTimeout: 12
   _useSeconds: 1.5
-  _flashRange: 7
+  _flashRange: 5.5
   _flashWindup: 0.8
-  _flashCooldown: 5
+  _flashCooldown: 10
+  _dazzleSeconds: 3
   _meshSearchRadius: 3
   _chaseGiveUpSeconds: 18
   _recoverySeconds: 8

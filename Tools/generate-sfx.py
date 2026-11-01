@@ -321,6 +321,10 @@ def horn():
     return band(wave_a, 200, 3000) * attack(np.ones(int(d * SR)), 0.01) * 0.6
 
 
+def pan_ting():
+    return modal(0.7, [(1180, 0.25, 0.7), (2760, 0.14, 0.5), (4310, 0.08, 0.3)]) + mix(0.7, (0.0, hit(0.02, 1500, 8000, 0.005, 0.6)))
+
+
 def rabbit_hole():
     d = 0.26
     return tone(d, 700, 180, 0.6) * decay(d, 0.09) * 0.7 + mix(d, (0.0, hit(0.05, 300, 1800, 0.015, 0.5)))
@@ -368,7 +372,7 @@ CLIPS = {
     "log_snap": log_snap, "log_unsnap": log_unsnap, "fire_ready": fire_ready,
     "watched": watched, "break_press": break_press, "break_free": break_free,
     "butterfly_catch": butterfly_catch, "mission_step": mission_step, "mission_complete": mission_complete, "swarm": swarm,
-    "horn": horn, "rabbit_hole": rabbit_hole, "statue_place": statue_place, "statue_boom": statue_boom,
+    "horn": horn, "pan_ting": pan_ting, "rabbit_hole": rabbit_hole, "statue_place": statue_place, "statue_boom": statue_boom,
 }
 
 

@@ -55,11 +55,13 @@ namespace BetterTogether.Bot
 
         [Header("Camera")]
         [Tooltip("Metres of the bot's camera.")]
-        [SerializeField, Min(0f)] private float _flashRange = 7f;
+        [SerializeField, Min(0f)] private float _flashRange = 5.5f;
         [Tooltip("Seconds the camera is raised before the flash: the warning for the gnomes.")]
         [SerializeField, Min(0f)] private float _flashWindup = 0.8f;
         [Tooltip("Seconds to recharge a shot.")]
-        [SerializeField, Min(0f)] private float _flashCooldown = 5f;
+        [SerializeField, Min(0f)] private float _flashCooldown = 10f;
+        [Tooltip("Seconds the bot stays dazzled by a reflected flash.")]
+        [SerializeField, Min(0f)] private float _dazzleSeconds = 3f;
 
         [Tooltip("Metres to look for walkable ground around the bot and its destination.")]
         [SerializeField, Min(0.1f)] private float _meshSearchRadius = 3f;
@@ -209,6 +211,16 @@ namespace BetterTogether.Bot
             _verticalSpeed = velocity.y;
             _stunUntil = Time.time + stunSeconds;
             _raiseStarted = -1f;
+        }
+
+        /// <summary>A gnome's pan bounced the flash: the bot is left blinking. Anyone may call it; only the master acts.</summary>
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        public void RPC_Dazzle()
+        {
+            _stunUntil = Time.time + _dazzleSeconds;
+            _raiseStarted = -1f;
+            
+            DropHeld();
         }
 
         public override void FixedUpdateNetwork()
@@ -605,6 +617,14 @@ namespace BetterTogether.Bot
 
             _raiseStarted = -1f;
             _flashReady = Time.time + _flashCooldown;
+
+            // Decided at the shot, not at the aim: stepping behind cover in time saves the gnome, and the plate is spent all the same.
+            if (!_senses.CanSee(gnome.transform.position + Vector3.up * 0.3f))
+            {
+                NetFlashSeq = (byte)(NetFlashSeq + 1);
+                return;
+            }
+
             NetFlashSeq = (byte)(NetFlashSeq + 1);
             gnome.RPC_BotFreeze();
         }
@@ -782,7 +802,7 @@ namespace BetterTogether.Bot
                 {
                     BotGoal.Carry => "¡A la jaula!",
                     BotGoal.Eat => "¡Por fin, mi cena!",
-                    BotGoal.Recover => "¡Ay!",
+                    BotGoal.Recover => "¡Mis ojos!",
                     _ => "",
                 },
             };

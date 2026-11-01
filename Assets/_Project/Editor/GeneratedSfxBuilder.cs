@@ -84,6 +84,7 @@ namespace BetterTogether.EditorTools
             new("SFX_MissionComplete", "mission_complete", 0.8f, false, 20f, 0.2f, 0f),
             new("SFX_Swarm", "swarm", 0.8f, false, 20f, 0.5f, 0.02f),
             new("SFX_Horn", "horn", 0.9f, false, 20f, 0.5f, 0f),
+            new("SFX_PanTing", "pan_ting", 1f, true, 24f, 0.1f, 0.03f),
             new("SFX_RabbitHole", "rabbit_hole", 0.6f, true, 14f, 0.1f, 0.06f),
             new("SFX_StatuePlace", "statue_place", 0.5f, true, 10f, 0.1f, 0.06f),
             new("SFX_StatueBoom", "statue_boom", 1f, true, 34f, 0.1f, 0.05f),
