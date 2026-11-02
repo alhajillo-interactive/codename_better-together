@@ -177,13 +177,16 @@ namespace BetterTogether.Player
                 Write(BombSlot, Explosive);
                 BombTimer = TickTimer.CreateFromSeconds(Runner, _bombCooldown);
             }
-            else if (place && PlaceTimer.ExpiredOrNotRunning(Runner))
+            else if (place && PlainAllowed && PlaceTimer.ExpiredOrNotRunning(Runner))
             {
                 Write(NextPlain, Plain);
                 NextPlain = (byte)((NextPlain + 1) % PlainSlots);
                 PlaceTimer = TickTimer.CreateFromSeconds(Runner, _placeCooldown);
             }
         }
+
+        // Plain statues belong to the level with a list of pranks; elsewhere only the explosive one is available.
+        private static bool PlainAllowed => TravesuraLayout.Current != null;
 
         private bool CanPlace =>
             MatchManager.AllowsInteraction && _character.Role == PlayerRole.Gnome && _interactor.Carried == null

@@ -18,4 +18,4 @@ MonoBehaviour:
   _spatialBlend: 1
   _rolloff: 1
   _minDistance: 4
-  _maxDistance: 12
+  _maxDistance: 30
